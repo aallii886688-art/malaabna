@@ -634,9 +634,10 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   <div class="mcard" style="text-align:right">
     <div class="dclose" style="margin-bottom:12px;margin-right:auto" onclick="closeAll()">✕</div>
     <div class="tabs"><div class="tab active" id="tabLogin" onclick="authTab('login')">دخول</div><div class="tab" id="tabSignup" onclick="authTab('signup')">حساب جديد</div></div>
-    <div id="signupName" style="display:none"><div class="field"><label>الاسم الكامل</label><input type="text" placeholder="أحمد محمد"></div></div>
-    <div class="field"><label>البريد الإلكتروني</label><input type="email" placeholder="you@example.com"></div>
-    <div class="field"><label>كلمة المرور</label><input type="password" placeholder="••••••••"></div>
+    <div id="fieldName" style="display:none"><div class="field"><label>الاسم الكامل</label><input id="au-name" type="text" placeholder="أحمد محمد"></div></div>
+    <div class="field"><label>رقم الجوال</label><input id="au-phone" type="tel" inputmode="numeric" maxlength="10" placeholder="05xxxxxxxx"></div>
+    <div class="field" id="fieldEmail" style="display:none"><label>البريد الإلكتروني <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label><input id="au-email" type="email" placeholder="you@example.com"></div>
+    <div class="field"><label>كلمة المرور</label><input id="au-pass" type="password" placeholder="••••••••"></div>
     <button class="btn btn-brand btn-block" style="margin-top:8px" id="authBtn" onclick="doAuth()">دخول</button>
   </div>
 </div>
@@ -924,7 +925,8 @@ function openAuth(mode){ authTab(mode); document.getElementById('mAuth').classLi
 function authTab(mode){ authMode=mode;
   document.getElementById('tabLogin').classList.toggle('active',mode==='login');
   document.getElementById('tabSignup').classList.toggle('active',mode==='signup');
-  document.getElementById('signupName').style.display = mode==='signup'?'block':'none';
+  document.getElementById('fieldName').style.display  = mode==='signup'?'block':'none';
+  document.getElementById('fieldEmail').style.display = mode==='signup'?'block':'none';
   document.getElementById('authBtn').textContent = mode==='login'?'دخول':'إنشاء الحساب';
 }
 function doAuth(){
@@ -1017,33 +1019,58 @@ if (BACKEND_READY && window.supabase) {
 }
 
 function initBackend() {
-  // ── استبدال تسجيل الدخول/التسجيل بالحقيقي ──
+  // تحويل رقم الجوال إلى بريد داخلي ثابت (للاستخدام مع Supabase Auth)
+  function phoneToEmail(phone) {
+    return 'p' + phone + '@malaebna.local';   // مثال: p0501234567@malaebna.local
+  }
+  // التحقق من صيغة رقم الجوال السعودي (يبدأ بـ 05 ويتبعه 8 أرقام)
+  function isValidSaudiPhone(phone) {
+    return /^05[0-9]{8}$/.test(phone);
+  }
+
+  // ── استبدال تسجيل الدخول/التسجيل بالحقيقي (بالجوال) ──
   window.doAuth = async function () {
-    const inputs = document.querySelectorAll('#mAuth input');
-    let name='', email='', pass='';
-    if (authMode === 'signup') {
-      name  = inputs[0]?.value?.trim() || '';
-      email = inputs[1]?.value?.trim() || '';
-      pass  = inputs[2]?.value || '';
-    } else {
-      email = inputs[0]?.value?.trim() || '';
-      pass  = inputs[1]?.value || '';
-    }
-    if (!email || !pass) { showToast('أدخل البريد وكلمة المرور','error'); return; }
+    const phone = (document.getElementById('au-phone')?.value || '').trim();
+    const pass  = document.getElementById('au-pass')?.value || '';
+    const name  = (document.getElementById('au-name')?.value || '').trim();
+    const emailInput = (document.getElementById('au-email')?.value || '').trim();
+
+    // تحقق من رقم الجوال
+    if (!phone) { showToast('أدخل رقم الجوال','error'); return; }
+    if (!isValidSaudiPhone(phone)) { showToast('رقم الجوال يجب أن يبدأ بـ 05 ويتكوّن من 10 أرقام','error'); return; }
+    if (!pass) { showToast('أدخل كلمة المرور','error'); return; }
 
     if (authMode === 'signup') {
+      // الإيميل اختياري: لو أُدخل نستخدمه، وإلا نولّد إيميل داخلي من الجوال
+      const loginEmail = emailInput || phoneToEmail(phone);
       const { data, error } = await sb.auth.signUp({
-        email, password: pass, options: { data: { name } }
+        email: loginEmail,
+        password: pass,
+        options: { data: { name, phone, real_email: emailInput || null } }
       });
       if (error) { showToast(translateErr(error.message),'error'); return; }
+
+      // حفظ رقم الجوال في جدول profiles
+      if (data.user) {
+        await sb.from('profiles').update({ phone, name }).eq('id', data.user.id);
+      }
       loggedIn = true;
-      afterLogin(name || email);
+      afterLogin(name || phone);
       showToast('تم إنشاء حسابك ✓');
     } else {
-      const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-      if (error) { showToast(translateErr(error.message),'error'); return; }
+      // تسجيل الدخول: نبني الإيميل من الجوال (نفس طريقة التسجيل)
+      // ملاحظة: من سجّل بإيميل حقيقي يسجّل الدخول بنفس رقم جواله
+      const loginEmail = phoneToEmail(phone);
+      let { data, error } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
+
+      // احتياط: لو المستخدم سجّل بإيميل حقيقي بدل الداخلي
+      if (error && emailInput) {
+        ({ data, error } = await sb.auth.signInWithPassword({ email: emailInput, password: pass }));
+      }
+      if (error) { showToast('رقم الجوال أو كلمة المرور غير صحيحة','error'); return; }
+
       loggedIn = true;
-      const nm = data.user?.user_metadata?.name || email;
+      const nm = data.user?.user_metadata?.name || phone;
       afterLogin(nm);
       showToast('تم تسجيل الدخول ✓');
     }
