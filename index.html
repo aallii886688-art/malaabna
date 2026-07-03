@@ -1077,6 +1077,18 @@ if (BACKEND_READY && window.supabase) {
 }
 
 function initBackend() {
+  // ── استعادة الجلسة عند تحديث الصفحة ──
+  // إذا كان المستخدم مسجّل دخول مسبقاً، أعِد تسجيله تلقائياً
+  (async function restoreSession() {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session && session.user) {
+        loggedIn = true;
+        await afterLogin();
+      }
+    } catch(e) { console.log('لا توجد جلسة سابقة'); }
+  })();
+
   // تحويل رقم الجوال إلى بريد داخلي ثابت (للاستخدام مع Supabase Auth)
   function phoneToEmail(phone) {
     return 'p' + phone + '@malaebna.local';   // مثال: p0501234567@malaebna.local
