@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ملاعبنا — منصة حجز الملاعب والأكاديميات والبطولات في منطقة عسير. احجز ملعبك، قسّم التكلفة بذكاء، وانضم للبطولات.">
+<title>ملاعبنا | احجز · تدرّب · نافس</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap');
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+/* ══════════ THEME TOKENS ══════════ */
+:root{
+  /* النهاري (افتراضي) */
+  --bg:           #f4f7f5;
+  --bg-elev:      #ffffff;
+  --bg-soft:      #eef3ef;
+  --line:         #dde6e0;
+  --line-soft:    #e8efe9;
+  --ink:          #0f2419;
+  --ink-soft:     #44604f;
+  --ink-dim:      #7e948a;
+  --brand:        #1f9d57;
+  --brand-deep:   #15793f;
+  --brand-soft:   #e3f6ea;
+  --flood:        #e9a019;
+  --flood-soft:   #fdf0d6;
+  --danger:       #d64545;
+  --danger-soft:  #fbe6e6;
+  --neon:         #1f9d57;       /* في النهاري نستخدم الأخضر العادي */
+  --shadow:       0 4px 24px rgba(20,60,40,.08);
+  --shadow-lg:    0 18px 50px rgba(20,60,40,.14);
+  --radius:       16px;
+  --radius-sm:    10px;
+  --radius-lg:    24px;
+}
+html[data-theme="dark"]{
+  --bg:           #121212;
+  --bg-elev:      #1a1d1b;
+  --bg-soft:      #161a17;
+  --line:         #283028;
+  --line-soft:    #1f261f;
+  --ink:          #eafbef;
+  --ink-soft:     #9fb8a8;
+  --ink-dim:      #62786a;
+  --brand:        #39ff14;
+  --brand-deep:   #2bd40f;
+  --brand-soft:   rgba(57,255,20,.10);
+  --flood:        #ffc94d;
+  --flood-soft:   rgba(255,201,77,.10);
+  --danger:       #ff6b6b;
+  --danger-soft:  rgba(255,107,107,.10);
+  --neon:         #39ff14;
+  --shadow:       0 4px 24px rgba(0,0,0,.4);
+  --shadow-lg:    0 18px 50px rgba(0,0,0,.55);
+}
+
+html{scroll-behavior:smooth}
+body{
+  font-family:'Tajawal',sans-serif;
+  background:var(--bg);
+  color:var(--ink);
+  min-height:100vh;
+  overflow-x:hidden;
+  transition:background .4s ease, color .4s ease;
+}
+.mono{font-family:'JetBrains Mono',monospace}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+::selection{background:var(--brand);color:var(--bg)}
+::-webkit-scrollbar{width:7px}
+::-webkit-scrollbar-track{background:var(--bg-soft)}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+
+/* glow only in dark */
+html[data-theme="dark"] .neon-glow{box-shadow:0 0 24px rgba(57,255,20,.25)}
+html[data-theme="dark"] .neon-text{text-shadow:0 0 14px rgba(57,255,20,.5)}
+
+/* ══════════ BUTTONS ══════════ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:12px 24px;border-radius:30px;font-weight:700;font-size:14px;
+  transition:all .22s cubic-bezier(.2,.8,.3,1);white-space:nowrap;
+}
+.btn-brand{background:var(--brand);color:#fff}
+html[data-theme="dark"] .btn-brand{color:#0a1408}
+.btn-brand:hover{background:var(--brand-deep);transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn-flood{background:var(--flood);color:#3a2700}
+.btn-flood:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.btn-ghost{border:1px solid var(--line);color:var(--ink-soft)}
+.btn-ghost:hover{border-color:var(--brand);color:var(--brand)}
+.btn-soft{background:var(--brand-soft);color:var(--brand-deep)}
+html[data-theme="dark"] .btn-soft{color:var(--brand)}
+.btn-soft:hover{filter:brightness(.96)}
+.btn-block{width:100%}
+.btn-lg{padding:15px 32px;font-size:15px}
+.btn-sm{padding:8px 16px;font-size:12.5px}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+
+/* ══════════ NAV ══════════ */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:600;
+  display:flex;align-items:center;gap:20px;
+  padding:16px 40px;
+  background:color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--line-soft);
+  transition:padding .3s, background .3s;
+}
+.nav.scrolled{padding:11px 40px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:21px;letter-spacing:-.01em}
+.brand-logo{
+  width:38px;height:38px;border-radius:11px;
+  background:linear-gradient(135deg,var(--brand),var(--brand-deep));
+  display:grid;place-items:center;font-size:19px;flex-shrink:0;
+}
+html[data-theme="dark"] .brand-logo{box-shadow:0 0 18px rgba(57,255,20,.4)}
+.nav-links{display:flex;gap:30px;font-size:14px;font-weight:600;color:var(--ink-soft);margin-right:14px}
+.nav-links a{transition:color .2s;cursor:pointer}
+.nav-links a:hover{color:var(--brand)}
+.nav-right{margin-right:auto;display:flex;align-items:center;gap:12px}
+
+/* theme switch */
+.theme-toggle{
+  width:54px;height:30px;border-radius:30px;background:var(--bg-soft);
+  border:1px solid var(--line);position:relative;cursor:pointer;transition:all .3s;flex-shrink:0;
+}
+.theme-toggle .knob{
+  position:absolute;top:2px;right:2px;width:24px;height:24px;border-radius:50%;
+  background:var(--flood);display:grid;place-items:center;font-size:13px;
+  transition:transform .35s cubic-bezier(.4,1.4,.5,1);
+}
+html[data-theme="dark"] .theme-toggle .knob{transform:translateX(-24px);background:var(--brand)}
+.nav-user{display:flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--line);border-radius:30px;font-size:13px;font-weight:600}
+.nav-user .av{width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700}
+
+.menu-btn{display:none;font-size:22px;color:var(--ink)}
+
+/* ══════════ HERO ══════════ */
+.hero{position:relative;padding:130px 40px 80px;overflow:hidden}
+.hero::before{
+  content:'';position:absolute;inset:0;z-index:0;
+  background:
+    radial-gradient(ellipse 700px 500px at 85% 10%, var(--brand-soft), transparent 65%),
+    radial-gradient(ellipse 900px 600px at 10% 100%, var(--flood-soft), transparent 60%);
+}
+.hero-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;
+  color:var(--brand-deep);background:var(--brand-soft);padding:7px 15px;border-radius:30px;margin-bottom:22px;
+}
+html[data-theme="dark"] .eyebrow{color:var(--brand)}
+.eyebrow .pulse{width:7px;height:7px;border-radius:50%;background:var(--brand);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.hero h1{font-size:clamp(36px,5vw,60px);font-weight:900;line-height:1.1;letter-spacing:-.01em;margin-bottom:20px}
+.hero h1 .g{color:var(--brand)}
+html[data-theme="dark"] .hero h1 .g{text-shadow:0 0 18px rgba(57,255,20,.45)}
+.hero h1 .f{color:var(--flood)}
+.hero-sub{font-size:17px;color:var(--ink-soft);line-height:1.75;max-width:470px;margin-bottom:34px}
+.hero-ctas{display:flex;gap:13px;margin-bottom:44px;flex-wrap:wrap}
+.hero-stats{display:flex;gap:34px}
+.hstat .n{font-size:25px;font-weight:900;color:var(--ink)}
+.hstat .n span{color:var(--brand)}
+.hstat .l{font-size:12px;color:var(--ink-dim);margin-top:3px}
+
+/* hero card */
+.hcard{
+  background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius-lg);
+  padding:24px;box-shadow:var(--shadow-lg);position:relative;
+}
+.hcard-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.hcard-title{font-size:17px;font-weight:800}
+.hcard-loc{font-size:12.5px;color:var(--ink-dim);margin-top:3px}
+.live{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--brand-deep);background:var(--brand-soft);padding:5px 11px;border-radius:20px}
+html[data-theme="dark"] .live{color:var(--brand)}
+.live .d{width:6px;height:6px;border-radius:50%;background:var(--brand);animation:pulse 1.5s infinite}
+.slot-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:18px}
+.sm{padding:10px 2px;text-align:center;border-radius:8px;font-size:12px;font-weight:700;border:1px solid var(--line);color:var(--ink-dim);font-family:'JetBrains Mono',monospace}
+.sm.taken{background:var(--danger-soft);color:var(--danger);text-decoration:line-through;border-color:transparent}
+.sm.sel{background:var(--flood);color:#3a2700;border-color:var(--flood)}
+.hcard-foot{display:flex;justify-content:space-between;align-items:center;padding-top:16px;border-top:1px solid var(--line)}
+.hprice .a{font-size:21px;font-weight:900;color:var(--flood)}
+.hprice .p{font-size:11px;color:var(--ink-dim)}
+.floaty{position:absolute;padding:11px 15px;background:var(--bg-elev);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px;animation:float 4s ease-in-out infinite}
+.floaty-1{top:-16px;left:-26px}
+.floaty-2{bottom:24px;right:-30px;animation-delay:1.5s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+
+/* ══════════ SECTIONS ══════════ */
+.section{padding:90px 40px;position:relative}
+.container{max-width:1280px;margin:0 auto}
+.shead{max-width:640px;margin:0 auto 50px;text-align:center}
+.seyebrow{font-size:12.5px;font-weight:800;color:var(--brand);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+.stitle{font-size:clamp(26px,3.2vw,38px);font-weight:900;line-height:1.2;margin-bottom:14px}
+.ssub{font-size:15px;color:var(--ink-soft);line-height:1.7}
+
+/* tabs (modules) */
+.mod-tabs{display:flex;gap:10px;justify-content:center;margin-bottom:40px;flex-wrap:wrap}
+.mod-tab{
+  display:flex;align-items:center;gap:8px;padding:12px 22px;border-radius:30px;
+  font-weight:700;font-size:14px;color:var(--ink-soft);border:1px solid var(--line);background:var(--bg-elev);transition:all .2s;
+}
+.mod-tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+html[data-theme="dark"] .mod-tab.active{color:#0a1408}
+.mod-tab:hover:not(.active){border-color:var(--brand);color:var(--brand)}
+.mod-panel{display:none;animation:fade .3s ease}
+.mod-panel.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* filter bar */
+.fbar{display:flex;gap:11px;margin-bottom:30px;flex-wrap:wrap;align-items:center}
+.fsearch{flex:1;min-width:220px;display:flex;align-items:center;gap:9px;background:var(--bg-elev);border:1px solid var(--line);border-radius:30px;padding:12px 18px}
+.fsearch input{flex:1;background:none;border:none;outline:none;color:var(--ink);font-family:inherit;font-size:14px}
+.fsearch input::placeholder{color:var(--ink-dim)}
+.fsel{background:var(--bg-elev);border:1px solid var(--line);border-radius:30px;padding:12px 18px;color:var(--ink-soft);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;outline:none}
+
+/* ══════════ CARDS GRID ══════════ */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.card{
+  background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;cursor:pointer;transition:transform .3s cubic-bezier(.2,.8,.3,1),border-color .3s,box-shadow .3s;
+}
+.card:hover{transform:translateY(-5px);border-color:var(--brand);box-shadow:var(--shadow-lg)}
+.card-media{height:155px;position:relative;display:grid;place-items:center;font-size:46px;
+  background:linear-gradient(135deg,var(--brand-soft),var(--bg-soft));overflow:hidden}
+.card-media::after{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,transparent,transparent 26px,rgba(0,0,0,.025) 26px,rgba(0,0,0,.025) 27px)}
+html[data-theme="dark"] .card-media::after{background-image:repeating-linear-gradient(90deg,transparent,transparent 26px,rgba(255,255,255,.03) 26px,rgba(255,255,255,.03) 27px)}
+.tag-tl{position:absolute;top:11px;left:11px;display:flex;align-items:center;gap:4px;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(6px);padding:5px 10px;border-radius:20px;font-size:11.5px;font-weight:700}
+.tag-tr{position:absolute;top:11px;right:11px;font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;background:var(--brand-soft);color:var(--brand-deep)}
+html[data-theme="dark"] .tag-tr{color:var(--brand)}
+.card-b{padding:18px}
+.card-name{font-size:16.5px;font-weight:800;margin-bottom:5px}
+.card-loc{font-size:12.5px;color:var(--ink-dim);display:flex;align-items:center;gap:4px;margin-bottom:14px}
+.card-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:15px}
+.ctag{font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:6px;background:var(--bg-soft);color:var(--ink-soft)}
+.card-f{display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid var(--line)}
+.cprice .a{font-size:18px;font-weight:900;color:var(--flood)}
+.cprice .p{font-size:11px;color:var(--ink-dim)}
+
+/* ══════════ STAR OF WEEK ══════════ */
+.star-band{margin:0 40px;border-radius:var(--radius-lg);overflow:hidden;position:relative;
+  background:linear-gradient(120deg,var(--brand-deep),var(--brand) 80%)}
+html[data-theme="dark"] .star-band{background:linear-gradient(120deg,#0d2a0a,#103810)}
+.star-inner{position:relative;z-index:1;display:grid;grid-template-columns:auto 1fr auto;gap:32px;align-items:center;padding:44px 48px}
+.star-band::before{content:'🏅';position:absolute;font-size:280px;opacity:.07;left:-30px;top:-60px;z-index:0}
+.star-photo{width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.15);border:3px solid var(--flood);display:grid;place-items:center;font-size:48px;flex-shrink:0}
+.star-label{font-size:13px;font-weight:700;color:var(--flood);letter-spacing:.05em;margin-bottom:6px}
+.star-name{font-size:30px;font-weight:900;color:#fff;margin-bottom:6px}
+.star-meta{font-size:14px;color:rgba(255,255,255,.85)}
+.star-pts{text-align:center;color:#fff}
+.star-pts .v{font-size:42px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--flood)}
+.star-pts .k{font-size:12px;opacity:.85}
+
+/* ══════════ HOW ══════════ */
+.how3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
+.hstep{background:var(--bg-elev);padding:34px 30px}
+.hnum{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--flood);margin-bottom:16px}
+.hicon{font-size:30px;margin-bottom:14px}
+.htitle{font-size:17px;font-weight:800;margin-bottom:9px}
+.htext{font-size:13.5px;color:var(--ink-soft);line-height:1.7}
+
+/* trust */
+.trust4{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;text-align:center}
+.titem .b{font-size:36px;font-weight:900;color:var(--brand);font-family:'JetBrains Mono',monospace}
+html[data-theme="dark"] .titem .b{text-shadow:0 0 16px rgba(57,255,20,.4)}
+.titem .s{font-size:13px;color:var(--ink-soft);margin-top:6px}
+
+/* ══════════ FOOTER ══════════ */
+footer{padding:56px 40px 28px;border-top:1px solid var(--line);margin-top:40px}
+.fgrid{max-width:1280px;margin:0 auto 40px;display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:36px}
+.fbrand{font-size:19px;font-weight:900;margin-bottom:13px;display:flex;align-items:center;gap:9px}
+.fdesc{font-size:13px;color:var(--ink-dim);line-height:1.7;max-width:260px}
+.fh{font-size:12px;font-weight:800;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px}
+.flinks{display:flex;flex-direction:column;gap:10px}
+.flinks a{font-size:13.5px;color:var(--ink-soft);transition:color .2s;cursor:pointer}
+.flinks a:hover{color:var(--brand)}
+.fbottom{max-width:1280px;margin:0 auto;padding-top:26px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--ink-dim)}
+.vat-badge{display:inline-flex;align-items:center;gap:6px;background:var(--brand-soft);color:var(--brand-deep);padding:5px 12px;border-radius:20px;font-weight:700;font-size:12px}
+html[data-theme="dark"] .vat-badge{color:var(--brand)}
+
+/* ══════════ OVERLAY / DRAWER / MODAL ══════════ */
+.ov{position:fixed;inset:0;z-index:900;background:rgba(8,18,12,.6);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity .25s}
+.ov.open{opacity:1;pointer-events:all}
+
+.drawer{position:fixed;top:0;left:0;height:100vh;width:480px;max-width:94vw;z-index:901;background:var(--bg-elev);border-right:1px solid var(--line);transform:translateX(-100%);transition:transform .35s cubic-bezier(.2,.8,.2,1);overflow-y:auto}
+.drawer.open{transform:translateX(0)}
+.dhead{padding:20px 26px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;position:sticky;top:0;background:var(--bg-elev);z-index:5}
+.dhead .t{font-weight:800;font-size:16px}
+.dclose{margin-right:auto;width:34px;height:34px;border-radius:50%;background:var(--bg-soft);display:grid;place-items:center;font-size:15px;transition:background .2s}
+.dclose:hover{background:var(--line)}
+.dbody{padding:26px}
+.dmedia{height:200px;border-radius:var(--radius);background:linear-gradient(135deg,var(--brand-soft),var(--bg-soft));display:grid;place-items:center;font-size:60px;margin-bottom:22px;position:relative;overflow:hidden}
+
+.irow{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ink-soft);margin-bottom:9px}
+.irow b{color:var(--ink);font-weight:700}
+.dlabel{font-size:13px;font-weight:800;margin:22px 0 12px;display:flex;align-items:center;gap:8px}
+
+.dates{display:flex;gap:7px;overflow-x:auto;padding:2px 0 12px}
+.dpill{flex-shrink:0;width:58px;padding:9px 0;border-radius:11px;text-align:center;cursor:pointer;background:var(--bg-soft);border:1px solid var(--line);transition:all .2s}
+.dpill .dw{font-size:10.5px;color:var(--ink-dim);margin-bottom:3px}
+.dpill .dd{font-size:16px;font-weight:800}
+.dpill.active{background:var(--brand);border-color:var(--brand);color:#fff}
+html[data-theme="dark"] .dpill.active{color:#0a1408}
+
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.slot{padding:11px 2px;text-align:center;border-radius:9px;font-size:12.5px;font-weight:700;border:1px solid var(--line);color:var(--ink-soft);font-family:'JetBrains Mono',monospace;transition:all .15s}
+.slot.taken{background:var(--danger-soft);color:var(--danger);text-decoration:line-through;border-color:transparent;cursor:not-allowed}
+.slot.free{cursor:pointer}
+.slot.free:hover{border-color:var(--brand);color:var(--brand)}
+.slot.sel{background:var(--flood);color:#3a2700;border-color:var(--flood);transform:scale(1.05)}
+
+/* smart split */
+.split-box{margin-top:22px;padding:20px;border-radius:var(--radius);background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 30%,transparent)}
+.split-head{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;margin-bottom:14px;color:var(--brand-deep)}
+html[data-theme="dark"] .split-head{color:var(--brand)}
+.split-ctrl{display:flex;align-items:center;justify-content:space-between;background:var(--bg-elev);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.split-ctrl .lbl{font-size:13px;font-weight:600;color:var(--ink-soft)}
+.stepper{display:flex;align-items:center;gap:14px}
+.stepper button{width:32px;height:32px;border-radius:9px;background:var(--bg-soft);border:1px solid var(--line);font-size:18px;font-weight:700;color:var(--ink);display:grid;place-items:center;transition:all .15s}
+.stepper button:hover{background:var(--brand);color:#fff;border-color:var(--brand)}
+.stepper .cnt{font-size:18px;font-weight:800;min-width:26px;text-align:center;font-family:'JetBrains Mono',monospace}
+.split-result{display:flex;justify-content:space-between;align-items:center}
+.split-result .each{font-size:13px;color:var(--ink-soft)}
+.split-result .amt{font-size:24px;font-weight:900;color:var(--flood);font-family:'JetBrains Mono',monospace}
+
+.summary{margin-top:20px;padding:18px;border-radius:var(--radius);background:var(--bg-soft);border:1px solid var(--line)}
+.srow{display:flex;justify-content:space-between;font-size:13.5px;color:var(--ink-soft);margin-bottom:9px}
+.srow.tot{font-size:17px;font-weight:900;color:var(--ink);padding-top:11px;border-top:1px solid var(--line);margin-top:3px}
+.srow.tot .amt{color:var(--flood)}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s}
+.modal.open{opacity:1;pointer-events:all}
+.mcard{width:430px;max-width:100%;background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius-lg);padding:32px 28px;transform:translateY(16px) scale(.97);transition:transform .3s cubic-bezier(.2,.8,.2,1);max-height:90vh;overflow-y:auto}
+.modal.open .mcard{transform:none}
+.micon{width:68px;height:68px;border-radius:50%;background:var(--brand-soft);display:grid;place-items:center;font-size:30px;margin:0 auto 18px}
+.mcard h3{font-size:20px;font-weight:900;text-align:center;margin-bottom:9px}
+.mcard p{font-size:13.5px;color:var(--ink-soft);line-height:1.7;text-align:center;margin-bottom:22px}
+.receipt{background:var(--bg-soft);border:1px solid var(--line);border-radius:var(--radius-sm);padding:15px 17px;margin-bottom:22px}
+.receipt .r{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;color:var(--ink-soft)}
+.receipt .r b{color:var(--ink)}
+
+/* pay methods */
+.pays{display:flex;gap:10px;margin-bottom:18px}
+.pay{flex:1;padding:14px;border:1px solid var(--line);border-radius:12px;text-align:center;cursor:pointer;transition:all .2s;font-weight:700;font-size:13px}
+.pay.sel{border-color:var(--brand);background:var(--brand-soft)}
+.pay .ic{font-size:22px;margin-bottom:5px}
+
+/* auth */
+.tabs{display:flex;gap:4px;background:var(--bg-soft);border-radius:30px;padding:4px;margin-bottom:22px}
+.tab{flex:1;text-align:center;padding:9px;border-radius:26px;font-size:13px;font-weight:700;color:var(--ink-dim);transition:all .2s;cursor:pointer}
+.tab.active{background:var(--brand);color:#fff}
+html[data-theme="dark"] .tab.active{color:#0a1408}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px}
+.field input{width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none;transition:border-color .2s}
+.field input:focus{border-color:var(--brand)}
+
+/* legal modal */
+.legal-body{text-align:right;max-height:60vh;overflow-y:auto;padding-left:8px}
+.legal-body h4{font-size:15px;font-weight:800;margin:18px 0 8px;color:var(--brand-deep)}
+html[data-theme="dark"] .legal-body h4{color:var(--brand)}
+.legal-body p{font-size:13.5px;color:var(--ink-soft);line-height:1.8;margin-bottom:10px;text-align:right}
+.legal-note{background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:10px;padding:13px 15px;font-size:12.5px;color:var(--ink-soft);line-height:1.7;margin-top:14px}
+
+/* map placeholder */
+.map-wrap{height:300px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);position:relative;background:var(--bg-soft)}
+.map-grid-bg{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:40px 40px;opacity:.5}
+.map-pin{position:absolute;transform:translate(-50%,-100%);text-align:center;cursor:pointer}
+.map-pin .p{font-size:30px;filter:drop-shadow(0 4px 6px rgba(0,0,0,.3))}
+.map-pin .lab{font-size:11px;font-weight:700;background:var(--bg-elev);border:1px solid var(--line);padding:3px 8px;border-radius:8px;margin-top:-6px;white-space:nowrap;box-shadow:var(--shadow)}
+.map-you{position:absolute;width:18px;height:18px;background:var(--brand);border-radius:50%;border:3px solid var(--bg-elev);transform:translate(-50%,-50%);box-shadow:0 0 0 6px var(--brand-soft)}
+
+/* toast */
+.toasts{position:fixed;bottom:22px;left:22px;z-index:999;display:flex;flex-direction:column;gap:9px}
+.toast{display:flex;align-items:center;gap:9px;background:var(--bg-elev);border:1px solid var(--line);border-right:3px solid var(--brand);border-radius:11px;padding:12px 18px;font-size:13.5px;font-weight:600;min-width:250px;box-shadow:var(--shadow-lg);animation:tin .3s ease}
+.toast.error{border-right-color:var(--danger)}
+@keyframes tin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+/* mobile menu */
+.mmenu{position:fixed;top:0;left:0;right:0;z-index:590;background:var(--bg-elev);border-bottom:1px solid var(--line);padding:80px 30px 30px;transform:translateY(-100%);transition:transform .3s;display:flex;flex-direction:column;gap:4px}
+.mmenu.open{transform:translateY(0)}
+.mmenu a{padding:14px;font-size:16px;font-weight:600;border-radius:10px}
+.mmenu a:hover{background:var(--bg-soft)}
+
+@media(max-width:980px){
+  .hero-inner{grid-template-columns:1fr;gap:44px}
+  .hero-visual{max-width:460px}
+  .grid3,.how3{grid-template-columns:1fr 1fr}
+  .trust4{grid-template-columns:1fr 1fr}
+  .fgrid{grid-template-columns:1fr 1fr}
+  .star-inner{grid-template-columns:1fr;text-align:center;gap:18px;justify-items:center}
+}
+@media(max-width:640px){
+  .nav{padding:13px 18px}
+  .nav-links{display:none}
+  .menu-btn{display:block}
+  .hero{padding:110px 18px 60px}
+  .section{padding:60px 18px}
+  .grid3,.how3,.trust4,.fgrid{grid-template-columns:1fr}
+  .star-band{margin:0 18px}
+  .drawer{width:100vw}
+  .hero-ctas{flex-direction:column}
+  .hero-ctas .btn{width:100%}
+}
+</style>
+<!-- مكتبة Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<nav class="nav" id="nav">
+  <div class="brand"><div class="brand-logo">⚽</div> ملاعبنا</div>
+  <div class="nav-links">
+    <a onclick="goMod('stadiums')">الملاعب</a>
+    <a onclick="goMod('academies')">الأكاديميات</a>
+    <a onclick="goMod('tournaments')">البطولات</a>
+    <a onclick="scrollToId('map')">الخريطة</a>
+  </div>
+  <div class="nav-right">
+    <div class="theme-toggle" onclick="toggleTheme()" title="الوضع الليلي / النهاري">
+      <div class="knob" id="knob">☀️</div>
+    </div>
+    <div id="navAuth">
+      <button class="btn btn-ghost btn-sm" onclick="openAuth('login')">دخول</button>
+    </div>
+    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+  </div>
+</nav>
+
+<div class="mmenu" id="mmenu">
+  <a onclick="goMod('stadiums');toggleMenu()">🏟️ الملاعب</a>
+  <a onclick="goMod('academies');toggleMenu()">🎓 الأكاديميات</a>
+  <a onclick="goMod('tournaments');toggleMenu()">🏆 البطولات</a>
+  <a onclick="scrollToId('map');toggleMenu()">📍 الخريطة</a>
+</div>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <div class="eyebrow"><span class="pulse"></span> متاح الآن في منطقة عسير · خميس البحر</div>
+      <h1>احجز ملعبك،<br><span class="g">قسّم التكلفة</span><br>بدون <span class="f">إحراج</span></h1>
+      <p class="hero-sub">منصة ملاعبنا تجمع الملاعب والأكاديميات والبطولات في مكان واحد. شوف الأوقات المتاحة لحظيًا، قسّم الحساب آليًا على اللاعبين، وادفع بمدى أو Apple Pay.</p>
+      <div class="hero-ctas">
+        <button class="btn btn-brand btn-lg neon-glow" onclick="goMod('stadiums')">🏟️ تصفّح الملاعب</button>
+        <button class="btn btn-ghost btn-lg" onclick="scrollToId('how')">كيف يعمل؟</button>
+      </div>
+      <div class="hero-stats">
+        <div class="hstat"><div class="n"><span>1,240</span>+</div><div class="l">حجز هذا الشهر</div></div>
+        <div class="hstat"><div class="n"><span>8</span></div><div class="l">ملاعب وأكاديميات</div></div>
+        <div class="hstat"><div class="n"><span>0%</span></div><div class="l">ضريبة مضافة</div></div>
+      </div>
+    </div>
+    <div class="hero-visual" style="position:relative">
+      <div class="floaty floaty-1">⚡ حجز فوري</div>
+      <div class="floaty floaty-2">🤝 قطة ذكية</div>
+      <div class="hcard">
+        <div class="hcard-top">
+          <div><div class="hcard-title">ملعب البحر الأخضر</div><div class="hcard-loc">📍 خميس البحر، عسير</div></div>
+          <div class="live"><span class="d"></span> مباشر</div>
+        </div>
+        <div class="slot-mini">
+          <div class="sm taken">16:00</div><div class="sm">17:00</div><div class="sm sel">18:00</div><div class="sm">19:00</div>
+          <div class="sm taken">20:00</div><div class="sm">21:00</div><div class="sm">22:00</div><div class="sm taken">23:00</div>
+        </div>
+        <div class="hcard-foot">
+          <div class="hprice"><span class="a">160</span> <span class="p">ر / ساعة</span></div>
+          <button class="btn btn-flood btn-sm" onclick="goMod('stadiums')">احجز 18:00 ←</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ MODULES (Stadiums / Academies / Tournaments) ═══ -->
+<section class="section" id="modules">
+  <div class="container">
+    <div class="shead">
+      <div class="seyebrow">كل شيء في مكان واحد</div>
+      <h2 class="stitle">اختر خدمتك</h2>
+      <p class="ssub">ملاعب للحجز · أكاديميات للتدريب · بطولات للمنافسة — مع فلترة جغرافية دقيقة لمنطقتك.</p>
+    </div>
+
+    <div class="mod-tabs">
+      <button class="mod-tab active" data-mod="stadiums" onclick="switchMod('stadiums',this)">🏟️ الملاعب</button>
+      <button class="mod-tab" data-mod="academies" onclick="switchMod('academies',this)">🎓 الأكاديميات</button>
+      <button class="mod-tab" data-mod="tournaments" onclick="switchMod('tournaments',this)">🏆 البطولات</button>
+    </div>
+
+    <!-- filter bar -->
+    <div class="fbar">
+      <div class="fsearch">
+        <span>🔍</span>
+        <input type="text" id="search" placeholder="ابحث بالاسم أو الحي..." oninput="renderActive()">
+      </div>
+      <select class="fsel" id="regionFilter" onchange="renderActive()">
+        <option value="all">كل المناطق</option>
+        <option value="خميس البحر">خميس البحر</option>
+        <option value="بحر أبو سكينة">بحر أبو سكينة</option>
+        <option value="أبها">أبها</option>
+      </select>
+      <select class="fsel" id="priceFilter" onchange="renderActive()">
+        <option value="all">كل الأسعار</option>
+        <option value="low">أقل من 150 ر</option>
+        <option value="mid">150 - 200 ر</option>
+        <option value="high">أكثر من 200 ر</option>
+      </select>
+    </div>
+
+    <!-- panels -->
+    <div class="mod-panel active" id="panel-stadiums"><div class="grid3" id="grid-stadiums"></div></div>
+    <div class="mod-panel" id="panel-academies"><div class="grid3" id="grid-academies"></div></div>
+    <div class="mod-panel" id="panel-tournaments"><div class="grid3" id="grid-tournaments"></div></div>
+  </div>
+</section>
+
+<!-- ═══ STAR OF THE WEEK ═══ -->
+<div class="star-band">
+  <div class="star-inner">
+    <div class="star-photo">⭐</div>
+    <div>
+      <div class="star-label">🏅 نجم الأسبوع</div>
+      <div class="star-name">سلطان القحطاني</div>
+      <div class="star-meta">ملعب البحر الأخضر · 6 مباريات · حضور كامل · أداء استثنائي</div>
+    </div>
+    <div class="star-pts"><div class="v">94</div><div class="k">نقطة أداء</div></div>
+  </div>
+</div>
+
+<!-- ═══ MAP ═══ -->
+<section class="section" id="map">
+  <div class="container">
+    <div class="shead">
+      <div class="seyebrow">قريب منك</div>
+      <h2 class="stitle">أقرب الملاعب على الخريطة</h2>
+      <p class="ssub">فعّل موقعك لعرض الملاعب والأكاديميات الأقرب إليك في منطقة عسير.</p>
+    </div>
+    <div class="map-wrap">
+      <div class="map-grid-bg"></div>
+      <div class="map-you" style="left:50%;top:55%" title="موقعك"></div>
+      <div class="map-pin" style="left:30%;top:35%" onclick="openItem('stadiums',1)"><div class="p">📍</div><div class="lab">ملعب البحر الأخضر</div></div>
+      <div class="map-pin" style="left:68%;top:42%" onclick="openItem('stadiums',2)"><div class="p">📍</div><div class="lab">ملعب أبو سكينة</div></div>
+      <div class="map-pin" style="left:45%;top:72%" onclick="openItem('academies',1)"><div class="p">🎓</div><div class="lab">أكاديمية النجوم</div></div>
+      <div style="position:absolute;bottom:14px;right:14px;z-index:3">
+        <button class="btn btn-brand btn-sm neon-glow" onclick="locateMe()">📍 حدّد موقعي</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ HOW ═══ -->
+<section class="section" id="how">
+  <div class="container">
+    <div class="shead">
+      <div class="seyebrow">العملية</div>
+      <h2 class="stitle">من البحث إلى الملعب — ٣ خطوات</h2>
+    </div>
+    <div class="how3">
+      <div class="hstep"><div class="hnum">01 / اختر</div><div class="hicon">🔍</div><div class="htitle">اختر ملعبك</div><div class="htext">تصفّح الملاعب والأكاديميات القريبة، فلتر حسب منطقتك وسعرك، وشوف التقييمات.</div></div>
+      <div class="hstep"><div class="hnum">02 / قسّم</div><div class="hicon">🤝</div><div class="htitle">قسّم التكلفة بذكاء</div><div class="htext">حدّد عدد اللاعبين، والنظام يقسّم تكلفة الساعة آليًا بالتساوي — كل واحد يعرف نصيبه بدون إحراج.</div></div>
+      <div class="hstep"><div class="hnum">03 / ادفع</div><div class="hicon">💳</div><div class="htitle">ادفع بأمان</div><div class="htext">مدى أو Apple Pay، تأكيد فوري، وإشعار يصلك. بدون ضريبة مضافة (0% VAT).</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ TRUST ═══ -->
+<section class="section">
+  <div class="container">
+    <div class="trust4">
+      <div class="titem"><div class="b">1,240+</div><div class="s">حجز ناجح هذا الشهر</div></div>
+      <div class="titem"><div class="b">0</div><div class="s">حالات تعارض في الحجز</div></div>
+      <div class="titem"><div class="b">&lt;30s</div><div class="s">متوسط وقت الحجز</div></div>
+      <div class="titem"><div class="b">4.8★</div><div class="s">رضا المستخدمين</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer>
+  <div class="fgrid">
+    <div>
+      <div class="fbrand"><div class="brand-logo" style="width:32px;height:32px;font-size:16px">⚽</div> ملاعبنا</div>
+      <p class="fdesc">منصة حجز الملاعب والأكاديميات والبطولات في منطقة عسير. احجز، قسّم، والعب بدون تعقيد.</p>
+      <div style="margin-top:14px"><span class="vat-badge">🧾 أسعار صافية · 0% VAT</span></div>
+    </div>
+    <div>
+      <div class="fh">المنصة</div>
+      <div class="flinks"><a onclick="goMod('stadiums')">الملاعب</a><a onclick="goMod('academies')">الأكاديميات</a><a onclick="goMod('tournaments')">البطولات</a><a onclick="scrollToId('map')">الخريطة</a></div>
+    </div>
+    <div>
+      <div class="fh">الحوكمة والامتثال</div>
+      <div class="flinks">
+        <a onclick="openLegal('terms')">الشروط والأحكام</a>
+        <a onclick="openLegal('privacy')">سياسة الخصوصية</a>
+        <a onclick="openLegal('refund')">الإلغاء والاسترداد</a>
+        <a onclick="openLegal('pricing')">سياسة الأسعار</a>
+      </div>
+    </div>
+    <div>
+      <div class="fh">الدعم</div>
+      <div class="flinks"><a onclick="showToast('سيتواصل معك فريقنا قريبًا')">تواصل معنا</a><a onclick="showToast('قريبًا: مركز المساعدة')">مركز المساعدة</a><a onclick="openAuth('signup')">سجّل ملعبك</a></div>
+    </div>
+  </div>
+  <div class="fbottom">
+    <span>© 2026 ملاعبنا · منطقة عسير، المملكة العربية السعودية</span>
+    <span>وثيقة عمل حر · FL-246268597</span>
+  </div>
+</footer>
+
+<!-- ═══ OVERLAY + DRAWER + MODALS ═══ -->
+<div class="ov" id="ov" onclick="closeAll()"></div>
+
+<div class="drawer" id="drawer">
+  <div class="dhead"><div class="t" id="drawerTitle">تفاصيل</div><div class="dclose" onclick="closeAll()">✕</div></div>
+  <div class="dbody" id="drawerBody"></div>
+</div>
+
+<!-- confirm modal -->
+<div class="modal" id="mConfirm">
+  <div class="mcard">
+    <div class="micon">✅</div>
+    <h3 id="confirmTitle">تم تأكيد حجزك!</h3>
+    <p id="confirmText">تم إرسال التفاصيل إلى بريدك. نتمنى لك مباراة رائعة ⚽</p>
+    <div class="receipt" id="receipt"></div>
+    <button class="btn btn-brand btn-block" onclick="closeAll()">تم</button>
+  </div>
+</div>
+
+<!-- auth modal -->
+<div class="modal" id="mAuth">
+  <div class="mcard" style="text-align:right">
+    <div class="dclose" style="margin-bottom:12px;margin-right:auto" onclick="closeAll()">✕</div>
+    <div class="tabs"><div class="tab active" id="tabLogin" onclick="authTab('login')">دخول</div><div class="tab" id="tabSignup" onclick="authTab('signup')">حساب جديد</div></div>
+    <div id="fieldName" style="display:none"><div class="field"><label>الاسم الكامل</label><input id="au-name" type="text" placeholder="أحمد محمد"></div></div>
+    <div id="fieldRole" style="display:none">
+      <div class="field">
+        <label>نوع الحساب</label>
+        <div style="display:flex;gap:8px;margin-top:2px">
+          <div class="pay sel" id="role-customer" onclick="selRole('customer')" style="flex:1;padding:12px 8px"><div class="ic">⚽</div>لاعب</div>
+          <div class="pay" id="role-owner" onclick="selRole('owner')" style="flex:1;padding:12px 8px"><div class="ic">🏟️</div>صاحب ملعب</div>
+        </div>
+      </div>
+    </div>
+    <div class="field"><label>رقم الجوال</label><input id="au-phone" type="tel" inputmode="numeric" maxlength="10" placeholder="05xxxxxxxx"></div>
+    <div class="field" id="fieldEmail" style="display:none"><label>البريد الإلكتروني <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label><input id="au-email" type="email" placeholder="you@example.com"></div>
+    <div class="field"><label>كلمة المرور</label><input id="au-pass" type="password" placeholder="••••••••"></div>
+    <button class="btn btn-brand btn-block" style="margin-top:8px" id="authBtn" onclick="doAuth()">دخول</button>
+  </div>
+</div>
+
+<!-- legal modal -->
+<div class="modal" id="mLegal">
+  <div class="mcard" style="width:560px">
+    <div class="dclose" style="margin-bottom:8px;margin-right:auto" onclick="closeAll()">✕</div>
+    <h3 id="legalTitle" style="text-align:right">الشروط والأحكام</h3>
+    <div class="legal-body" id="legalBody"></div>
+    <button class="btn btn-soft btn-block" style="margin-top:18px" onclick="closeAll()">إغلاق</button>
+  </div>
+</div>
+
+<!-- owner/admin panel modal -->
+<div class="modal" id="mOwner">
+  <div class="mcard" style="width:560px;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <h3 id="ownerTitle" style="flex:1;text-align:right;margin:0">لوحة التحكم</h3>
+      <div class="dclose" onclick="closeAll()">✕</div>
+    </div>
+    <div id="ownerBody"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+// ════════════════ DATA ════════════════
+const DATA = {
+  stadiums: [
+    { id:1, name:"ملعب البحر الأخضر", region:"خميس البحر",    loc:"كورنيش البحر",   price:160, rating:4.9, tags:["إنارة ليلية","عشب صناعي"], icon:"🏟️" },
+    { id:2, name:"ملعب أبو سكينة",    region:"بحر أبو سكينة", loc:"وسط البلد",      price:140, rating:4.6, tags:["مواقف","غرف تبديل"], icon:"⚽" },
+    { id:3, name:"ملعب القمة",        region:"أبها",          loc:"حي المنهل",      price:210, rating:5.0, tags:["VIP","تكييف"], icon:"🏟️" },
+    { id:4, name:"ملعب الشلال",       region:"أبها",          loc:"حي الشلال",      price:130, rating:4.5, tags:["اقتصادي","مواقف"], icon:"⚽" },
+    { id:5, name:"ملعب النخيل",       region:"خميس البحر",    loc:"حي النخيل",      price:170, rating:4.7, tags:["إنارة ليلية","مدرجات"], icon:"🏟️" },
+    { id:6, name:"ملعب الواحة",       region:"بحر أبو سكينة", loc:"طريق الساحل",    price:120, rating:4.4, tags:["اقتصادي"], icon:"⚽" },
+  ],
+  academies: [
+    { id:1, name:"أكاديمية النجوم",   region:"خميس البحر", loc:"المجمع الرياضي", price:300, rating:4.8, tags:["تحت 12","تحت 16"], icon:"🎓", desc:"برنامج تدريبي احترافي" },
+    { id:2, name:"أكاديمية الصقور",   region:"أبها",       loc:"حي المنهل",      price:280, rating:4.9, tags:["حراس مرمى","مهارات"], icon:"🥅", desc:"تخصص حراسة المرمى" },
+    { id:3, name:"أكاديمية المستقبل", region:"بحر أبو سكينة", loc:"الساحل",      price:250, rating:4.6, tags:["ناشئين","لياقة"], icon:"⚽", desc:"بناء أساس رياضي قوي" },
+  ],
+  tournaments: [
+    { id:1, name:"بطولة الحي الرمضانية", region:"خميس البحر", loc:"ملعب البحر الأخضر", price:500, rating:0, tags:["16 فريق","جوائز"], icon:"🏆", desc:"بطولة سداسي · تبدأ قريبًا", teams:"12/16" },
+    { id:2, name:"دوري عسير المفتوح",     region:"أبها",       loc:"ملعب القمة",       price:800, rating:0, tags:["دوري","8 فرق"], icon:"🥇", desc:"دوري ذهاب وإياب", teams:"6/8" },
+    { id:3, name:"كأس الساحل",           region:"بحر أبو سكينة", loc:"ملعب أبو سكينة", price:400, rating:0, tags:["خروج المغلوب"], icon:"🏅", desc:"بطولة نهاية الأسبوع", teams:"8/16" },
+  ]
+};
+
+const dayNames = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+const timeSlots = ["14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"];
+
+let currentMod = 'stadiums';
+let active = null, activeType = null;
+let selDate = 0, selSlot = null, playerCount = 6, payMethod = 'mada';
+let loggedIn = false, authMode = 'login';
+
+function takenSlots(id, d){ const seed=id*7+d*3; return timeSlots.filter((_,i)=>(seed+i*13)%5===0); }
+
+// ════════════════ SMART SPLIT (من مواصفاتك) ════════════════
+function calculateSmartSplit(totalPrice, playersCount){
+  if(playersCount <= 0) return { error:"يجب تحديد عدد اللاعبين بشكل صحيح" };
+  const sharePerPlayer = totalPrice / playersCount;
+  const finalShare = Math.round(sharePerPlayer * 100) / 100;
+  return { totalAmount:totalPrice, numberOfPlayers:playersCount, sharePerPlayer:finalShare, currency:"SAR", taxRate:"0% VAT" };
+}
+
+// ════════════════ THEME ════════════════
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur==='dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  document.getElementById('knob').textContent = next==='dark' ? '🌙' : '☀️';
+}
+// نظام التشغيل
+if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+  document.documentElement.setAttribute('data-theme','dark');
+}
+document.getElementById('knob').textContent =
+  document.documentElement.getAttribute('data-theme')==='dark' ? '🌙' : '☀️';
+
+// ════════════════ MODULE SWITCH ════════════════
+function switchMod(mod, el){
+  currentMod = mod;
+  document.querySelectorAll('.mod-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.mod-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+mod).classList.add('active');
+  renderActive();
+}
+function goMod(mod){
+  const el = document.querySelector(`[data-mod="${mod}"]`);
+  switchMod(mod, el);
+  scrollToId('modules');
+}
+
+// ════════════════ RENDER ════════════════
+function renderActive(){
+  const q = (document.getElementById('search').value||'').trim();
+  const region = document.getElementById('regionFilter').value;
+  const price = document.getElementById('priceFilter').value;
+
+  const items = DATA[currentMod].filter(it=>{
+    const qok = !q || it.name.includes(q) || it.loc.includes(q) || it.region.includes(q);
+    const rok = region==='all' || it.region===region;
+    let pok = true;
+    if(price==='low') pok = it.price < 150;
+    else if(price==='mid') pok = it.price>=150 && it.price<=200;
+    else if(price==='high') pok = it.price > 200;
+    return qok && rok && pok;
+  });
+
+  const grid = document.getElementById('grid-'+currentMod);
+  if(items.length===0){ grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:50px;color:var(--ink-dim)">لا توجد نتائج مطابقة.</div>`; return; }
+
+  grid.innerHTML = items.map(it=>{
+    const isStadium = currentMod==='stadiums';
+    const isTourney = currentMod==='tournaments';
+    const cta = isStadium ? 'احجز' : isTourney ? 'سجّل فريقك' : 'سجّل ابنك';
+    const ratingBadge = it.rating>0 ? `<div class="tag-tl">⭐ ${it.rating}</div>` : `<div class="tag-tl">🏆 ${it.teams}</div>`;
+    const priceLbl = isStadium ? 'ر/ساعة' : isTourney ? 'ر/فريق' : 'ر/شهر';
+    return `<div class="card" onclick="openItem('${currentMod}',${it.id})">
+      <div class="card-media">${it.icon}${ratingBadge}<div class="tag-tr">${it.region}</div></div>
+      <div class="card-b">
+        <div class="card-name">${it.name}</div>
+        <div class="card-loc">📍 ${it.loc}، ${it.region}</div>
+        <div class="card-tags">${it.tags.map(t=>`<span class="ctag">${t}</span>`).join('')}</div>
+        <div class="card-f">
+          <div class="cprice"><span class="a">${it.price}</span> <span class="p">${priceLbl}</span></div>
+          <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();openItem('${currentMod}',${it.id})">${cta} ←</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════ OPEN ITEM (DRAWER) ════════════════
+function openItem(type, id){
+  activeType = type;
+  active = DATA[type].find(x=>x.id===id);
+  selDate=0; selSlot=null; playerCount=6;
+  if(type==='stadiums') renderStadiumDrawer();
+  else renderSimpleDrawer();
+  document.getElementById('ov').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+
+function renderStadiumDrawer(){
+  const s = active;
+  document.getElementById('drawerTitle').textContent = 'حجز ملعب';
+  const today = new Date();
+  let pills='';
+  for(let i=0;i<7;i++){ const d=new Date(today);d.setDate(d.getDate()+i);
+    pills+=`<div class="dpill ${i===selDate?'active':''}" onclick="setDate(${i})"><div class="dw">${dayNames[d.getDay()]}</div><div class="dd">${d.getDate()}</div></div>`; }
+  const taken = takenSlots(s.id, selDate);
+  const slots = timeSlots.map(t=>{ const tk=taken.includes(t); const sl=selSlot===t;
+    return `<div class="slot ${tk?'taken':sl?'sel':'free'}" ${tk?'':`onclick="setSlot('${t}')"`}>${t}</div>`; }).join('');
+
+  const split = calculateSmartSplit(s.price, playerCount);
+  const canBook = !!selSlot;
+
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="dmedia">${s.icon}</div>
+    <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
+    <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
+    <div class="irow">⭐ <b>${s.rating}</b> · ${s.tags.join(' · ')}</div>
+    <div class="irow">💰 <b>${s.price} ريال</b> / الساعة</div>
+
+    <div class="dlabel">📅 اختر اليوم</div>
+    <div class="dates">${pills}</div>
+    <div class="dlabel">⏱️ اختر الوقت المتاح</div>
+    <div class="slots">${slots}</div>
+
+    <div class="split-box">
+      <div class="split-head">🤝 القطة الذكية — تقسيم التكلفة</div>
+      <div class="split-ctrl">
+        <span class="lbl">عدد اللاعبين</span>
+        <div class="stepper">
+          <button onclick="changePlayers(-1)">−</button>
+          <span class="cnt">${playerCount}</span>
+          <button onclick="changePlayers(1)">+</button>
+        </div>
+      </div>
+      <div class="split-result">
+        <span class="each">نصيب كل لاعب</span>
+        <span class="amt">${split.sharePerPlayer} <span style="font-size:13px">ر</span></span>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div class="srow"><span>الملعب</span><span>${s.name}</span></div>
+      <div class="srow"><span>الوقت</span><span>${selSlot? selSlot+' - '+(parseInt(selSlot)+1)+':00' : '— اختر وقتًا —'}</span></div>
+      <div class="srow"><span>الضريبة</span><span>0% VAT</span></div>
+      <div class="srow tot"><span>الإجمالي</span><span class="amt">${s.price} ريال</span></div>
+    </div>
+
+    <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()" ${canBook?'':'disabled'}>
+      ${canBook? '💳 متابعة الدفع' : 'اختر وقتًا أولًا'}
+    </button>`;
+}
+
+function renderSimpleDrawer(){
+  const it = active;
+  const isTourney = activeType==='tournaments';
+  document.getElementById('drawerTitle').textContent = isTourney ? 'تسجيل في بطولة' : 'تسجيل في أكاديمية';
+  const priceLbl = isTourney ? 'رسوم الفريق' : 'الاشتراك الشهري';
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="dmedia">${it.icon}</div>
+    <div style="font-size:20px;font-weight:900;margin-bottom:8px">${it.name}</div>
+    <div class="irow">📍 <b>${it.loc}، ${it.region}</b></div>
+    <div class="irow">📋 <b>${it.desc}</b></div>
+    ${isTourney? `<div class="irow">👥 الفرق المسجلة: <b>${it.teams}</b></div>` : `<div class="irow">⭐ <b>${it.rating}</b></div>`}
+    <div class="irow">🏷️ ${it.tags.join(' · ')}</div>
+
+    ${isTourney? `
+      <div class="dlabel">📝 بيانات الفريق</div>
+      <div class="field"><label>اسم الفريق</label><input type="text" placeholder="صقور الساحل"></div>
+      <div class="field"><label>اسم الكابتن</label><input type="text" placeholder="اسمك"></div>
+    ` : `
+      <div class="dlabel">📝 بيانات اللاعب</div>
+      <div class="field"><label>اسم اللاعب</label><input type="text" placeholder="اسم ابنك"></div>
+      <div class="field"><label>العمر</label><input type="number" placeholder="10"></div>
+    `}
+
+    <div class="summary">
+      <div class="srow"><span>${priceLbl}</span><span>${it.price} ريال</span></div>
+      <div class="srow"><span>الضريبة</span><span>0% VAT</span></div>
+      <div class="srow tot"><span>الإجمالي</span><span class="amt">${it.price} ريال</span></div>
+    </div>
+    <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()">💳 متابعة الدفع</button>`;
+}
+
+function setDate(i){ selDate=i; selSlot=null; renderStadiumDrawer(); }
+function setSlot(t){ selSlot=t; renderStadiumDrawer(); }
+function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); renderStadiumDrawer(); }
+
+// ════════════════ PAYMENT / CONFIRM ════════════════
+function proceed(){
+  if(!loggedIn){ showToast('سجّل الدخول أولًا لإتمام العملية','error'); closeDrawer(); openAuth('login'); return; }
+  // payment selection inline in confirm modal
+  const it = active;
+  const isStadium = activeType==='stadiums';
+  let extraRow = '';
+  if(isStadium){
+    const split = calculateSmartSplit(it.price, playerCount);
+    extraRow = `<div class="r"><span>نصيب كل لاعب (${playerCount})</span><b>${split.sharePerPlayer} ر</b></div>`;
+  }
+  document.getElementById('confirmTitle').textContent = 'اختر طريقة الدفع';
+  document.getElementById('confirmText').textContent = 'ادفع بأمان عبر بوابة مرخّصة. أسعارنا صافية بدون ضريبة مضافة.';
+  document.querySelector('#mConfirm .micon').textContent = '💳';
+  document.getElementById('receipt').innerHTML = `
+    <div class="pays">
+      <div class="pay sel" id="pay-mada" onclick="selPay('mada')"><div class="ic">💳</div>مدى</div>
+      <div class="pay" id="pay-apple" onclick="selPay('apple')"><div class="ic"></div>Apple Pay</div>
+    </div>
+    <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
+    ${isStadium? `<div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
+    ${extraRow}
+    <div class="r"><span>الضريبة</span><b>0% VAT</b></div>
+    <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>الإجمالي</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
+  `;
+  // swap button
+  const btn = document.querySelector('#mConfirm .btn-brand');
+  btn.textContent = `ادفع ${it.price} ريال`;
+  btn.onclick = finalizePayment;
+  closeDrawer();
+  document.getElementById('mConfirm').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+function selPay(m){ payMethod=m; document.getElementById('pay-mada').classList.toggle('sel',m==='mada'); document.getElementById('pay-apple').classList.toggle('sel',m==='apple'); }
+
+function finalizePayment(){
+  const it = active;
+  const isStadium = activeType==='stadiums';
+  const today = new Date(); today.setDate(today.getDate()+selDate);
+  const dateStr = isStadium? `${dayNames[today.getDay()]} ${today.getDate()}/${today.getMonth()+1}` : '—';
+  document.querySelector('#mConfirm .micon').textContent = '✅';
+  document.getElementById('confirmTitle').textContent = isStadium ? 'تم تأكيد حجزك!' : 'تم تسجيلك بنجاح!';
+  document.getElementById('confirmText').textContent = `تمت العملية عبر ${payMethod==='mada'?'مدى':'Apple Pay'}. وصلك إشعار بالتفاصيل ⚽`;
+  document.getElementById('receipt').innerHTML = `
+    <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
+    ${isStadium? `<div class="r"><span>التاريخ</span><b>${dateStr}</b></div><div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
+    <div class="r"><span>رقم العملية</span><b class="mono">#${Math.floor(10000+Math.random()*89999)}</b></div>
+    <div class="r"><span>طريقة الدفع</span><b>${payMethod==='mada'?'مدى':'Apple Pay'}</b></div>
+    <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المدفوع</span><b style="color:var(--flood);font-size:16px">${it.price} ريال · 0% VAT</b></div>
+  `;
+  const btn = document.querySelector('#mConfirm .btn-brand');
+  btn.textContent = 'تم';
+  btn.onclick = closeAll;
+  showToast(isStadium?'تم تأكيد الحجز ✓':'تم التسجيل ✓');
+}
+
+// ════════════════ AUTH ════════════════
+function openAuth(mode){ authTab(mode); document.getElementById('mAuth').classList.add('open'); document.getElementById('ov').classList.add('open'); }
+function authTab(mode){ authMode=mode;
+  document.getElementById('tabLogin').classList.toggle('active',mode==='login');
+  document.getElementById('tabSignup').classList.toggle('active',mode==='signup');
+  document.getElementById('fieldName').style.display  = mode==='signup'?'block':'none';
+  document.getElementById('fieldRole').style.display  = mode==='signup'?'block':'none';
+  document.getElementById('fieldEmail').style.display = mode==='signup'?'block':'none';
+  document.getElementById('authBtn').textContent = mode==='login'?'دخول':'إنشاء الحساب';
+}
+let selectedRole = 'customer';
+function selRole(r){
+  selectedRole = r;
+  document.getElementById('role-customer').classList.toggle('sel', r==='customer');
+  document.getElementById('role-owner').classList.toggle('sel', r==='owner');
+}
+function doAuth(){
+  loggedIn=true; closeAll();
+  document.getElementById('navAuth').innerHTML = `<div class="nav-user"><div class="av">أ</div> أحمد</div>`;
+  showToast(authMode==='login'?'تم تسجيل الدخول ✓':'تم إنشاء حسابك ✓');
+}
+
+// ════════════════ LEGAL PAGES ════════════════
+const LEGAL = {
+  terms: { t:"الشروط والأحكام", html:`
+    <h4>١. قبول الشروط</h4><p>باستخدامك منصة ملاعبنا فإنك توافق على هذه الشروط. المنصة تربط بين اللاعبين وأصحاب الملاعب والأكاديميات ومنظّمي البطولات.</p>
+    <h4>٢. الحجز والإلغاء</h4><p>يلتزم اللاعب بمهلة الإلغاء المرنة الموضحة عند الحجز. الإلغاء ضمن المهلة المسموحة يتيح استرداد المبلغ وفق سياسة الاسترداد.</p>
+    <h4>٣. مسؤولية المستخدم</h4><p>يتحمل المستخدم مسؤولية دقة بياناته والتزامه بمواعيد الحجز واحترام قواعد الملعب.</p>
+    <h4>٤. حقوق الملاك</h4><p>تحفظ المنصة حقوق أصحاب الملاعب وتنظّم العلاقة بينهم وبين اللاعبين بشكل عادل.</p>
+    <div class="legal-note">⚠️ هذه صياغة مبدئية للعرض. يجب مراجعتها واعتمادها من مختص قانوني قبل النشر الرسمي.</div>` },
+  privacy: { t:"سياسة الخصوصية", html:`
+    <h4>١. البيانات التي نجمعها</h4><p>نجمع الاسم، البريد، رقم الجوال، وبيانات الحجز لتقديم الخدمة فقط.</p>
+    <h4>٢. حماية البيانات</h4><p>تُشفّر بيانات المستخدمين وصور الملاعب وتُحفظ بأمان. لا نشارك بياناتك مع أطراف ثالثة دون موافقتك.</p>
+    <h4>٣. ملفات الموقع</h4><p>نستخدم تقنيات لتحسين تجربتك وحفظ تفضيلاتك مثل الوضع الليلي.</p>
+    <h4>٤. حقوقك</h4><p>يحق لك الاطلاع على بياناتك أو طلب حذفها في أي وقت.</p>
+    <div class="legal-note">⚠️ راجِع متطلبات نظام حماية البيانات الشخصية السعودي (PDPL) مع مختص قبل الاعتماد.</div>` },
+  refund: { t:"سياسة الإلغاء والاسترداد", html:`
+    <h4>١. الإلغاء من اللاعب</h4><p>عند الإلغاء ضمن المهلة المسموحة، يُعاد المبلغ آليًا إلى محفظتك الإلكترونية في المنصة.</p>
+    <h4>٢. الإلغاء من الملعب</h4><p>إذا ألغى الملعب الحجز، يُسترد كامل المبلغ فورًا وتلقائيًا لمحفظة اللاعب.</p>
+    <h4>٣. مدة المعالجة</h4><p>تتم إعادة المبالغ للمحفظة فورًا، والتحويل البنكي خلال المدة المعتادة لبوابة الدفع.</p>
+    <div class="legal-note">⚠️ آلية الاسترداد الفعلية تعتمد على بوابة الدفع المرخّصة. تُضبط التفاصيل عند التكامل مع البوابة.</div>` },
+  pricing: { t:"سياسة الأسعار", html:`
+    <h4>١. العملة</h4><p>جميع الأسعار بالريال السعودي (SAR).</p>
+    <h4>٢. الضريبة</h4><p>تُعرض الأسعار صافية. يظهر معدل 0% VAT في الفواتير الحالية.</p>
+    <h4>٣. الشفافية</h4><p>لا توجد رسوم خفية. السعر الظاهر عند الحجز هو السعر النهائي.</p>
+    <div class="legal-note">⚠️ مهم: الإعفاء من ضريبة القيمة المضافة ليس تلقائيًا. يرتبط بحد التسجيل الإلزامي (375,000 ريال سنويًا) وقواعد هيئة الزكاة والضريبة والجمارك. راجِع محاسبًا قانونيًا للتأكد من وضعك الضريبي قبل إصدار فواتير بـ 0%.</div>` },
+};
+function openLegal(key){
+  const L = LEGAL[key];
+  document.getElementById('legalTitle').textContent = L.t;
+  document.getElementById('legalBody').innerHTML = L.html;
+  document.getElementById('mLegal').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+
+// ════════════════ MAP / GEO ════════════════
+function locateMe(){
+  showToast('جارٍ تحديد موقعك...');
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      ()=>showToast('تم تحديد موقعك ✓ عرض أقرب الملاعب'),
+      ()=>showToast('تعذّر الوصول للموقع — فعّل صلاحية الموقع','error')
+    );
+  } else { showToast('المتصفح لا يدعم تحديد الموقع','error'); }
+}
+
+// ════════════════ HELPERS ════════════════
+function scrollToId(id){ document.getElementById(id).scrollIntoView({behavior:'smooth'}); }
+function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); }
+function closeAll(){ ['ov','drawer','mConfirm','mAuth','mLegal','mOwner'].forEach(id=>document.getElementById(id).classList.remove('open')); }
+function toggleMenu(){ document.getElementById('mmenu').classList.toggle('open'); }
+function showToast(msg,type='success'){ const t=document.createElement('div'); t.className=`toast ${type}`;
+  t.innerHTML=`<span>${type==='success'?'✅':'⚠️'}</span><span>${msg}</span>`;
+  document.getElementById('toasts').appendChild(t); setTimeout(()=>t.remove(),3600); }
+
+window.addEventListener('scroll',()=>document.getElementById('nav').classList.toggle('scrolled',window.scrollY>30));
+
+// init
+renderActive();
+
+/* ════════════════════════════════════════════════════════════════
+ *  🔗 جسر الربط مع Supabase (Malaabna Backend Bridge)
+ *  ────────────────────────────────────────────────────────────────
+ *  ▼▼▼  ضع مفاتيحك هنا  ▼▼▼
+ *  احصل عليهما من: Supabase → Settings → API
+ * ════════════════════════════════════════════════════════════════ */
+const SUPABASE_URL      = 'https://lsgakyydqomzntoebqep.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZ2FreXlkcW9tem50b2VicWVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTkwMDEsImV4cCI6MjA5ODU5NTAwMX0.33DmQ23ab5hw3Y3iGtzXphopVMKmnOnTZZfxhtVZmcM';
+/* ▲▲▲  لا تعدّل شيئاً تحت هذا السطر  ▲▲▲ */
+
+// هل تم إدخال المفاتيح؟
+const BACKEND_READY =
+  SUPABASE_URL.startsWith('https://') &&
+  !SUPABASE_URL.includes('YOUR_PROJECT') &&
+  !SUPABASE_ANON_KEY.includes('YOUR_ANON');
+
+let sb = null;
+window.sb = null;
+if (BACKEND_READY && window.supabase) {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  window.sb = sb;
+  console.log('✅ متصل بقاعدة البيانات Supabase');
+  initBackend();
+} else {
+  console.log('ℹ️ الوضع التجريبي — أدخل مفاتيح Supabase لتفعيل الحفظ الدائم');
+}
+
+function initBackend() {
+  // تحويل رقم الجوال إلى بريد داخلي ثابت (للاستخدام مع Supabase Auth)
+  function phoneToEmail(phone) {
+    return 'p' + phone + '@malaebna.local';   // مثال: p0501234567@malaebna.local
+  }
+  // التحقق من صيغة رقم الجوال السعودي (يبدأ بـ 05 ويتبعه 8 أرقام)
+  function isValidSaudiPhone(phone) {
+    return /^05[0-9]{8}$/.test(phone);
+  }
+
+  // ── استبدال تسجيل الدخول/التسجيل بالحقيقي (بالجوال) ──
+  window.doAuth = async function () {
+    const phone = (document.getElementById('au-phone')?.value || '').trim();
+    const pass  = document.getElementById('au-pass')?.value || '';
+    const name  = (document.getElementById('au-name')?.value || '').trim();
+    const emailInput = (document.getElementById('au-email')?.value || '').trim();
+
+    // تحقق من رقم الجوال
+    if (!phone) { showToast('أدخل رقم الجوال','error'); return; }
+    if (!isValidSaudiPhone(phone)) { showToast('رقم الجوال يجب أن يبدأ بـ 05 ويتكوّن من 10 أرقام','error'); return; }
+    if (!pass) { showToast('أدخل كلمة المرور','error'); return; }
+
+    if (authMode === 'signup') {
+      // الإيميل اختياري: لو أُدخل نستخدمه، وإلا نولّد إيميل داخلي من الجوال
+      const loginEmail = emailInput || phoneToEmail(phone);
+      // صاحب الملعب يبدأ كـ owner لكن حسابه "قيد المراجعة" حتى يفعّله المالك
+      const chosenRole = (selectedRole === 'owner') ? 'owner' : 'customer';
+      const { data, error } = await sb.auth.signUp({
+        email: loginEmail,
+        password: pass,
+        options: { data: { name, phone, real_email: emailInput || null, role: chosenRole } }
+      });
+      if (error) { showToast(translateErr(error.message),'error'); return; }
+
+      // حفظ رقم الجوال والدور في جدول profiles
+      if (data.user) {
+        await sb.from('profiles').update({ phone, name, role: chosenRole }).eq('id', data.user.id);
+      }
+      loggedIn = true;
+      if (chosenRole === 'owner') {
+        showToast('تم إنشاء حساب صاحب الملعب ✓ (بانتظار تفعيل الإدارة)');
+      } else {
+        showToast('تم إنشاء حسابك ✓');
+      }
+      await afterLogin();
+    } else {
+      // تسجيل الدخول: نبني الإيميل من الجوال (نفس طريقة التسجيل)
+      // ملاحظة: من سجّل بإيميل حقيقي يسجّل الدخول بنفس رقم جواله
+      const loginEmail = phoneToEmail(phone);
+      let { data, error } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
+
+      // احتياط: لو المستخدم سجّل بإيميل حقيقي بدل الداخلي
+      if (error && emailInput) {
+        ({ data, error } = await sb.auth.signInWithPassword({ email: emailInput, password: pass }));
+      }
+      if (error) { showToast('رقم الجوال أو كلمة المرور غير صحيحة','error'); return; }
+
+      loggedIn = true;
+      showToast('تم تسجيل الدخول ✓');
+      await afterLogin();
+    }
+  };
+
+  // بعد الدخول: اقرأ الدور من قاعدة البيانات ووجّه المستخدم
+  async function afterLogin() {
+    closeAll();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+
+    // اقرأ بيانات المستخدم (الاسم + الدور)
+    const { data: profile } = await sb
+      .from('profiles').select('name, role').eq('id', user.id).single();
+
+    const name = profile?.name || user.user_metadata?.name || 'مستخدم';
+    const role = profile?.role || 'customer';
+    const initial = name.trim().charAt(0) || 'م';
+
+    // زر المستخدم في الشريط العلوي — يختلف حسب الدور
+    let roleBadge = '', roleAction = '';
+    if (role === 'super_admin') {
+      roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
+      roleAction = `<button class="btn btn-flood btn-sm" onclick="openOwnerPanel('admin')">لوحة التحكم</button>`;
+    } else if (role === 'owner' || role === 'staff') {
+      roleBadge = '<span style="font-size:10px;color:var(--brand);font-weight:700">🏟️ صاحب ملعب</span>';
+      roleAction = `<button class="btn btn-brand btn-sm" onclick="openOwnerPanel('owner')">لوحة ملاعبي</button>`;
+    }
+
+    document.getElementById('navAuth').innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px">
+        ${roleAction}
+        <div class="nav-user"><div class="av">${initial}</div>
+          <div style="display:flex;flex-direction:column;line-height:1.1">
+            <span>${name.split(' ')[0]}</span>${roleBadge}
+          </div>
+        </div>
+      </div>`;
+
+    // توجيه تلقائي حسب الدور
+    if (role === 'super_admin') {
+      showToast('مرحباً بك أيها المالك 🛡️');
+    } else if (role === 'owner' || role === 'staff') {
+      showToast('مرحباً صاحب الملعب 🏟️');
+    }
+  }
+
+  // ── استبدال إنشاء الحجز بالحقيقي ──
+  const _finalizePayment = window.finalizePayment;
+  window.proceed = async function () {
+    if (!loggedIn) { showToast('سجّل الدخول أولاً','error'); closeDrawer(); openAuth('login'); return; }
+
+    // فقط الملاعب تُحفظ كحجز فعلي (الأكاديميات/البطولات لاحقاً)
+    if (activeType === 'stadiums') {
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); openAuth('login'); return; }
+
+      const today = new Date(); today.setDate(today.getDate() + selDate);
+      const dateStr = today.toISOString().split('T')[0];
+
+      // ملاحظة: يحتاج ربط الملعب بـ field_id حقيقي من قاعدة البيانات
+      const { error } = await sb.from('bookings').insert({
+        user_id: user.id,
+        field_id: active.id,
+        booking_date: dateStr,
+        start_time: selSlot,
+        end_time: (parseInt(selSlot)+1)+':00',
+        players_count: playerCount,
+        total_price: active.price,
+        status: 'pending'
+      });
+
+      if (error) {
+        if (error.message.includes('BOOKING_OVERLAP')) {
+          showToast('عذراً، هذا الوقت محجوز. اختر وقتاً آخر','error'); return;
+        }
+        if (error.message.includes('FIELD_UNAVAILABLE')) {
+          showToast('الملعب مغلق أو تحت الصيانة','error'); return;
+        }
+        if (error.message.includes('foreign key') || error.code === '23503') {
+          // الملعب التجريبي غير موجود في قاعدة البيانات بعد
+          showToast('أضف الملاعب لقاعدة البيانات أولاً (راجع الدليل)','error'); return;
+        }
+        showToast('تعذّر الحجز: ' + error.message,'error'); return;
+      }
+    }
+    // أكمل تدفق الدفع/التأكيد المعتاد
+    _proceedUI();
+  };
+
+  // نحتفظ بمنطق واجهة الدفع الأصلي
+  function _proceedUI() {
+    const it = active;
+    const isStadium = activeType === 'stadiums';
+    let extraRow = '';
+    if (isStadium) {
+      const split = calculateSmartSplit(it.price, playerCount);
+      extraRow = `<div class="r"><span>نصيب كل لاعب (${playerCount})</span><b>${split.sharePerPlayer} ر</b></div>`;
+    }
+    document.getElementById('confirmTitle').textContent = 'اختر طريقة الدفع';
+    document.getElementById('confirmText').textContent = 'ادفع بأمان. أسعارنا صافية بدون ضريبة.';
+    document.querySelector('#mConfirm .micon').textContent = '💳';
+    document.getElementById('receipt').innerHTML = `
+      <div class="pays">
+        <div class="pay sel" id="pay-mada" onclick="selPay('mada')"><div class="ic">💳</div>مدى</div>
+        <div class="pay" id="pay-apple" onclick="selPay('apple')"><div class="ic"></div>Apple Pay</div>
+      </div>
+      <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
+      ${isStadium ? `<div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
+      ${extraRow}
+      <div class="r"><span>الضريبة</span><b>0% VAT</b></div>
+      <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>الإجمالي</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>`;
+    const btn = document.querySelector('#mConfirm .btn-brand');
+    btn.textContent = `ادفع ${it.price} ريال`;
+    btn.onclick = window.finalizePayment;
+    closeDrawer();
+    document.getElementById('mConfirm').classList.add('open');
+    document.getElementById('ov').classList.add('open');
+  }
+
+  // ── تحميل الملاعب الحقيقية من قاعدة البيانات (إن وُجدت) ──
+  loadRealFields();
+  async function loadRealFields() {
+    const { data, error } = await sb
+      .from('fields')
+      .select('id, name, type, price_per_hour, facilities!inner(name, city, district, region)')
+      .eq('status', 'available');
+    if (error || !data || data.length === 0) {
+      console.log('ℹ️ لا توجد ملاعب في قاعدة البيانات بعد — عرض البيانات التجريبية');
+      return;
+    }
+    // حوّل بيانات قاعدة البيانات لصيغة الموقع
+    DATA.stadiums = data.map(f => ({
+      id: f.id,
+      name: f.name,
+      region: f.facilities.region || f.facilities.district || f.facilities.city,
+      loc: f.facilities.district || f.facilities.city,
+      price: Number(f.price_per_hour),
+      rating: 4.7,
+      tags: [f.type === 'natural' ? 'عشب طبيعي' : f.type === 'indoor' ? 'مغلق' : 'عشب صناعي'],
+      icon: '🏟️'
+    }));
+    if (currentMod === 'stadiums') renderActive();
+    console.log(`✅ تم تحميل ${data.length} ملعب من قاعدة البيانات`);
+  }
+}
+
+// ترجمة أخطاء Supabase الشائعة لرسائل عربية واضحة
+// ════════════════ لوحة صاحب الملعب / المالك ════════════════
+async function openOwnerPanel(kind) {
+  const modal = document.getElementById('mOwner');
+  const bodyEl = document.getElementById('ownerBody');
+  const titleEl = document.getElementById('ownerTitle');
+
+  if (!window.sb) { showToast('يتطلب اتصال قاعدة البيانات','error'); return; }
+
+  if (kind === 'admin') {
+    titleEl.textContent = '🛡️ لوحة تحكم المالك';
+    bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+    modal.classList.add('open'); document.getElementById('ov').classList.add('open');
+
+    // إحصائيات عامة للمالك
+    const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { data: pendingOwners }] = await Promise.all([
+      sb.from('profiles').select('*', { count: 'exact', head: true }),
+      sb.from('facilities').select('*', { count: 'exact', head: true }),
+      sb.from('bookings').select('*', { count: 'exact', head: true }),
+      sb.from('profiles').select('id, name, phone').eq('role', 'owner').limit(20),
+    ]);
+
+    bodyEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+          <div style="font-size:26px;font-weight:900;color:var(--brand)">${usersCount||0}</div>
+          <div style="font-size:12px;color:var(--ink-dim)">مستخدم</div></div>
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+          <div style="font-size:26px;font-weight:900;color:var(--flood)">${facCount||0}</div>
+          <div style="font-size:12px;color:var(--ink-dim)">منشأة</div></div>
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+          <div style="font-size:26px;font-weight:900;color:var(--brand)">${bookCount||0}</div>
+          <div style="font-size:12px;color:var(--ink-dim)">حجز</div></div>
+      </div>
+      <div class="dlabel">🏟️ أصحاب الملاعب المسجّلون</div>
+      ${(pendingOwners&&pendingOwners.length)? pendingOwners.map(o=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+          <div><b>${o.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${o.phone||''}</div></div>
+          <span class="badge available" style="font-size:11px">صاحب ملعب</span>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:13px;padding:10px">لا يوجد أصحاب ملاعب بعد</div>'}
+      <div class="legal-note" style="margin-top:16px">💡 لتعيين مالك جديد أو تفعيل صاحب ملعب، غيّر حقل role في جدول profiles من Supabase.</div>
+    `;
+  } else {
+    // لوحة صاحب الملعب
+    titleEl.textContent = '🏟️ لوحة ملاعبي';
+    bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+    modal.classList.add('open'); document.getElementById('ov').classList.add('open');
+
+    const { data: { user } } = await sb.auth.getUser();
+    // ملاعب هذا المالك مع عدد الملاعب الفرعية
+    const { data: myFacilities } = await sb
+      .from('facilities')
+      .select('id, name, city, district, fields(id, name, price_per_hour, status)')
+      .eq('owner_id', user.id);
+
+    bodyEl.innerHTML = `
+      <div class="dlabel">🏟️ ملاعبي</div>
+      ${(myFacilities&&myFacilities.length)? myFacilities.map(f=>`
+        <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div><b style="font-size:15px">${f.name}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district}، ${f.city}</div></div>
+            <span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span>
+          </div>
+          ${(f.fields||[]).map(fd=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:8px 10px;background:var(--bg-elev);border-radius:8px;font-size:13px">
+              <span>${fd.name}</span>
+              <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
+            </div>`).join('')}
+        </div>`).join('') : `
+        <div style="text-align:center;padding:24px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:12px">
+          <div style="font-size:32px;margin-bottom:8px">🏟️</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:4px">لا توجد ملاعب بعد</div>
+          <div style="font-size:12px;color:var(--ink-dim)">أضف أول ملعب لك لتبدأ استقبال الحجوزات</div>
+        </div>`}
+      <button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>
+    `;
+  }
+}
+
+// ── نموذج إضافة ملعب جديد ──
+function showAddStadiumForm() {
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '➕ إضافة ملعب جديد';
+  bodyEl.innerHTML = `
+    <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" placeholder="مثال: ملعب النخيل"></div>
+    <div class="field"><label>المدينة *</label><input id="st-city" type="text" placeholder="خميس مشيط"></div>
+    <div class="field"><label>الحي *</label><input id="st-district" type="text" placeholder="حي الراقي"></div>
+    <div class="field">
+      <label>المنطقة</label>
+      <select id="st-region" class="form-input" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        <option value="خميس البحر">خميس البحر</option>
+        <option value="بحر أبو سكينة">بحر أبو سكينة</option>
+        <option value="أبها">أبها</option>
+        <option value="خميس مشيط">خميس مشيط</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>نوع الأرضية</label>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <div class="pay sel" id="type-artificial" onclick="selFieldType('artificial')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌿</div>عشب صناعي</div>
+        <div class="pay" id="type-natural" onclick="selFieldType('natural')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌱</div>عشب طبيعي</div>
+        <div class="pay" id="type-indoor" onclick="selFieldType('indoor')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🏛️</div>مغلق</div>
+      </div>
+    </div>
+    <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" placeholder="150"></div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
+      <button class="btn btn-brand" style="flex:2" onclick="saveStadium()">💾 حفظ الملعب</button>
+    </div>
+  `;
+}
+
+let newFieldType = 'artificial';
+function selFieldType(t) {
+  newFieldType = t;
+  ['artificial','natural','indoor'].forEach(x =>
+    document.getElementById('type-'+x).classList.toggle('sel', x===t));
+}
+
+async function saveStadium() {
+  const name     = document.getElementById('st-name').value.trim();
+  const city     = document.getElementById('st-city').value.trim();
+  const district = document.getElementById('st-district').value.trim();
+  const region   = document.getElementById('st-region').value;
+  const price    = parseFloat(document.getElementById('st-price').value);
+
+  if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
+  if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); return; }
+
+  // 1) إنشاء المنشأة (facility)
+  const { data: facility, error: facErr } = await sb
+    .from('facilities')
+    .insert({ owner_id: user.id, name, city, district, region })
+    .select()
+    .single();
+
+  if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
+
+  // 2) إنشاء الملعب (field) داخل المنشأة
+  const { error: fldErr } = await sb
+    .from('fields')
+    .insert({ facility_id: facility.id, name, type: newFieldType, price_per_hour: price, status: 'available' });
+
+  if (fldErr) { showToast('حُفظت المنشأة لكن تعذّر حفظ الملعب: ' + fldErr.message,'error'); return; }
+
+  showToast('تمت إضافة الملعب بنجاح ✓ 🏟️');
+  // أعد تحميل اللوحة لعرض الملعب الجديد
+  openOwnerPanel('owner');
+  // حدّث قائمة الملاعب في الصفحة الرئيسية أيضاً
+  if (typeof loadRealFields === 'function') { /* سيُعاد التحميل عند التصفح */ }
+}
+
+function translateErr(msg) {
+  if (msg.includes('already registered')) return 'هذا البريد مسجّل مسبقاً';
+  if (msg.includes('Invalid login'))      return 'البريد أو كلمة المرور خطأ';
+  if (msg.includes('Password should'))    return 'كلمة المرور قصيرة (6 أحرف على الأقل)';
+  if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
+  return msg;
+}
+</script>
+</body>
+</html>
