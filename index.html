@@ -374,6 +374,17 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
 
 /* toast */
 .toasts{position:fixed;bottom:22px;left:22px;z-index:999;display:flex;flex-direction:column;gap:9px}
+/* sidebar */
+.sidebar{position:fixed;top:0;right:0;height:100vh;width:300px;max-width:85vw;z-index:920;background:var(--bg-elev);border-left:1px solid var(--line);transform:translateX(100%);transition:transform .3s cubic-bezier(.2,.8,.2,1);overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.15)}
+.sidebar.open{transform:translateX(0)}
+.side-top{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)}
+.side-head{display:flex;align-items:center;gap:12px;padding:20px;background:var(--brand-soft);border-bottom:1px solid var(--line)}
+.side-links{padding:10px}
+.side-link{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;color:var(--ink-soft);transition:background .15s}
+.side-link:hover{background:var(--bg-soft);color:var(--ink)}
+.side-link .si{font-size:18px;width:22px;text-align:center}
+.side-sep{height:1px;background:var(--line);margin:8px 14px}
+.side-badge{margin-right:auto;background:var(--danger);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;min-width:20px;text-align:center}
 .toast{display:flex;align-items:center;gap:9px;background:var(--bg-elev);border:1px solid var(--line);border-right:3px solid var(--brand);border-radius:11px;padding:12px 18px;font-size:13.5px;font-weight:600;min-width:250px;box-shadow:var(--shadow-lg);animation:tin .3s ease}
 .toast.error{border-right-color:var(--danger)}
 @keyframes tin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
@@ -647,6 +658,13 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
     <div class="field"><label>رقم الجوال</label><input id="au-phone" type="tel" inputmode="numeric" maxlength="10" placeholder="05xxxxxxxx"></div>
     <div class="field" id="fieldEmail" style="display:none"><label>البريد الإلكتروني <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label><input id="au-email" type="email" placeholder="you@example.com"></div>
     <div class="field"><label>كلمة المرور</label><input id="au-pass" type="password" placeholder="••••••••"></div>
+    <div id="forgotLink" style="text-align:left;margin:-4px 0 8px"><a onclick="forgotPassword()" style="font-size:12.5px;color:var(--brand);cursor:pointer">نسيت كلمة المرور؟</a></div>
+    <div id="termsAgree" style="display:none;margin:6px 0 4px">
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;color:var(--ink-soft)">
+        <input type="checkbox" id="au-terms" style="margin-top:3px;flex-shrink:0">
+        <span>أوافق على <a onclick="event.preventDefault();openLegal('terms')" style="color:var(--brand);cursor:pointer">الشروط والأحكام</a> و<a onclick="event.preventDefault();openLegal('privacy')" style="color:var(--brand);cursor:pointer">سياسة الخصوصية</a></span>
+      </label>
+    </div>
     <button class="btn btn-brand btn-block" style="margin-top:8px" id="authBtn" onclick="doAuth()">دخول</button>
   </div>
 </div>
@@ -670,6 +688,15 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
     </div>
     <div id="ownerBody"></div>
   </div>
+</div>
+
+<!-- sidebar -->
+<div class="sidebar" id="sidebar">
+  <div class="side-top">
+    <span style="font-weight:800;font-size:15px">القائمة</span>
+    <div class="dclose" onclick="closeSidebar()">✕</div>
+  </div>
+  <div id="sidebarContent"></div>
 </div>
 
 <div class="toasts" id="toasts"></div>
@@ -948,6 +975,8 @@ function authTab(mode){ authMode=mode;
   document.getElementById('fieldName').style.display  = mode==='signup'?'block':'none';
   document.getElementById('fieldRole').style.display  = mode==='signup'?'block':'none';
   document.getElementById('fieldEmail').style.display = mode==='signup'?'block':'none';
+  document.getElementById('termsAgree').style.display = mode==='signup'?'block':'none';
+  document.getElementById('forgotLink').style.display = mode==='login'?'block':'none';
   document.getElementById('authBtn').textContent = mode==='login'?'دخول':'إنشاء الحساب';
 }
 let selectedRole = 'customer';
@@ -1009,7 +1038,7 @@ function locateMe(){
 // ════════════════ HELPERS ════════════════
 function scrollToId(id){ document.getElementById(id).scrollIntoView({behavior:'smooth'}); }
 function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); }
-function closeAll(){ ['ov','drawer','mConfirm','mAuth','mLegal','mOwner'].forEach(id=>document.getElementById(id).classList.remove('open')); }
+function closeAll(){ ['ov','drawer','mConfirm','mAuth','mLegal','mOwner','sidebar'].forEach(id=>document.getElementById(id).classList.remove('open')); }
 function toggleMenu(){ document.getElementById('mmenu').classList.toggle('open'); }
 function showToast(msg,type='success'){ const t=document.createElement('div'); t.className=`toast ${type}`;
   t.innerHTML=`<span>${type==='success'?'✅':'⚠️'}</span><span>${msg}</span>`;
@@ -1068,6 +1097,9 @@ function initBackend() {
     if (!phone) { showToast('أدخل رقم الجوال','error'); return; }
     if (!isValidSaudiPhone(phone)) { showToast('رقم الجوال يجب أن يبدأ بـ 05 ويتكوّن من 10 أرقام','error'); return; }
     if (!pass) { showToast('أدخل كلمة المرور','error'); return; }
+    if (authMode === 'signup' && !document.getElementById('au-terms').checked) {
+      showToast('يجب الموافقة على الشروط والأحكام','error'); return;
+    }
 
     if (authMode === 'signup') {
       // الإيميل اختياري: لو أُدخل نستخدمه، وإلا نولّد إيميل داخلي من الجوال
@@ -1110,47 +1142,68 @@ function initBackend() {
     }
   };
 
-  // بعد الدخول: اقرأ الدور من قاعدة البيانات ووجّه المستخدم
+  // بعد الدخول: اقرأ الدور وابنِ زر يفتح القائمة الجانبية
   async function afterLogin() {
     closeAll();
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
 
-    // اقرأ بيانات المستخدم (الاسم + الدور)
     const { data: profile } = await sb
-      .from('profiles').select('name, role').eq('id', user.id).single();
+      .from('profiles').select('name, role, phone').eq('id', user.id).single();
 
     const name = profile?.name || user.user_metadata?.name || 'مستخدم';
     const role = profile?.role || 'customer';
     const initial = name.trim().charAt(0) || 'م';
 
-    // زر المستخدم في الشريط العلوي — يختلف حسب الدور
-    let roleBadge = '', roleAction = '';
-    if (role === 'super_admin') {
-      roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
-      roleAction = `<button class="btn btn-flood btn-sm" onclick="openOwnerPanel('admin')">لوحة التحكم</button>`;
-    } else if (role === 'owner' || role === 'staff') {
-      roleBadge = '<span style="font-size:10px;color:var(--brand);font-weight:700">🏟️ صاحب ملعب</span>';
-      roleAction = `<button class="btn btn-brand btn-sm" onclick="openOwnerPanel('owner')">لوحة ملاعبي</button>`;
-    }
+    // خزّن بيانات المستخدم عالمياً للاستخدام في القائمة
+    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial };
 
+    let roleBadge = '';
+    if (role === 'super_admin') roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
+    else if (role === 'owner' || role === 'staff') roleBadge = '<span style="font-size:10px;color:var(--brand);font-weight:700">🏟️ صاحب ملعب</span>';
+
+    // زر المستخدم يفتح القائمة الجانبية
     document.getElementById('navAuth').innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px">
-        ${roleAction}
-        <div class="nav-user"><div class="av">${initial}</div>
-          <div style="display:flex;flex-direction:column;line-height:1.1">
-            <span>${name.split(' ')[0]}</span>${roleBadge}
-          </div>
+      <div class="nav-user" onclick="openSidebar()" style="cursor:pointer">
+        <div class="av">${initial}</div>
+        <div style="display:flex;flex-direction:column;line-height:1.1">
+          <span>${name.split(' ')[0]}</span>${roleBadge}
         </div>
+        <span style="margin-right:4px">☰</span>
       </div>`;
 
-    // توجيه تلقائي حسب الدور
-    if (role === 'super_admin') {
-      showToast('مرحباً بك أيها المالك 🛡️');
-    } else if (role === 'owner' || role === 'staff') {
-      showToast('مرحباً صاحب الملعب 🏟️');
-    }
+    if (role === 'super_admin') showToast('مرحباً بك أيها المالك 🛡️');
+    else if (role === 'owner' || role === 'staff') showToast('مرحباً صاحب الملعب 🏟️');
+
+    // فعّل مراقبة الإشعارات للمالك وصاحب الملعب
+    if (role === 'super_admin' || role === 'owner') startNotificationsWatch();
   }
+  window.afterLogin = afterLogin;
+
+  // ── نسيت كلمة المرور ──
+  window.forgotPassword = async function () {
+    const phone = (document.getElementById('au-phone')?.value || '').trim();
+    const emailInput = (document.getElementById('au-email')?.value || '').trim();
+
+    // نحتاج بريد لإرسال رابط الاستعادة
+    let email = emailInput;
+    if (!email && phone && isValidSaudiPhone(phone)) {
+      email = phoneToEmail(phone);  // البريد الداخلي المرتبط بالجوال
+    }
+    if (!email) {
+      showToast('أدخل رقم جوالك أولاً في الخانة أعلاه','error'); return;
+    }
+    // البريد الداخلي (.local) لا يستقبل رسائل فعلية
+    if (email.endsWith('@malaebna.local')) {
+      showToast('حسابك مسجّل بالجوال فقط. تواصل مع الدعم لاستعادة كلمة المرور','error');
+      return;
+    }
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    if (error) { showToast('تعذّر الإرسال: ' + error.message,'error'); return; }
+    showToast('تم إرسال رابط استعادة كلمة المرور لبريدك ✓');
+  };
 
   // ── استبدال إنشاء الحجز بالحقيقي ──
   const _finalizePayment = window.finalizePayment;
@@ -1166,7 +1219,7 @@ function initBackend() {
       const dateStr = today.toISOString().split('T')[0];
 
       // ملاحظة: يحتاج ربط الملعب بـ field_id حقيقي من قاعدة البيانات
-      const { error } = await sb.from('bookings').insert({
+      const { data: newBooking, error } = await sb.from('bookings').insert({
         user_id: user.id,
         field_id: active.id,
         booking_date: dateStr,
@@ -1175,7 +1228,7 @@ function initBackend() {
         players_count: playerCount,
         total_price: active.price,
         status: 'pending'
-      });
+      }).select().single();
 
       if (error) {
         if (error.message.includes('BOOKING_OVERLAP')) {
@@ -1190,6 +1243,19 @@ function initBackend() {
         }
         showToast('تعذّر الحجز: ' + error.message,'error'); return;
       }
+
+      // أرسل إشعاراً لصاحب الملعب بالحجز الجديد
+      try {
+        const { data: fieldInfo } = await sb.from('fields')
+          .select('name, facilities(owner_id)').eq('id', active.id).single();
+        const ownerId = fieldInfo?.facilities?.owner_id;
+        if (ownerId) {
+          await sb.from('notifications').insert({
+            user_id: ownerId, title: 'حجز جديد 📅',
+            body: `حجز جديد في ${fieldInfo.name} بتاريخ ${dateStr} الساعة ${selSlot}`
+          });
+        }
+      } catch(e){}
     }
     // أكمل تدفق الدفع/التأكيد المعتاد
     _proceedUI();
@@ -1253,6 +1319,250 @@ function initBackend() {
 }
 
 // ترجمة أخطاء Supabase الشائعة لرسائل عربية واضحة
+// ════════════════ القائمة الجانبية (Sidebar) ════════════════
+function openSidebar() {
+  if (!window.currentUser) return;
+  const u = window.currentUser;
+  const isOwnerOrAdmin = (u.role === 'owner' || u.role === 'staff' || u.role === 'super_admin');
+  document.getElementById('sidebarContent').innerHTML = `
+    <div class="side-head">
+      <div class="av" style="width:52px;height:52px;font-size:22px">${u.initial}</div>
+      <div>
+        <div style="font-size:16px;font-weight:800">${u.name}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">${u.phone || ''}</div>
+      </div>
+    </div>
+    <div class="side-links">
+      <a class="side-link" onclick="sideGo('profile')"><span class="si">👤</span> الملف الشخصي</a>
+      <a class="side-link" onclick="sideGo('bookings')"><span class="si">📅</span> حجوزاتي</a>
+      <a class="side-link" onclick="sideGo('lookup')"><span class="si">🔍</span> استعلام عن حجز</a>
+      <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
+      ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
+      <div class="side-sep"></div>
+      <a class="side-link" onclick="sideGo('share')"><span class="si">📤</span> مشاركة الموقع</a>
+      <a class="side-link" onclick="sideGo('contact')"><span class="si">✉️</span> تواصل معنا</a>
+      <a class="side-link" onclick="sideGo('about')"><span class="si">ℹ️</span> عن الموقع</a>
+      <a class="side-link" onclick="sideGo('terms')"><span class="si">📄</span> الشروط والأحكام</a>
+      <div class="side-sep"></div>
+      <a class="side-link" onclick="sideGo('logout')" style="color:var(--danger)"><span class="si">🚪</span> تسجيل الخروج</a>
+    </div>`;
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+  refreshSideNotifBadge();
+}
+function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('ov').classList.remove('open'); }
+
+async function sideGo(where) {
+  closeSidebar();
+  switch(where) {
+    case 'profile':       showProfile(); break;
+    case 'bookings':      showMyBookings(); break;
+    case 'lookup':        showBookingLookup(); break;
+    case 'notifications': showNotifications(); break;
+    case 'panel':         openOwnerPanel(window.currentUser.role==='super_admin'?'admin':'owner'); break;
+    case 'share':         shareSite(); break;
+    case 'contact':       showContact(); break;
+    case 'about':         showAbout(); break;
+    case 'terms':         openLegal('terms'); break;
+    case 'logout':        doLogout(); break;
+  }
+}
+
+// فتح نافذة عامة بمحتوى
+function openInfoModal(title, html) {
+  document.getElementById('ownerTitle').textContent = title;
+  document.getElementById('ownerBody').innerHTML = html;
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+
+// ── الملف الشخصي ──
+function showProfile() {
+  const u = window.currentUser;
+  openInfoModal('👤 الملف الشخصي', `
+    <div style="text-align:center;margin-bottom:20px">
+      <div class="av" style="width:70px;height:70px;font-size:30px;margin:0 auto 10px">${u.initial}</div>
+      <div style="font-size:18px;font-weight:800">${u.name}</div>
+    </div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">الاسم</span><b>${u.name}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">رقم الجوال</span><b>${u.phone||'—'}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--ink-dim)">نوع الحساب</span><b>${u.role==='super_admin'?'🛡️ مالك':u.role==='owner'?'🏟️ صاحب ملعب':'⚽ لاعب'}</b></div>
+    </div>`);
+}
+
+// ── حجوزاتي (مع الإلغاء) ──
+async function showMyBookings() {
+  openInfoModal('📅 حجوزاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  const { data, error } = await sb
+    .from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, fields(name, facilities(name, city))')
+    .order('booking_date', { ascending: false });
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) {
+    document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">📅</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد حجوزات بعد</div></div>`; return;
+  }
+  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+  document.getElementById('ownerBody').innerHTML = data.map(b=>`
+    <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div><b>${b.fields?.name||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.fields?.facilities?.city||''}</div></div>
+        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
+      </div>
+      <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)} - ${b.end_time?.slice(0,5)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <span style="color:var(--flood);font-weight:800">${b.total_price} ريال</span>
+        ${(b.status==='pending'||b.status==='confirmed')? `<button class="btn btn-danger btn-sm" onclick="cancelMyBooking(${b.id})">إلغاء الحجز</button>`:''}
+      </div>
+    </div>`).join('');
+}
+
+// ── إلغاء الحجز ──
+async function cancelMyBooking(bookingId) {
+  if (!confirm('هل تريد إلغاء هذا الحجز؟')) return;
+  const { error } = await sb.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+  if (error) { showToast('تعذّر الإلغاء','error'); return; }
+
+  // أنشئ إشعاراً للمالك عند الإلغاء
+  try {
+    const { data: booking } = await sb.from('bookings')
+      .select('fields(name, facilities(owner_id))').eq('id', bookingId).single();
+    const ownerId = booking?.fields?.facilities?.owner_id;
+    if (ownerId) {
+      await sb.from('notifications').insert({
+        user_id: ownerId, title: 'إلغاء حجز ❌',
+        body: `تم إلغاء حجز في ${booking.fields.name}`
+      });
+    }
+  } catch(e){}
+
+  showToast('تم إلغاء الحجز ✓');
+  showMyBookings();
+}
+
+// ── استعلام عن حجز برقمه ──
+function showBookingLookup() {
+  openInfoModal('🔍 استعلام عن حجز', `
+    <div class="field"><label>رقم الحجز</label><input id="lookup-id" type="number" placeholder="مثال: 1024"></div>
+    <button class="btn btn-brand btn-block" onclick="doLookup()">استعلام</button>
+    <div id="lookupResult" style="margin-top:16px"></div>`);
+}
+async function doLookup() {
+  const id = document.getElementById('lookup-id').value.trim();
+  if (!id) { showToast('أدخل رقم الحجز','error'); return; }
+  const { data, error } = await sb
+    .from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, fields(name, facilities(city))')
+    .eq('id', id).single();
+  const box = document.getElementById('lookupResult');
+  if (error || !data) { box.innerHTML = '<div style="color:var(--danger);text-align:center;padding:14px">لم يُعثر على حجز بهذا الرقم</div>'; return; }
+  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  box.innerHTML = `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${data.fields?.name||'—'}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ</span><b>${data.booking_date}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الوقت</span><b>${data.start_time?.slice(0,5)} - ${data.end_time?.slice(0,5)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${statusMap[data.status]||data.status}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">المبلغ</span><b style="color:var(--flood)">${data.total_price} ريال</b></div>
+    </div>`;
+}
+
+// ── التنبيهات ──
+async function showNotifications() {
+  openInfoModal('🔔 التنبيهات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  const { data, error } = await sb
+    .from('notifications').select('*').order('created_at', { ascending: false }).limit(30);
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) {
+    document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">🔔</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد تنبيهات</div></div>`;
+  } else {
+    document.getElementById('ownerBody').innerHTML = data.map(n=>`
+      <div style="padding:13px;background:${n.is_read?'var(--bg-soft)':'var(--brand-soft)'};border:1px solid var(--line);border-radius:11px;margin-bottom:8px">
+        <div style="font-weight:700;font-size:14px">${n.title}</div>
+        ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${n.body}</div>`:''}
+        <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA')}</div>
+      </div>`).join('');
+  }
+  // علّم الكل كمقروء
+  await sb.from('notifications').update({ is_read: true }).eq('is_read', false);
+  refreshSideNotifBadge();
+}
+
+// عدّاد التنبيهات غير المقروءة
+async function refreshSideNotifBadge() {
+  try {
+    const { count } = await sb.from('notifications').select('*', { count:'exact', head:true }).eq('is_read', false);
+    const badge = document.getElementById('sideNotifBadge');
+    if (badge) {
+      if (count && count>0) { badge.textContent = count; badge.style.display='inline-block'; }
+      else badge.style.display='none';
+    }
+  } catch(e){}
+}
+
+// مراقبة التنبيهات كل 30 ثانية (للمالك وصاحب الملعب)
+let notifTimer = null;
+function startNotificationsWatch() {
+  if (notifTimer) clearInterval(notifTimer);
+  refreshSideNotifBadge();
+  notifTimer = setInterval(refreshSideNotifBadge, 30000);
+}
+
+// ── مشاركة الموقع ──
+function shareSite() {
+  const url = window.location.origin;
+  if (navigator.share) {
+    navigator.share({ title:'ملاعبنا', text:'احجز ملعبك عبر ملاعبنا', url }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(url).then(()=>showToast('تم نسخ رابط الموقع ✓')).catch(()=>showToast(url));
+  }
+}
+
+// ── تواصل معنا ──
+function showContact() {
+  openInfoModal('✉️ تواصل معنا', `
+    <div style="text-align:center;padding:10px">
+      <div style="font-size:40px;margin-bottom:12px">📞</div>
+      <div style="font-size:14px;color:var(--ink-soft);line-height:2">
+        نسعد بتواصلك معنا<br>
+        <b>البريد:</b> support@malaabna.sa<br>
+        <b>الجوال:</b> 0500000000
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-brand" style="flex:1" onclick="window.location.href='mailto:support@malaabna.sa'">راسلنا</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="window.location.href='tel:0500000000'">اتصل بنا</button>
+      </div>
+    </div>`);
+}
+
+// ── عن الموقع ──
+function showAbout() {
+  openInfoModal('ℹ️ عن ملاعبنا', `
+    <div style="text-align:center;padding:10px">
+      <div class="brand-logo" style="width:56px;height:56px;font-size:26px;margin:0 auto 14px">⚽</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:8px">ملاعبنا</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);line-height:1.9">
+        منصة سعودية لحجز الملاعب الرياضية والأكاديميات والبطولات.
+        احجز ملعبك، قسّم التكلفة بذكاء، وادفع بأمان.
+        <br><br>
+        نخدم منطقة عسير ونتوسّع قريباً 🌱
+      </div>
+      <div style="margin-top:16px;font-size:12px;color:var(--ink-dim)">الإصدار 2.0 · 2026</div>
+    </div>`);
+}
+
+// ── تسجيل الخروج ──
+async function doLogout() {
+  if (!confirm('هل تريد تسجيل الخروج؟')) return;
+  if (notifTimer) clearInterval(notifTimer);
+  await sb.auth.signOut();
+  window.currentUser = null;
+  loggedIn = false;
+  document.getElementById('navAuth').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openAuth('login')">دخول</button>`;
+  showToast('تم تسجيل الخروج ✓');
+}
+
 // ════════════════ لوحة صاحب الملعب / المالك ════════════════
 async function openOwnerPanel(kind) {
   const modal = document.getElementById('mOwner');
@@ -1357,6 +1667,11 @@ function showAddStadiumForm() {
       </div>
     </div>
     <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" placeholder="150"></div>
+    <div class="field">
+      <label>صورة الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
+      <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
+      <div id="st-image-preview" style="margin-top:8px"></div>
+    </div>
     <div style="display:flex;gap:10px;margin-top:20px">
       <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveStadium()">💾 حفظ الملعب</button>
@@ -1377,6 +1692,7 @@ async function saveStadium() {
   const district = document.getElementById('st-district').value.trim();
   const region   = document.getElementById('st-region').value;
   const price    = parseFloat(document.getElementById('st-price').value);
+  const imgFile  = document.getElementById('st-image')?.files?.[0];
 
   if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
@@ -1384,27 +1700,50 @@ async function saveStadium() {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); return; }
 
+  showToast('جارٍ الحفظ...');
+
+  // رفع الصورة إلى Supabase Storage (إن وُجدت)
+  let imageUrl = null;
+  if (imgFile) {
+    try {
+      const ext = imgFile.name.split('.').pop();
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('stadium-images').upload(path, imgFile);
+      if (!upErr) {
+        const { data: pub } = sb.storage.from('stadium-images').getPublicUrl(path);
+        imageUrl = pub?.publicUrl || null;
+      }
+    } catch(e){ console.log('تعذّر رفع الصورة:', e); }
+  }
+
   // 1) إنشاء المنشأة (facility)
+  const facPayload = { owner_id: user.id, name, city, district, region };
+  if (imageUrl) facPayload.images = [imageUrl];
   const { data: facility, error: facErr } = await sb
-    .from('facilities')
-    .insert({ owner_id: user.id, name, city, district, region })
-    .select()
-    .single();
+    .from('facilities').insert(facPayload).select().single();
 
   if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
 
   // 2) إنشاء الملعب (field) داخل المنشأة
-  const { error: fldErr } = await sb
-    .from('fields')
-    .insert({ facility_id: facility.id, name, type: newFieldType, price_per_hour: price, status: 'available' });
+  const fldPayload = { facility_id: facility.id, name, type: newFieldType, price_per_hour: price, status: 'available' };
+  if (imageUrl) fldPayload.image_url = imageUrl;
+  const { error: fldErr } = await sb.from('fields').insert(fldPayload);
 
   if (fldErr) { showToast('حُفظت المنشأة لكن تعذّر حفظ الملعب: ' + fldErr.message,'error'); return; }
 
   showToast('تمت إضافة الملعب بنجاح ✓ 🏟️');
-  // أعد تحميل اللوحة لعرض الملعب الجديد
   openOwnerPanel('owner');
-  // حدّث قائمة الملاعب في الصفحة الرئيسية أيضاً
-  if (typeof loadRealFields === 'function') { /* سيُعاد التحميل عند التصفح */ }
+}
+
+function previewStadiumImg(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('st-image-preview').innerHTML =
+      `<img src="${e.target.result}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">`;
+  };
+  reader.readAsDataURL(file);
 }
 
 function translateErr(msg) {
