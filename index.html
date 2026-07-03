@@ -1301,24 +1301,110 @@ async function openOwnerPanel(kind) {
     modal.classList.add('open'); document.getElementById('ov').classList.add('open');
 
     const { data: { user } } = await sb.auth.getUser();
-    // ملاعب هذا المالك
-    const { data: myFacilities } = await sb.from('facilities').select('id, name, city, district').eq('owner_id', user.id);
+    // ملاعب هذا المالك مع عدد الملاعب الفرعية
+    const { data: myFacilities } = await sb
+      .from('facilities')
+      .select('id, name, city, district, fields(id, name, price_per_hour, status)')
+      .eq('owner_id', user.id);
 
     bodyEl.innerHTML = `
-      <div class="dlabel">🏟️ منشآتي</div>
+      <div class="dlabel">🏟️ ملاعبي</div>
       ${(myFacilities&&myFacilities.length)? myFacilities.map(f=>`
-        <div style="padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-          <b>${f.name}</b><div style="font-size:12px;color:var(--ink-dim)">📍 ${f.district}، ${f.city}</div>
+        <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div><b style="font-size:15px">${f.name}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district}، ${f.city}</div></div>
+            <span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span>
+          </div>
+          ${(f.fields||[]).map(fd=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:8px 10px;background:var(--bg-elev);border-radius:8px;font-size:13px">
+              <span>${fd.name}</span>
+              <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
+            </div>`).join('')}
         </div>`).join('') : `
         <div style="text-align:center;padding:24px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:12px">
           <div style="font-size:32px;margin-bottom:8px">🏟️</div>
           <div style="font-size:14px;font-weight:600;margin-bottom:4px">لا توجد ملاعب بعد</div>
           <div style="font-size:12px;color:var(--ink-dim)">أضف أول ملعب لك لتبدأ استقبال الحجوزات</div>
         </div>`}
-      <button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showToast('قريباً: إضافة ملعب جديد')">+ إضافة ملعب</button>
-      <div class="legal-note" style="margin-top:14px">💡 حسابك كصاحب ملعب فعّال. لإضافة الملاعب فعلياً، سنربط هذه اللوحة بقاعدة البيانات في الخطوة القادمة.</div>
+      <button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>
     `;
   }
+}
+
+// ── نموذج إضافة ملعب جديد ──
+function showAddStadiumForm() {
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '➕ إضافة ملعب جديد';
+  bodyEl.innerHTML = `
+    <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" placeholder="مثال: ملعب النخيل"></div>
+    <div class="field"><label>المدينة *</label><input id="st-city" type="text" placeholder="خميس مشيط"></div>
+    <div class="field"><label>الحي *</label><input id="st-district" type="text" placeholder="حي الراقي"></div>
+    <div class="field">
+      <label>المنطقة</label>
+      <select id="st-region" class="form-input" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        <option value="خميس البحر">خميس البحر</option>
+        <option value="بحر أبو سكينة">بحر أبو سكينة</option>
+        <option value="أبها">أبها</option>
+        <option value="خميس مشيط">خميس مشيط</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>نوع الأرضية</label>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <div class="pay sel" id="type-artificial" onclick="selFieldType('artificial')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌿</div>عشب صناعي</div>
+        <div class="pay" id="type-natural" onclick="selFieldType('natural')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌱</div>عشب طبيعي</div>
+        <div class="pay" id="type-indoor" onclick="selFieldType('indoor')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🏛️</div>مغلق</div>
+      </div>
+    </div>
+    <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" placeholder="150"></div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
+      <button class="btn btn-brand" style="flex:2" onclick="saveStadium()">💾 حفظ الملعب</button>
+    </div>
+  `;
+}
+
+let newFieldType = 'artificial';
+function selFieldType(t) {
+  newFieldType = t;
+  ['artificial','natural','indoor'].forEach(x =>
+    document.getElementById('type-'+x).classList.toggle('sel', x===t));
+}
+
+async function saveStadium() {
+  const name     = document.getElementById('st-name').value.trim();
+  const city     = document.getElementById('st-city').value.trim();
+  const district = document.getElementById('st-district').value.trim();
+  const region   = document.getElementById('st-region').value;
+  const price    = parseFloat(document.getElementById('st-price').value);
+
+  if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
+  if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); return; }
+
+  // 1) إنشاء المنشأة (facility)
+  const { data: facility, error: facErr } = await sb
+    .from('facilities')
+    .insert({ owner_id: user.id, name, city, district, region })
+    .select()
+    .single();
+
+  if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
+
+  // 2) إنشاء الملعب (field) داخل المنشأة
+  const { error: fldErr } = await sb
+    .from('fields')
+    .insert({ facility_id: facility.id, name, type: newFieldType, price_per_hour: price, status: 'available' });
+
+  if (fldErr) { showToast('حُفظت المنشأة لكن تعذّر حفظ الملعب: ' + fldErr.message,'error'); return; }
+
+  showToast('تمت إضافة الملعب بنجاح ✓ 🏟️');
+  // أعد تحميل اللوحة لعرض الملعب الجديد
+  openOwnerPanel('owner');
+  // حدّث قائمة الملاعب في الصفحة الرئيسية أيضاً
+  if (typeof loadRealFields === 'function') { /* سيُعاد التحميل عند التصفح */ }
 }
 
 function translateErr(msg) {
