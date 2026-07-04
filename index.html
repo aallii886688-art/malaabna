@@ -1929,7 +1929,9 @@ async function openOwnerPanel(kind) {
     ]);
     const ownFacIds = (ownFac||[]).map(f=>f.id);
     const allFacIds = [...new Set([...ownFacIds, ...(staffFac||[]).map(f=>f.facility_id)])];
-    window._isTrueOwner = ownFacIds.length > 0; // للتحكم بإظهار زر "إضافة موظف" فقط للمالك الحقيقي
+    // "المالك الحقيقي" يُحدَّد من نوع حسابه (owner/super_admin)، وليس من امتلاكه لمنشأة موجودة —
+    // وإلا كل صاحب ملعب جديد (بدون منشآت بعد) كان يُصنَّف خطأً كموظف وتختفي عنه أزرار الإضافة
+    window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
 
     const { data: myFacilities } = allFacIds.length ? await sb
       .from('facilities')
