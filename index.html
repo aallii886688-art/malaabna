@@ -790,10 +790,12 @@ async function openItem(type, id){
 async function getFieldAvailability(fieldId, dateStr, weekday){
   if (!window.sb) return { slots: timeSlots, taken: takenSlots(fieldId, selDate), dayClosed: false };
   try {
-    const [{ data: wh }, { data: bo }, { data: bookings }] = await Promise.all([
+    const [{ data: wh }, { data: bo }, { data: bookings }, { data: matches }, { data: sessions }] = await Promise.all([
       sb.from('field_working_hours').select('open_time,close_time,is_closed').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle(),
       sb.from('field_blackouts').select('id,reason').eq('field_id', fieldId).eq('blackout_date', dateStr).maybeSingle(),
-      sb.from('bookings').select('start_time').eq('field_id', fieldId).eq('booking_date', dateStr).in('status', ['pending','confirmed'])
+      sb.from('bookings').select('start_time').eq('field_id', fieldId).eq('booking_date', dateStr).in('status', ['pending','confirmed']),
+      sb.from('tournament_matches').select('start_time,end_time').eq('field_id', fieldId).eq('match_date', dateStr).neq('status','cancelled'),
+      sb.from('academy_sessions').select('start_time,end_time').eq('field_id', fieldId).eq('weekday', weekday)
     ]);
     const dayClosed = !!bo || (wh && wh.is_closed);
     let slots = timeSlots;
@@ -802,6 +804,11 @@ async function getFieldAvailability(fieldId, dateStr, weekday){
       slots = timeSlots.filter(t => t >= o && t < c);
     }
     const taken = (bookings||[]).map(b => (b.start_time||'').slice(0,5));
+    // أي وقت يقع ضمن نطاق مباراة بطولة أو تدريب أكاديمية يُعتبر محجوزًا أيضًا
+    [...(matches||[]), ...(sessions||[])].forEach(block=>{
+      const bs = (block.start_time||'').slice(0,5), be = (block.end_time||'').slice(0,5);
+      timeSlots.forEach(t => { if (t >= bs && t < be && !taken.includes(t)) taken.push(t); });
+    });
     return { slots, taken, dayClosed, blackoutReason: bo?.reason || null };
   } catch(e) {
     // الملعب تجريبي (id غير موجود فعلياً في قاعدة البيانات) → استخدم البيانات الوهمية
@@ -1272,10 +1279,18 @@ function initBackend() {
       .from('profiles').select('name, role, phone').eq('id', user.id).single();
 
     const name = profile?.name || user.user_metadata?.name || 'مستخدم';
-    const role = profile?.role || 'customer';
+    let role = profile?.role || 'customer';
     const initial = name.trim().charAt(0) || 'م';
 
-    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial };
+    // تحقق إذا كان المستخدم موظفاً مضافاً من صاحب ملعب (حتى لو حسابه الأساسي "لاعب")
+    let isStaffMember = false;
+    try {
+      const { count } = await sb.from('facility_staff').select('*', { count:'exact', head:true }).eq('user_id', user.id);
+      isStaffMember = (count||0) > 0;
+    } catch(e){}
+    if (isStaffMember && role === 'customer') role = 'staff';
+
+    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial, isStaffMember };
 
     let roleBadge = '';
     if (role === 'super_admin') roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
@@ -1292,9 +1307,9 @@ function initBackend() {
     document.getElementById('navAuth').style.opacity = '1';
 
     if (role === 'super_admin') showToast('مرحباً بك أيها المالك 🛡️');
-    else if (role === 'owner' || role === 'staff') showToast('مرحباً صاحب الملعب 🏟️');
+    else if (role === 'owner' || role === 'staff') showToast('مرحباً 🏟️');
 
-    if (role === 'super_admin' || role === 'owner') startNotificationsWatch();
+    if (role === 'super_admin' || role === 'owner' || role === 'staff') startNotificationsWatch();
   }
   window.afterLogin = afterLogin;
 
@@ -1348,6 +1363,12 @@ function initBackend() {
         }
         if (error.message.includes('FIELD_UNAVAILABLE')) {
           showToast('الملعب مغلق أو تحت الصيانة','error'); return;
+        }
+        if (error.message.includes('TOURNAMENT_CONFLICT')) {
+          showToast('عذراً، هذا الوقت محجوز لمباراة بطولة. اختر وقتاً آخر','error'); return;
+        }
+        if (error.message.includes('ACADEMY_CONFLICT')) {
+          showToast('عذراً، هذا الوقت محجوز لتدريب أكاديمية. اختر وقتاً آخر','error'); return;
         }
         if (error.message.includes('foreign key') || error.code === '23503') {
           showToast('أضف الملاعب لقاعدة البيانات أولاً (راجع الدليل)','error'); return;
@@ -1821,6 +1842,8 @@ async function openOwnerPanel(kind) {
         <div style="font-size:12px;color:var(--ink-dim)">إجمالي إيرادات المنصة (المؤكدة + المكتملة)</div>
       </div>
       <button class="btn btn-soft btn-block" style="margin-bottom:10px" onclick="adminView('reviews')">⭐ إشراف على التقييمات</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:10px" onclick="adminView('sms')">📱 بوابة الرسائل النصية (SMS)</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:10px" onclick="adminView('payment')">💳 بوابة الدفع الإلكتروني</button>
       <div class="legal-note">💡 اضغط على أي بطاقة أعلاه لعرض التفاصيل والتحكم الكامل.</div>
     `;
   } else {
@@ -1829,10 +1852,18 @@ async function openOwnerPanel(kind) {
     modal.classList.add('open'); document.getElementById('ov').classList.add('open');
 
     const { data: { user } } = await sb.auth.getUser();
-    const { data: myFacilities } = await sb
+    const [{ data: ownFac }, { data: staffFac }] = await Promise.all([
+      sb.from('facilities').select('id').eq('owner_id', user.id),
+      sb.from('facility_staff').select('facility_id').eq('user_id', user.id)
+    ]);
+    const ownFacIds = (ownFac||[]).map(f=>f.id);
+    const allFacIds = [...new Set([...ownFacIds, ...(staffFac||[]).map(f=>f.facility_id)])];
+    window._isTrueOwner = ownFacIds.length > 0; // للتحكم بإظهار زر "إضافة موظف" فقط للمالك الحقيقي
+
+    const { data: myFacilities } = allFacIds.length ? await sb
       .from('facilities')
       .select('id, name, city, district, fields(id, name, price_per_hour, status)')
-      .eq('owner_id', user.id);
+      .in('id', allFacIds) : { data: [] };
 
     const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
     let pendingCount = 0, totalRevenue = 0;
@@ -1891,16 +1922,80 @@ async function openOwnerPanel(kind) {
           <div style="font-size:14px;font-weight:600;margin-bottom:4px">لا توجد ملاعب بعد</div>
           <div style="font-size:12px;color:var(--ink-dim)">أضف أول ملعب لك لتبدأ استقبال الحجوزات</div>
         </div>`}
-      <button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>
+      ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>` : ''}
 
       <div class="dlabel" style="margin-top:24px">🎓 أكاديمياتي وبطولاتي</div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showMyAcademiesTournaments()">📋 إدارتها</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddAcademyForm()">+ أكاديمية</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddTournamentForm()">+ بطولة</button>
+        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showMyAcademiesTournaments()">📋 إدارتها والجدولة</button>
+        ${window._isTrueOwner ? `<button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddAcademyForm()">+ أكاديمية</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddTournamentForm()">+ بطولة</button>` : ''}
       </div>
+      ${window._isTrueOwner ? `<button class="btn btn-ghost btn-block" onclick="showStaffManagement()">👥 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف على هذه المنشأة — إدارة الموظفين وإضافة منشآت جديدة تخص المالك فقط.</div>`}
     `;
   }
+}
+
+// ── إدارة الموظفين (للمالك الحقيقي فقط) ──
+async function showStaffManagement(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '👥 إدارة الموظفين';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: ownFac } = await sb.from('facilities').select('id, name').eq('owner_id', user.id);
+  const facIds = (ownFac||[]).map(f=>f.id);
+  const { data: staffRows } = facIds.length ? await sb
+    .from('facility_staff').select('id, facility_id, user_id, profiles(name, phone)').in('facility_id', facIds) : { data: [] };
+
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const facOptions = (ownFac||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+
+  bodyEl.innerHTML = backBtn + `
+    <div class="dlabel">➕ إضافة موظف</div>
+    <div class="field"><label>رقم جوال الموظف *</label><input id="staff-phone" type="tel" placeholder="05xxxxxxxx"></div>
+    <div class="field">
+      <label>المنشأة *</label>
+      <select id="staff-facility" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        ${facOptions}
+      </select>
+    </div>
+    <div class="legal-note">⚠️ الموظف لازم يكون سجّل حساب في المنصة برقم جواله هذا مسبقاً (أي نوع حساب).</div>
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="addStaffMember()">إضافة الموظف</button>
+
+    <div class="dlabel" style="margin-top:22px">👥 الموظفون الحاليون</div>
+    ${(staffRows&&staffRows.length)? staffRows.map(s=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div><b style="font-size:13px">${s.profiles?.name||'—'}</b><div style="font-size:11px;color:var(--ink-dim)">${s.profiles?.phone||''}</div></div>
+        <button class="btn btn-danger btn-sm" onclick="removeStaffMember(${s.id})">إزالة</button>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا يوجد موظفون بعد</div>'}
+  `;
+}
+
+async function addStaffMember(){
+  const phone = document.getElementById('staff-phone').value.trim();
+  const facilityId = document.getElementById('staff-facility').value;
+  if (!phone || !facilityId) { showToast('أدخل رقم الجوال واختر المنشأة','error'); return; }
+
+  const { data: prof, error: findErr } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
+  if (findErr || !prof) { showToast('لا يوجد حساب مسجّل بهذا الرقم — اطلب منه إنشاء حساب أولاً','error'); return; }
+
+  const { error } = await sb.from('facility_staff').insert({ facility_id: facilityId, user_id: prof.id, added_by: (await sb.auth.getUser()).data.user.id });
+  if (error) {
+    if (error.code === '23505') { showToast('هذا الموظف مضاف مسبقاً لهذه المنشأة','error'); return; }
+    showToast('تعذّرت الإضافة: ' + error.message,'error'); return;
+  }
+  try {
+    await sb.from('notifications').insert({ user_id: prof.id, title:'تمت إضافتك كموظف 👥', body:'أصبح بإمكانك إدارة منشأة عبر لوحة ملاعبي' });
+  } catch(e){}
+  showToast(`تمت إضافة ${prof.name||'الموظف'} ✓`);
+  showStaffManagement();
+}
+
+async function removeStaffMember(staffRowId){
+  if (!confirm('إزالة هذا الموظف من المنشأة؟')) return;
+  const { error } = await sb.from('facility_staff').delete().eq('id', staffRowId);
+  if (error) { showToast('تعذّرت الإزالة: ' + error.message,'error'); return; }
+  showToast('تمت الإزالة ✓');
+  showStaffManagement();
 }
 
 // ── إدارة أكاديميات وبطولات صاحب الملعب ──
@@ -1917,21 +2012,138 @@ async function showMyAcademiesTournaments(){
   bodyEl.innerHTML = backBtn + `
     <div class="dlabel">🎓 أكاديمياتي</div>
     ${(myAcad&&myAcad.length)? myAcad.map(a=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
-        <div><b style="font-size:13px">${a.name}</b><div style="font-size:11px;color:var(--ink-dim)">${a.city} · ${a.monthly_price} ر/شهر</div></div>
-        <button class="btn btn-danger btn-sm" onclick="deleteAcademy(${a.id})">حذف</button>
+      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><b style="font-size:13px">${a.name}</b><div style="font-size:11px;color:var(--ink-dim)">${a.city} · ${a.monthly_price} ر/شهر</div></div>
+          <button class="btn btn-danger btn-sm" onclick="deleteAcademy(${a.id})">حذف</button>
+        </div>
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleAcademySession(${a.id})">⏱️ جدولة موعد تدريب</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد أكاديميات بعد</div>'}
 
     <div class="dlabel" style="margin-top:18px">🏆 بطولاتي</div>
     ${(myTourn&&myTourn.length)? myTourn.map(t=>{
       const confirmed = (t.tournament_teams||[]).filter(x=>x.status==='confirmed').length;
       return `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
-        <div><b style="font-size:13px">${t.name}</b><div style="font-size:11px;color:var(--ink-dim)">${t.city} · ${confirmed}/${t.max_teams} فريق · ${t.team_fee} ر/فريق</div></div>
-        <button class="btn btn-danger btn-sm" onclick="deleteTournament(${t.id})">حذف</button>
+      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><b style="font-size:13px">${t.name}</b><div style="font-size:11px;color:var(--ink-dim)">${t.city} · ${confirmed}/${t.max_teams} فريق · ${t.team_fee} ر/فريق</div></div>
+          <button class="btn btn-danger btn-sm" onclick="deleteTournament(${t.id})">حذف</button>
+        </div>
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleMatch(${t.id})">📅 جدولة مباراة</button>
       </div>`;
     }).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد بطولات بعد</div>'}
   `;
+}
+
+// ── قائمة ملاعب المالك (لاختيارها عند الجدولة) ──
+async function myFieldsOptionsHtml(){
+  const { data: { user } } = await sb.auth.getUser();
+  const { data } = await sb.from('facilities').select('name, fields(id,name)').eq('owner_id', user.id);
+  const opts = [];
+  (data||[]).forEach(f => (f.fields||[]).forEach(fd => opts.push(`<option value="${fd.id}">${f.name} — ${fd.name}</option>`)));
+  return opts.join('') || '<option value="">لا توجد ملاعب مسجّلة</option>';
+}
+
+const WD_NAMES = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+
+async function showScheduleAcademySession(academyId){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '⏱️ جدولة موعد تدريب';
+  const fieldOpts = await myFieldsOptionsHtml();
+  const { data: sessions } = await sb.from('academy_sessions').select('id, weekday, start_time, end_time, label, fields(name)').eq('academy_id', academyId);
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="showMyAcademiesTournaments()" style="margin-bottom:14px">→ رجوع</button>
+    <div class="field"><label>الملعب *</label><select id="acs-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
+    <div class="field"><label>يوم الأسبوع *</label><select id="acs-weekday" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${WD_NAMES.map((n,i)=>`<option value="${i}">${n}</option>`).join('')}</select></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>من *</label><input id="acs-start" type="time" value="16:00"></div>
+      <div class="field" style="flex:1"><label>إلى *</label><input id="acs-end" type="time" value="17:00"></div>
+    </div>
+    <div class="field"><label>ملاحظة (اختياري)</label><input id="acs-label" type="text" placeholder="فئة تحت 12"></div>
+    <button class="btn btn-brand btn-block" onclick="saveAcademySession(${academyId})">💾 حفظ الموعد</button>
+
+    <div class="dlabel" style="margin-top:18px">📋 المواعيد الحالية</div>
+    ${(sessions&&sessions.length)? sessions.map(s=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
+        <span style="font-size:12.5px"><b>${WD_NAMES[s.weekday]}</b> · ${s.start_time?.slice(0,5)}–${s.end_time?.slice(0,5)} · ${s.fields?.name||''}${s.label?' · '+s.label:''}</span>
+        <button class="btn btn-ghost btn-sm" onclick="deleteAcademySession(${s.id},${academyId})">حذف</button>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مواعيد بعد</div>'}
+  `;
+}
+async function saveAcademySession(academyId){
+  const field_id = document.getElementById('acs-field').value;
+  const weekday = parseInt(document.getElementById('acs-weekday').value);
+  const start_time = document.getElementById('acs-start').value;
+  const end_time = document.getElementById('acs-end').value;
+  const label = document.getElementById('acs-label').value.trim();
+  if (!field_id) { showToast('اختر ملعباً','error'); return; }
+  if (start_time >= end_time) { showToast('وقت النهاية لازم يكون بعد وقت البداية','error'); return; }
+  const { error } = await sb.from('academy_sessions').insert({ academy_id: academyId, field_id, weekday, start_time, end_time, label: label||null });
+  if (error) {
+    if (error.message.includes('TOURNAMENT_CONFLICT')) { showToast('⚠️ يوجد مباراة بطولة مجدولة بهذا اليوم والوقت على هذا الملعب','error'); return; }
+    if (error.message.includes('BOOKING_CONFLICT')) { showToast('⚠️ يوجد حجز لاعب بهذا اليوم والوقت على هذا الملعب','error'); return; }
+    showToast('تعذّر الحفظ: ' + error.message,'error'); return;
+  }
+  showToast('تم حفظ الموعد ✓ لا يوجد تعارض');
+  showScheduleAcademySession(academyId);
+}
+async function deleteAcademySession(id, academyId){
+  const { error } = await sb.from('academy_sessions').delete().eq('id', id);
+  if (error) { showToast('تعذّر الحذف','error'); return; }
+  showToast('تم الحذف ✓');
+  showScheduleAcademySession(academyId);
+}
+
+async function showScheduleMatch(tournamentId){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📅 جدولة مباراة';
+  const fieldOpts = await myFieldsOptionsHtml();
+  const { data: matches } = await sb.from('tournament_matches').select('id, field_id, match_date, start_time, end_time, team_a, team_b, status, fields(name)').eq('tournament_id', tournamentId).order('match_date');
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="showMyAcademiesTournaments()" style="margin-bottom:14px">→ رجوع</button>
+    <div class="field"><label>الملعب *</label><select id="tm-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
+    <div class="field"><label>التاريخ *</label><input id="tm-date" type="date"></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>من *</label><input id="tm-start" type="time" value="18:00"></div>
+      <div class="field" style="flex:1"><label>إلى *</label><input id="tm-end" type="time" value="19:00"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>الفريق الأول</label><input id="tm-team-a" type="text" placeholder="صقور الساحل"></div>
+      <div class="field" style="flex:1"><label>الفريق الثاني</label><input id="tm-team-b" type="text" placeholder="نسور الجبل"></div>
+    </div>
+    <button class="btn btn-brand btn-block" onclick="saveMatch(${tournamentId})">💾 حفظ المباراة</button>
+
+    <div class="dlabel" style="margin-top:18px">📋 المباريات المجدولة</div>
+    ${(matches&&matches.length)? matches.map(m=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
+        <span style="font-size:12.5px"><b>${m.match_date}</b> · ${m.start_time?.slice(0,5)}–${m.end_time?.slice(0,5)} · ${m.fields?.name||''}${(m.team_a||m.team_b)? ' · '+(m.team_a||'؟')+' ضد '+(m.team_b||'؟'):''}</span>
+        <button class="btn btn-ghost btn-sm" onclick="deleteMatch(${m.id},${tournamentId})">حذف</button>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مباريات مجدولة بعد</div>'}
+  `;
+}
+async function saveMatch(tournamentId){
+  const field_id = document.getElementById('tm-field').value;
+  const match_date = document.getElementById('tm-date').value;
+  const start_time = document.getElementById('tm-start').value;
+  const end_time = document.getElementById('tm-end').value;
+  const team_a = document.getElementById('tm-team-a').value.trim();
+  const team_b = document.getElementById('tm-team-b').value.trim();
+  if (!field_id || !match_date) { showToast('اختر ملعباً وتاريخاً','error'); return; }
+  if (start_time >= end_time) { showToast('وقت النهاية لازم يكون بعد وقت البداية','error'); return; }
+  const { error } = await sb.from('tournament_matches').insert({ tournament_id: tournamentId, field_id, match_date, start_time, end_time, team_a: team_a||null, team_b: team_b||null });
+  if (error) {
+    if (error.message.includes('BOOKING_CONFLICT')) { showToast('⚠️ يوجد حجز لاعب بهذا الوقت على هذا الملعب','error'); return; }
+    if (error.message.includes('ACADEMY_CONFLICT')) { showToast('⚠️ يوجد تدريب أكاديمية بهذا اليوم والوقت على هذا الملعب','error'); return; }
+    showToast('تعذّر الحفظ: ' + error.message,'error'); return;
+  }
+  showToast('تم حفظ المباراة ✓ لا يوجد تعارض');
+  showScheduleMatch(tournamentId);
+}
+async function deleteMatch(id, tournamentId){
+  const { error } = await sb.from('tournament_matches').delete().eq('id', id);
+  if (error) { showToast('تعذّر الحذف','error'); return; }
+  showToast('تم الحذف ✓');
+  showScheduleMatch(tournamentId);
 }
 
 async function deleteAcademy(id){
@@ -2348,6 +2560,59 @@ async function adminView(kind) {
         </div>
       </div>`).join('');
   }
+
+  else if (kind === 'sms') {
+    titleEl.textContent = '📱 بوابة الرسائل النصية';
+    const { data: logs } = await sb.from('sms_logs').select('*').order('created_at',{ascending:false}).limit(30);
+    const activated = (logs||[]).some(l=>l.status==='sent');
+    bodyEl.innerHTML = backBtn + `
+      <div class="legal-note">
+        ${activated ? '✅ البوابة تعمل فعليًا (تقنيات Taqnyat).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب في <b>taqnyat.sa</b>، ثم انشر Edge Function باسم <code>send-sms</code> (الكود جاهز في ملف edge-functions/send-sms.ts)، وأضف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions.'}
+      </div>
+      <div class="dlabel">🧪 اختبار الإرسال</div>
+      <div class="field"><label>رقم الجوال</label><input id="sms-test-phone" type="tel" placeholder="05xxxxxxxx"></div>
+      <div class="field"><label>نص الرسالة</label><input id="sms-test-msg" type="text" value="رسالة تجريبية من ملاعبنا"></div>
+      <button class="btn btn-brand btn-block" onclick="sendTestSms()">إرسال تجريبي</button>
+
+      <div class="dlabel" style="margin-top:18px">📋 آخر الرسائل المرسلة</div>
+      ${(logs&&logs.length)? logs.map(l=>`
+        <div style="padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
+          <div style="display:flex;justify-content:space-between"><b>${l.to_phone}</b><span class="badge ${l.status==='sent'?'available':'closed'}" style="font-size:10px">${l.status}</span></div>
+          <div style="color:var(--ink-dim);margin-top:3px">${l.message}</div>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد رسائل بعد</div>'}
+    `;
+  }
+
+  else if (kind === 'payment') {
+    titleEl.textContent = '💳 بوابة الدفع الإلكتروني';
+    const { data: payRows } = await sb.from('payments').select('*, bookings(id)').order('created_at',{ascending:false}).limit(30);
+    const activated = (payRows||[]).some(p=>p.status==='paid'||p.status==='initiated');
+    bodyEl.innerHTML = backBtn + `
+      <div class="legal-note">
+        ${activated ? '✅ البوابة متصلة (Moyasar).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب تاجر في <b>moyasar.com</b>، وانشر Edge Functions باسم <code>create-payment</code> و<code>payment-webhook</code> (الكود جاهز في مجلد edge-functions)، وأضف مفتاحك كـ Secret باسم <code>MOYASAR_SECRET_KEY</code>.'}
+      </div>
+      <div class="dlabel">📋 آخر عمليات الدفع</div>
+      ${(payRows&&payRows.length)? payRows.map(p=>`
+        <div style="display:flex;justify-content:space-between;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
+          <span>حجز #${p.booking_id} — ${p.amount} ر</span>
+          <span class="badge ${p.status==='paid'?'available':p.status==='failed'?'closed':'pending'}" style="font-size:10px">${p.status}</span>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد عمليات دفع بعد</div>'}
+    `;
+  }
+}
+
+async function sendTestSms(){
+  const phone = document.getElementById('sms-test-phone').value.trim();
+  const msg = document.getElementById('sms-test-msg').value.trim();
+  if (!phone || !msg) { showToast('أدخل الرقم والرسالة','error'); return; }
+  showToast('جارٍ الإرسال...');
+  try {
+    const { data, error } = await sb.functions.invoke('send-sms', { body: { to_phone: phone, message: msg } });
+    if (error) { showToast('تعذّر الإرسال: ' + error.message,'error'); adminView('sms'); return; }
+    if (data?.error) { showToast(data.error,'error'); adminView('sms'); return; }
+    showToast('تم الإرسال ✓');
+  } catch(e) { showToast('تعذّر الاتصال بالدالة — تأكد من نشرها في Supabase','error'); }
+  adminView('sms');
 }
 
 async function adminDeleteReview(reviewId) {
