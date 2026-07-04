@@ -1551,7 +1551,26 @@ async function openOwnerPanel(kind) {
       .select('id, name, city, district, fields(id, name, price_per_hour, status)')
       .eq('owner_id', user.id);
 
+    const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
+    let pendingCount = 0;
+    if (myFieldIds.length) {
+      const { count } = await sb.from('bookings').select('*', { count:'exact', head:true })
+        .in('field_id', myFieldIds).eq('status', 'pending');
+      pendingCount = count || 0;
+    }
+
+    const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
+    const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
+
     bodyEl.innerHTML = `
+      <div class="stat-click" onclick="showOwnerBookings()" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:800">📅 حجوزات ملاعبي</div>
+          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">اضغط لعرض كل الحجوزات وتأكيدها أو إلغاؤها</div>
+        </div>
+        <span class="badge ${pendingCount>0?'pending':'available'}" style="font-size:12px">${pendingCount} قيد الانتظار</span>
+      </div>
+
       <div class="dlabel">🏟️ ملاعبي</div>
       ${(myFacilities&&myFacilities.length)? myFacilities.map(f=>`
         <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
@@ -1560,9 +1579,19 @@ async function openOwnerPanel(kind) {
             <span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span>
           </div>
           ${(f.fields||[]).map(fd=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:8px 10px;background:var(--bg-elev);border-radius:8px;font-size:13px">
-              <span>${fd.name}</span>
-              <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
+            <div style="margin-top:8px;padding:10px;background:var(--bg-elev);border-radius:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+                <span>${fd.name}</span>
+                <span style="display:flex;align-items:center;gap:6px">
+                  <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
+                  <span class="badge ${statusClass[fd.status]||'available'}" style="font-size:10px">${statusLabel[fd.status]||fd.status}</span>
+                </span>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:8px">
+                <button class="btn btn-soft btn-sm" style="flex:1" onclick="editStadiumForm(${fd.id})">✏️ تعديل</button>
+                <button class="btn btn-ghost btn-sm" style="flex:1" onclick="toggleFieldStatus(${fd.id}, '${fd.status}')">${fd.status==='available' ? '⛔ إغلاق' : '✅ فتح'}</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteField(${fd.id})">🗑️</button>
+              </div>
             </div>`).join('')}
         </div>`).join('') : `
         <div style="text-align:center;padding:24px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:12px">
@@ -1573,6 +1602,157 @@ async function openOwnerPanel(kind) {
       <button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>
     `;
   }
+}
+
+// ── حجوزات ملاعب صاحب الملعب (يشوف حجوزات ملاعبه هو فقط، ويتحكم فيها) ──
+async function showOwnerBookings() {
+  const titleEl = document.getElementById('ownerTitle');
+  const bodyEl = document.getElementById('ownerBody');
+  titleEl.textContent = '📅 حجوزات ملاعبي';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: myFacilities } = await sb.from('facilities').select('id, fields(id)').eq('owner_id', user.id);
+  const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
+
+  if (!myFieldIds.length) {
+    bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>';
+    return;
+  }
+
+  const { data, error } = await sb.from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, players_count, profiles(name, phone), fields(name)')
+    .in('field_id', myFieldIds)
+    .order('booking_date', { ascending: false });
+
+  if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
+
+  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+
+  bodyEl.innerHTML = backBtn + data.map(b => `
+    <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
+        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)||''} - ${b.end_time?.slice(0,5)||''} · 👥 ${b.players_count||''} لاعب</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
+        <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
+        <div style="display:flex;gap:6px">
+          ${b.status==='pending' ? `<button class="btn btn-soft btn-sm" onclick="ownerSetBookingStatus(${b.id},'confirmed')">✅ تأكيد</button>` : ''}
+          ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="ownerSetBookingStatus(${b.id},'cancelled')">إلغاء</button>` : ''}
+          ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="ownerSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function ownerSetBookingStatus(bookingId, newStatus) {
+  const msgs = { confirmed:'تأكيد هذا الحجز؟', cancelled:'إلغاء هذا الحجز؟', completed:'تحديد هذا الحجز كمكتمل؟' };
+  if (!confirm(msgs[newStatus] || 'تأكيد العملية؟')) return;
+  const { error } = await sb.from('bookings').update({ status: newStatus }).eq('id', bookingId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+
+  try {
+    const { data: booking } = await sb.from('bookings').select('user_id, fields(name)').eq('id', bookingId).single();
+    if (booking?.user_id) {
+      const titles = { confirmed:'تم تأكيد حجزك ✅', cancelled:'تم إلغاء حجزك ❌', completed:'انتهت مباراتك 🏁' };
+      await sb.from('notifications').insert({
+        user_id: booking.user_id, title: titles[newStatus] || 'تحديث على حجزك',
+        body: `تحديث بخصوص حجزك في ${booking.fields?.name || 'الملعب'}`
+      });
+    }
+  } catch(e){}
+
+  showToast('تم التحديث ✓');
+  showOwnerBookings();
+}
+
+// ── فتح/إغلاق ملعب فورياً ──
+async function toggleFieldStatus(fieldId, currentStatus) {
+  const newStatus = currentStatus === 'available' ? 'closed' : 'available';
+  const { error } = await sb.from('fields').update({ status: newStatus }).eq('id', fieldId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  showToast(newStatus === 'available' ? 'تم فتح الملعب ✓' : 'تم إغلاق الملعب ✓');
+  openOwnerPanel('owner');
+}
+
+// ── حذف ملعب ──
+async function deleteField(fieldId) {
+  if (!confirm('حذف هذا الملعب نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+  const { error } = await sb.from('fields').delete().eq('id', fieldId);
+  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  showToast('تم حذف الملعب ✓');
+  openOwnerPanel('owner');
+}
+
+// ── تعديل بيانات ملعب موجود ──
+let editingFieldId = null;
+async function editStadiumForm(fieldId) {
+  editingFieldId = fieldId;
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '✏️ تعديل الملعب';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+
+  const { data: fd, error } = await sb.from('fields')
+    .select('id, name, type, price_per_hour, facilities(id, name, city, district, region)')
+    .eq('id', fieldId).single();
+  if (error || !fd) { showToast('تعذّر تحميل بيانات الملعب', 'error'); openOwnerPanel('owner'); return; }
+
+  newFieldType = fd.type;
+  bodyEl.innerHTML = `
+    <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" value="${fd.name}"></div>
+    <div class="field"><label>المدينة *</label><input id="st-city" type="text" value="${fd.facilities?.city||''}"></div>
+    <div class="field"><label>الحي *</label><input id="st-district" type="text" value="${fd.facilities?.district||''}"></div>
+    <div class="field">
+      <label>المنطقة</label>
+      <select id="st-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        ${['خميس البحر','بحر أبو سكينة','أبها','خميس مشيط'].map(r=>`<option value="${r}" ${fd.facilities?.region===r?'selected':''}>${r}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field">
+      <label>نوع الأرضية</label>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <div class="pay ${fd.type==='artificial'?'sel':''}" id="type-artificial" onclick="selFieldType('artificial')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌿</div>عشب صناعي</div>
+        <div class="pay ${fd.type==='natural'?'sel':''}" id="type-natural" onclick="selFieldType('natural')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌱</div>عشب طبيعي</div>
+        <div class="pay ${fd.type==='indoor'?'sel':''}" id="type-indoor" onclick="selFieldType('indoor')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🏛️</div>مغلق</div>
+      </div>
+    </div>
+    <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" value="${fd.price_per_hour}"></div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
+      <button class="btn btn-brand" style="flex:2" onclick="updateStadium(${fd.facilities?.id})">💾 حفظ التعديلات</button>
+    </div>
+  `;
+}
+
+async function updateStadium(facilityId) {
+  const name     = document.getElementById('st-name').value.trim();
+  const city     = document.getElementById('st-city').value.trim();
+  const district = document.getElementById('st-district').value.trim();
+  const region   = document.getElementById('st-region').value;
+  const price    = parseFloat(document.getElementById('st-price').value);
+
+  if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
+  if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
+
+  showToast('جارٍ الحفظ...');
+
+  const { error: facErr } = await sb.from('facilities').update({ city, district, region }).eq('id', facilityId);
+  if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
+
+  const { error: fldErr } = await sb.from('fields')
+    .update({ name, type: newFieldType, price_per_hour: price })
+    .eq('id', editingFieldId);
+  if (fldErr) { showToast('تعذّر الحفظ: ' + fldErr.message,'error'); return; }
+
+  showToast('تم حفظ التعديلات ✓ 🏟️');
+  editingFieldId = null;
+  openOwnerPanel('owner');
 }
 
 async function adminView(kind) {
@@ -1610,6 +1790,9 @@ async function adminView(kind) {
         <div style="display:flex;justify-content:space-between"><b>${f.name}</b><span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span></div>
         <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">📍 ${f.district||''}، ${f.city||''}</div>
         <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">👤 المالك: ${f.profiles?.name||'—'} · ${f.profiles?.phone||''}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-danger btn-sm" onclick="adminDeleteFacility(${f.id})">🗑️ حذف المنشأة وكل ملاعبها</button>
+        </div>
       </div>`).join('');
   }
 
@@ -1631,10 +1814,29 @@ async function adminView(kind) {
         <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)||''}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
-          ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="adminCancelBooking(${b.id})">إلغاء الحجز</button>` : ''}
+          <div style="display:flex;gap:6px">
+            ${b.status==='pending' ? `<button class="btn btn-soft btn-sm" onclick="adminSetBookingStatus(${b.id},'confirmed')">✅ تأكيد</button>` : ''}
+            ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="adminCancelBooking(${b.id})">إلغاء</button>` : ''}
+            ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="adminSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
+          </div>
         </div>
       </div>`).join('');
   }
+}
+
+async function adminSetBookingStatus(bookingId, newStatus) {
+  const { error } = await sb.from('bookings').update({ status: newStatus }).eq('id', bookingId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  showToast('تم التحديث ✓');
+  adminView('bookings');
+}
+
+async function adminDeleteFacility(facilityId) {
+  if (!confirm('حذف هذه المنشأة وكل ملاعبها نهائياً؟ لا يمكن التراجع.')) return;
+  const { error } = await sb.from('facilities').delete().eq('id', facilityId);
+  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  showToast('تم الحذف ✓');
+  adminView('facilities');
 }
 
 async function ownerControl(userId, newRole) {
