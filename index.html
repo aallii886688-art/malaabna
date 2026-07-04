@@ -417,9 +417,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     <div class="theme-toggle" onclick="toggleTheme()" title="الوضع الليلي / النهاري">
       <div class="knob" id="knob">☀️</div>
     </div>
-    <div id="navAuth">
-      <button class="btn btn-ghost btn-sm" onclick="openAuth('login')">دخول</button>
-    </div>
+    <div id="navAuth" style="opacity:0;transition:opacity .15s ease"></div>
     <button class="menu-btn" onclick="toggleMenu()">☰</button>
   </div>
 </nav>
@@ -1002,6 +1000,15 @@ window.addEventListener('scroll',()=>document.getElementById('nav').classList.to
 
 renderActive();
 
+// يُستدعى فقط بعد أن نتأكد فعلياً أن لا توجد جلسة نشطة —
+// هذا يمنع "ومضة" ظهور زر الدخول ثم اختفائه عند من هو مسجّل دخول أصلاً
+function renderLoggedOutNav(){
+  const el = document.getElementById('navAuth');
+  el.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openAuth('login')">دخول</button>`;
+  el.style.opacity = '1';
+}
+window.renderLoggedOutNav = renderLoggedOutNav;
+
 const SUPABASE_URL      = 'https://lsgakyydqomzntoebqep.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZ2FreXlkcW9tem50b2VicWVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTkwMDEsImV4cCI6MjA5ODU5NTAwMX0.33DmQ23ab5hw3Y3iGtzXphopVMKmnOnTZZfxhtVZmcM';
 
@@ -1021,6 +1028,7 @@ if (BACKEND_READY && window.supabase) {
   initBackend();
 } else {
   console.log('ℹ️ الوضع التجريبي — أدخل مفاتيح Supabase لتفعيل الحفظ الدائم');
+  renderLoggedOutNav();
 }
 
 function initBackend() {
@@ -1030,8 +1038,13 @@ function initBackend() {
       if (session && session.user) {
         loggedIn = true;
         await afterLogin();
+      } else {
+        renderLoggedOutNav();
       }
-    } catch(e) { console.log('لا توجد جلسة سابقة'); }
+    } catch(e) {
+      console.log('لا توجد جلسة سابقة');
+      renderLoggedOutNav();
+    }
   })();
 
   document.addEventListener('visibilitychange', async () => {
@@ -1131,6 +1144,7 @@ function initBackend() {
         </div>
         <span style="margin-right:4px">☰</span>
       </div>`;
+    document.getElementById('navAuth').style.opacity = '1';
 
     if (role === 'super_admin') showToast('مرحباً بك أيها المالك 🛡️');
     else if (role === 'owner' || role === 'staff') showToast('مرحباً صاحب الملعب 🏟️');
@@ -1490,7 +1504,7 @@ async function doLogout() {
   await sb.auth.signOut();
   window.currentUser = null;
   loggedIn = false;
-  document.getElementById('navAuth').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openAuth('login')">دخول</button>`;
+  renderLoggedOutNav();
   showToast('تم تسجيل الخروج ✓');
 }
 
