@@ -697,6 +697,7 @@ const dayNames = ["الأحد","الإثنين","الثلاثاء","الأربع
 const timeSlots = ["14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"];
 
 let currentMod = 'stadiums';
+let appliedCoupon = null, finalBookingPrice = null;
 let active = null, activeType = null;
 let selDate = 0, selSlot = null, playerCount = 6, payMethod = 'mada';
 let loggedIn = false, authMode = 'login';
@@ -708,6 +709,40 @@ function calculateSmartSplit(totalPrice, playersCount){
   const sharePerPlayer = totalPrice / playersCount;
   const finalShare = Math.round(sharePerPlayer * 100) / 100;
   return { totalAmount:totalPrice, numberOfPlayers:playersCount, sharePerPlayer:finalShare, currency:"SAR", taxRate:"0% VAT" };
+}
+
+async function applyCoupon(basePrice){
+  const codeInput = document.getElementById('coupon-code');
+  const msgEl = document.getElementById('couponMsg');
+  const code = (codeInput?.value||'').trim().toUpperCase();
+  if (!code) { msgEl.textContent = 'أدخل كود الخصم'; msgEl.style.color = 'var(--danger)'; return; }
+  if (!window.sb) { msgEl.textContent = 'الكوبونات تحتاج اتصال قاعدة بيانات'; msgEl.style.color='var(--danger)'; return; }
+
+  const { data: coupon, error } = await sb.from('coupons').select('*').eq('code', code).eq('active', true).maybeSingle();
+  if (error || !coupon) { msgEl.textContent = 'كود غير صحيح أو منتهي'; msgEl.style.color='var(--danger)'; appliedCoupon=null; finalBookingPrice=null; updateCouponUI(basePrice); return; }
+  if (coupon.expires_at && coupon.expires_at < new Date().toISOString().split('T')[0]) { msgEl.textContent = 'انتهت صلاحية هذا الكود'; msgEl.style.color='var(--danger)'; return; }
+  if (coupon.max_uses && coupon.used_count >= coupon.max_uses) { msgEl.textContent = 'تم استنفاد هذا الكود'; msgEl.style.color='var(--danger)'; return; }
+
+  const discount = coupon.discount_type === 'percent' ? basePrice * (coupon.discount_value/100) : coupon.discount_value;
+  finalBookingPrice = Math.max(0, Math.round((basePrice - discount) * 100) / 100);
+  appliedCoupon = coupon;
+  msgEl.textContent = `✓ تم تطبيق الخصم (${coupon.discount_type==='percent'?coupon.discount_value+'%':coupon.discount_value+' ر'})`;
+  msgEl.style.color = 'var(--brand)';
+  updateCouponUI(basePrice);
+}
+function updateCouponUI(basePrice){
+  const row = document.getElementById('couponRow');
+  const discEl = document.getElementById('couponDiscount');
+  const finalEl = document.getElementById('finalPrice');
+  if (!row || !finalEl) return;
+  if (appliedCoupon && finalBookingPrice!=null) {
+    row.style.display = 'flex';
+    discEl.textContent = `- ${(basePrice-finalBookingPrice).toFixed(2)} ر`;
+    finalEl.textContent = `${finalBookingPrice} ريال`;
+  } else {
+    row.style.display = 'none';
+    finalEl.textContent = `${basePrice} ريال`;
+  }
 }
 
 function toggleTheme(){
@@ -779,6 +814,7 @@ async function openItem(type, id){
   activeType = type;
   active = DATA[type].find(x=>x.id===id);
   selDate=0; selSlot=null; playerCount=6;
+  appliedCoupon=null; finalBookingPrice=null;
   if(type==='stadiums') await renderStadiumDrawer();
   else renderSimpleDrawer();
   document.getElementById('ov').classList.add('open');
@@ -790,12 +826,13 @@ async function openItem(type, id){
 async function getFieldAvailability(fieldId, dateStr, weekday){
   if (!window.sb) return { slots: timeSlots, taken: takenSlots(fieldId, selDate), dayClosed: false };
   try {
-    const [{ data: wh }, { data: bo }, { data: bookings }, { data: matches }, { data: sessions }] = await Promise.all([
+    const [{ data: wh }, { data: bo }, { data: bookings }, { data: matches }, { data: sessions }, { data: priceOverride }] = await Promise.all([
       sb.from('field_working_hours').select('open_time,close_time,is_closed').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle(),
       sb.from('field_blackouts').select('id,reason').eq('field_id', fieldId).eq('blackout_date', dateStr).maybeSingle(),
       sb.from('bookings').select('start_time').eq('field_id', fieldId).eq('booking_date', dateStr).in('status', ['pending','confirmed']),
       sb.from('tournament_matches').select('start_time,end_time').eq('field_id', fieldId).eq('match_date', dateStr).neq('status','cancelled'),
-      sb.from('academy_sessions').select('start_time,end_time').eq('field_id', fieldId).eq('weekday', weekday)
+      sb.from('academy_sessions').select('start_time,end_time').eq('field_id', fieldId).eq('weekday', weekday),
+      sb.from('field_weekday_pricing').select('price').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle()
     ]);
     const dayClosed = !!bo || (wh && wh.is_closed);
     let slots = timeSlots;
@@ -809,7 +846,7 @@ async function getFieldAvailability(fieldId, dateStr, weekday){
       const bs = (block.start_time||'').slice(0,5), be = (block.end_time||'').slice(0,5);
       timeSlots.forEach(t => { if (t >= bs && t < be && !taken.includes(t)) taken.push(t); });
     });
-    return { slots, taken, dayClosed, blackoutReason: bo?.reason || null };
+    return { slots, taken, dayClosed, blackoutReason: bo?.reason || null, priceOverride: priceOverride?.price!=null ? Number(priceOverride.price) : null };
   } catch(e) {
     // الملعب تجريبي (id غير موجود فعلياً في قاعدة البيانات) → استخدم البيانات الوهمية
     return { slots: timeSlots, taken: takenSlots(fieldId, selDate), dayClosed: false };
@@ -852,15 +889,17 @@ async function renderStadiumDrawer(){
   const slots = activeSlots.map(t=>{ const tk=taken.includes(t); const sl=selSlot===t;
     return `<div class="slot ${tk?'taken':sl?'sel':'free'}" ${tk?'':`onclick="setSlot('${t}')"`}>${t}</div>`; }).join('');
 
-  const split = calculateSmartSplit(s.price, playerCount);
+  window.effectivePrice = avail.priceOverride!=null ? avail.priceOverride : s.price;
+  const split = calculateSmartSplit(window.effectivePrice, playerCount);
   const canBook = !!selSlot;
+  const priceNote = avail.priceOverride!=null ? ` <span style="font-size:11px;color:var(--flood)">(سعر ${dayNames[weekday]})</span>` : '';
 
   document.getElementById('drawerBody').innerHTML = `
     <div class="dmedia">${s.icon}</div>
     <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
     <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
     <div class="irow">⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
-    <div class="irow">💰 <b>${s.price} ريال</b> / الساعة</div>
+    <div class="irow">💰 <b>${window.effectivePrice} ريال</b> / الساعة${priceNote}</div>
 
     <div class="dlabel">📅 اختر اليوم</div>
     <div class="dates">${pills}</div>
@@ -883,11 +922,18 @@ async function renderStadiumDrawer(){
       </div>
     </div>
 
+    <div class="field" style="display:flex;gap:8px;align-items:flex-end;margin-top:14px">
+      <div style="flex:1"><label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px">لديك كود خصم؟</label><input id="coupon-code" type="text" placeholder="مثال: RAMADAN20" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13px"></div>
+      <button class="btn btn-soft btn-sm" onclick="applyCoupon(window.effectivePrice)" type="button">تطبيق</button>
+    </div>
+    <div id="couponMsg" style="font-size:12px;margin-top:6px"></div>
+
     <div class="summary">
       <div class="srow"><span>الملعب</span><span>${s.name}</span></div>
       <div class="srow"><span>الوقت</span><span>${selSlot? selSlot+' - '+(parseInt(selSlot)+1)+':00' : '— اختر وقتًا —'}</span></div>
+      <div class="srow" id="couponRow" style="display:none"><span>خصم الكوبون</span><span id="couponDiscount">0 ر</span></div>
       <div class="srow"><span>الضريبة</span><span>0% VAT</span></div>
-      <div class="srow tot"><span>الإجمالي</span><span class="amt">${s.price} ريال</span></div>
+      <div class="srow tot"><span>الإجمالي</span><span class="amt" id="finalPrice">${window.effectivePrice} ريال</span></div>
     </div>
 
     <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()" ${canBook?'':'disabled'}>
@@ -1345,6 +1391,8 @@ function initBackend() {
 
       const today = new Date(); today.setDate(today.getDate() + selDate);
       const dateStr = today.toISOString().split('T')[0];
+      const basePrice = window.effectivePrice != null ? window.effectivePrice : active.price;
+      const bookedPrice = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePrice;
 
       const { data: newBooking, error } = await sb.from('bookings').insert({
         user_id: user.id,
@@ -1353,7 +1401,7 @@ function initBackend() {
         start_time: selSlot,
         end_time: (parseInt(selSlot)+1)+':00',
         players_count: playerCount,
-        total_price: active.price,
+        total_price: bookedPrice,
         status: 'pending'
       }).select().single();
 
@@ -1374,6 +1422,10 @@ function initBackend() {
           showToast('أضف الملاعب لقاعدة البيانات أولاً (راجع الدليل)','error'); return;
         }
         showToast('تعذّر الحجز: ' + error.message,'error'); return;
+      }
+
+      if (appliedCoupon) {
+        try { await sb.from('coupons').update({ used_count: appliedCoupon.used_count + 1 }).eq('id', appliedCoupon.id); } catch(e){}
       }
 
       try {
@@ -1424,9 +1476,11 @@ function initBackend() {
   function _proceedUI() {
     const it = active;
     const isStadium = activeType === 'stadiums';
+    const basePriceUI = (isStadium && window.effectivePrice!=null) ? window.effectivePrice : it.price;
+    const displayPrice = (isStadium && appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePriceUI;
     let extraRow = '';
     if (isStadium) {
-      const split = calculateSmartSplit(it.price, playerCount);
+      const split = calculateSmartSplit(displayPrice, playerCount);
       extraRow = `<div class="r"><span>نصيب كل لاعب (${playerCount})</span><b>${split.sharePerPlayer} ر</b></div>`;
     }
     document.getElementById('confirmTitle').textContent = 'تم حفظ حجزك ✓';
@@ -1436,8 +1490,9 @@ function initBackend() {
       <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
       ${isStadium ? `<div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
       ${extraRow}
+      ${appliedCoupon ? `<div class="r"><span>كوبون</span><b class="mono">${appliedCoupon.code}</b></div>` : ''}
       <div class="r"><span>الضريبة</span><b>0% VAT</b></div>
-      <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق عند الملعب</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>`;
+      <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق عند الملعب</span><b style="color:var(--flood);font-size:16px">${displayPrice} ريال</b></div>`;
     const btn = document.querySelector('#mConfirm .btn-brand');
     btn.textContent = `تم`;
     btn.onclick = closeAll;
@@ -1454,7 +1509,8 @@ function initBackend() {
     const { data, error } = await sb
       .from('fields')
       .select('id, name, type, price_per_hour, facilities!inner(name, city, district, region, lat, lng)')
-      .eq('status', 'available');
+      .eq('status', 'available')
+      .eq('approved', true);
     if (error || !data || data.length === 0) {
       console.log('ℹ️ لا توجد ملاعب في قاعدة البيانات بعد — عرض البيانات التجريبية');
       document.getElementById('mapEmptyState').style.display = 'flex';
@@ -1817,10 +1873,11 @@ async function openOwnerPanel(kind) {
     bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
     modal.classList.add('open'); document.getElementById('ov').classList.add('open');
 
-    const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { data: earnRows }] = await Promise.all([
+    const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFieldsCount }, { data: earnRows }] = await Promise.all([
       sb.from('profiles').select('*', { count: 'exact', head: true }),
       sb.from('facilities').select('*', { count: 'exact', head: true }),
       sb.from('bookings').select('*', { count: 'exact', head: true }),
+      sb.from('fields').select('*', { count: 'exact', head: true }).eq('approved', false),
       sb.from('bookings').select('total_price').in('status', ['confirmed','completed']),
     ]);
     const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
@@ -1837,14 +1894,28 @@ async function openOwnerPanel(kind) {
           <div style="font-size:26px;font-weight:900;color:var(--brand)">${bookCount||0}</div>
           <div style="font-size:12px;color:var(--ink-dim)">حجز</div></div>
       </div>
-      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:10px">
+      ${pendingFieldsCount>0 ? `
+      <div class="stat-click" onclick="adminView('approvals')" style="background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:700">⏳ ${pendingFieldsCount} ملعب بانتظار موافقتك</span>
+        <span style="font-size:12px">راجع الآن ←</span>
+      </div>` : ''}
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:14px">
         <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue} ريال</div>
         <div style="font-size:12px;color:var(--ink-dim)">إجمالي إيرادات المنصة (المؤكدة + المكتملة)</div>
       </div>
-      <button class="btn btn-soft btn-block" style="margin-bottom:10px" onclick="adminView('reviews')">⭐ إشراف على التقييمات</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:10px" onclick="adminView('sms')">📱 بوابة الرسائل النصية (SMS)</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:10px" onclick="adminView('payment')">💳 بوابة الدفع الإلكتروني</button>
-      <div class="legal-note">💡 اضغط على أي بطاقة أعلاه لعرض التفاصيل والتحكم الكامل.</div>
+
+      <div class="dlabel">📊 الإدارة والنمو</div>
+      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('analytics')">📈 تحليلات المنصة</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('coupons')">🎟️ كوبونات الخصم</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('approvals')">✅ موافقة الملاعب الجديدة${pendingFieldsCount>0?` (${pendingFieldsCount})`:''}</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('reviews')">⭐ إشراف على التقييمات</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:14px" onclick="showBroadcastForm()">📢 إرسال إشعار جماعي</button>
+
+      <div class="dlabel">🔌 تكاملات (لاحقًا)</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="adminView('sms')">📱 الرسائل</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="adminView('payment')">💳 الدفع</button>
+      </div>
     `;
   } else {
     titleEl.textContent = '🏟️ لوحة ملاعبي';
@@ -1930,6 +2001,12 @@ async function openOwnerPanel(kind) {
         ${window._isTrueOwner ? `<button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddAcademyForm()">+ أكاديمية</button>
         <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddTournamentForm()">+ بطولة</button>` : ''}
       </div>
+      <div class="dlabel" style="margin-top:22px">📊 النمو والعملاء</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerAnalytics()">📈 تحليلاتي</button>
+        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerCustomers()">👥 عملائي</button>
+      </div>
+
       ${window._isTrueOwner ? `<button class="btn btn-ghost btn-block" onclick="showStaffManagement()">👥 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف على هذه المنشأة — إدارة الموظفين وإضافة منشآت جديدة تخص المالك فقط.</div>`}
     `;
   }
@@ -2402,12 +2479,15 @@ async function openWorkingHours(fieldId) {
   document.getElementById('ownerTitle').textContent = '⏰ أوقات العمل وأيام الإغلاق';
   bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
 
-  const [{ data: hours }, { data: blackouts }] = await Promise.all([
+  const [{ data: hours }, { data: blackouts }, { data: pricing }] = await Promise.all([
     sb.from('field_working_hours').select('weekday, open_time, close_time, is_closed').eq('field_id', fieldId),
-    sb.from('field_blackouts').select('id, blackout_date, reason').eq('field_id', fieldId).gte('blackout_date', new Date().toISOString().split('T')[0]).order('blackout_date')
+    sb.from('field_blackouts').select('id, blackout_date, reason').eq('field_id', fieldId).gte('blackout_date', new Date().toISOString().split('T')[0]).order('blackout_date'),
+    sb.from('field_weekday_pricing').select('weekday, price').eq('field_id', fieldId)
   ]);
   const hoursByDay = {};
   (hours||[]).forEach(h => hoursByDay[h.weekday] = h);
+  const pricingByDay = {};
+  (pricing||[]).forEach(p => pricingByDay[p.weekday] = p.price);
 
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>
@@ -2429,9 +2509,23 @@ async function openWorkingHours(fieldId) {
     }).join('')}
     <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="saveWorkingHours()">💾 حفظ أوقات العمل</button>
 
-    <div class="dlabel" style="margin-top:26px">🚫 إغلاق تاريخ محدد (صيانة / مناسبة)</div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
+    <div class="dlabel" style="margin-top:26px">💰 تسعير حسب يوم الأسبوع (ذروة/خارج الذروة)</div>
+    <div class="legal-note" style="margin-bottom:10px">اترك الحقل فارغًا لاستخدام السعر الأساسي لليوم. مثال: ضع سعرًا أعلى للجمعة والسبت.</div>
+    ${WEEKDAY_NAMES.map((name,i)=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:6px">
+        <span style="width:70px;font-size:13px;font-weight:700">${name}</span>
+        <input type="number" id="wp-price-${i}" value="${pricingByDay[i] ?? ''}" placeholder="السعر الأساسي" style="flex:1;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink);font-size:12px">
+        <span style="font-size:11px;color:var(--ink-dim)">ريال</span>
+      </div>`).join('')}
+    <button class="btn btn-brand btn-block" style="margin-top:6px" onclick="saveWeekdayPricing()">💾 حفظ التسعير</button>
+
+    <div class="dlabel" style="margin-top:26px">🚫 إغلاق تواريخ (صيانة / مناسبة)</div>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
       <input type="date" id="bo-date" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
+      <span style="align-self:center;font-size:12px;color:var(--ink-dim)">إلى (اختياري)</span>
+      <input type="date" id="bo-date-end" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
       <input type="text" id="bo-reason" placeholder="السبب (اختياري)" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
       <button class="btn btn-soft btn-sm" onclick="addBlackout()">إضافة</button>
     </div>
@@ -2441,6 +2535,117 @@ async function openWorkingHours(fieldId) {
         <button class="btn btn-ghost btn-sm" onclick="removeBlackout(${b.id})">إلغاء</button>
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--ink-dim);padding:6px">لا توجد أيام إغلاق مجدولة</div>'}
   `;
+}
+
+// ── تحليلات صاحب الملعب (لملاعبه فقط) ──
+async function getMyFieldIds(){
+  const { data: { user } } = await sb.auth.getUser();
+  const [{ data: ownFac }, { data: staffFac }] = await Promise.all([
+    sb.from('facilities').select('id').eq('owner_id', user.id),
+    sb.from('facility_staff').select('facility_id').eq('user_id', user.id)
+  ]);
+  const facIds = [...new Set([...(ownFac||[]).map(f=>f.id), ...(staffFac||[]).map(f=>f.facility_id)])];
+  if (!facIds.length) return [];
+  const { data: fields } = await sb.from('fields').select('id').in('facility_id', facIds);
+  return (fields||[]).map(f=>f.id);
+}
+
+async function showOwnerAnalytics(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📈 تحليلاتي';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+
+  const fieldIds = await getMyFieldIds();
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  if (!fieldIds.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك التحليلات</div>'; return; }
+
+  const since = new Date(Date.now() - 13*24*60*60*1000).toISOString().split('T')[0];
+  const [{ data: recentBookings }, { data: allBookings }] = await Promise.all([
+    sb.from('bookings').select('booking_date').in('field_id', fieldIds).gte('booking_date', since),
+    sb.from('bookings').select('start_time, status, total_price').in('field_id', fieldIds).in('status',['confirmed','completed'])
+  ]);
+
+  const dayCounts = {};
+  for (let i=0;i<14;i++){ const d=new Date(); d.setDate(d.getDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
+  (recentBookings||[]).forEach(b=>{ if (dayCounts[b.booking_date]!==undefined) dayCounts[b.booking_date]++; });
+  const days = Object.keys(dayCounts).sort();
+  const maxCount = Math.max(1, ...days.map(d=>dayCounts[d]));
+  const barsHtml = days.map(d=>{
+    const h = Math.round((dayCounts[d]/maxCount)*60)+4;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="width:100%;max-width:16px;height:${h}px;background:var(--brand);border-radius:3px 3px 0 0" title="${d}: ${dayCounts[d]}"></div>
+      <span style="font-size:8px;color:var(--ink-dim)">${d.slice(8,10)}</span>
+    </div>`;
+  }).join('');
+
+  const hourCounts = {};
+  (allBookings||[]).forEach(b=>{ const h = (b.start_time||'').slice(0,2); if (h) hourCounts[h]=(hourCounts[h]||0)+1; });
+  const busiestHour = Object.entries(hourCounts).sort((a,b)=>b[1]-a[1])[0];
+  const totalRevenue = (allBookings||[]).reduce((s,b)=>s+Number(b.total_price||0),0);
+
+  bodyEl.innerHTML = backBtn + `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">إجمالي الإيرادات</div>
+      </div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:var(--brand)">${busiestHour ? busiestHour[0]+':00' : '—'}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">أكثر وقت ازدحامًا</div>
+      </div>
+    </div>
+    <div class="dlabel">📅 الحجوزات آخر 14 يوم</div>
+    <div style="display:flex;align-items:flex-end;gap:4px;height:80px;background:var(--bg-soft);border-radius:10px;padding:10px 8px">${barsHtml}</div>
+  `;
+}
+
+// ── عملاء صاحب الملعب (CRM مبسّط) ──
+async function showOwnerCustomers(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '👥 عملائي';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+
+  const fieldIds = await getMyFieldIds();
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  if (!fieldIds.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً ليظهر لك عملاؤك</div>'; return; }
+
+  const { data: bookings } = await sb.from('bookings')
+    .select('user_id, total_price, status, profiles(name, phone)')
+    .in('field_id', fieldIds).in('status',['confirmed','completed']);
+
+  const byUser = {};
+  (bookings||[]).forEach(b=>{
+    if (!b.user_id) return;
+    if (!byUser[b.user_id]) byUser[b.user_id] = { name:b.profiles?.name||'—', phone:b.profiles?.phone||'', count:0, spent:0 };
+    byUser[b.user_id].count++; byUser[b.user_id].spent += Number(b.total_price||0);
+  });
+  const customers = Object.values(byUser).sort((a,b)=>b.spent-a.spent);
+
+  bodyEl.innerHTML = backBtn + (customers.length ? `
+    <div class="legal-note" style="margin-bottom:12px">👥 ${customers.length} عميل حجز في ملاعبك حتى الآن</div>
+    ${customers.map(c=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div><b style="font-size:13px">${c.name}</b><div style="font-size:11px;color:var(--ink-dim)">${c.phone}</div></div>
+        <div style="text-align:left"><b style="color:var(--flood);font-size:13px">${c.spent} ر</b><div style="font-size:11px;color:var(--ink-dim)">${c.count} حجز</div></div>
+      </div>`).join('')}
+  ` : '<div style="color:var(--ink-dim);padding:14px">لا يوجد عملاء بعد</div>');
+}
+
+async function saveWeekdayPricing(){
+  const rows = [];
+  WEEKDAY_NAMES.forEach((_,i)=>{
+    const val = document.getElementById(`wp-price-${i}`).value;
+    if (val !== '' && !isNaN(parseFloat(val))) rows.push({ field_id: whFieldId, weekday: i, price: parseFloat(val) });
+  });
+  // احذف القديم غير المحدد حديثاً ثم أدرج الجديد (استبدال كامل بسيط وآمن)
+  await sb.from('field_weekday_pricing').delete().eq('field_id', whFieldId);
+  if (rows.length) {
+    const { error } = await sb.from('field_weekday_pricing').insert(rows);
+    if (error) { showToast('تعذّر حفظ التسعير: '+error.message,'error'); return; }
+  }
+  showToast('تم حفظ التسعير ✓ 💰');
 }
 
 async function saveWorkingHours() {
@@ -2457,12 +2662,23 @@ async function saveWorkingHours() {
 }
 
 async function addBlackout() {
-  const date = document.getElementById('bo-date').value;
+  const dateStart = document.getElementById('bo-date').value;
+  const dateEnd = document.getElementById('bo-date-end').value || dateStart;
   const reason = document.getElementById('bo-reason').value.trim();
-  if (!date) { showToast('اختر تاريخاً','error'); return; }
-  const { error } = await sb.from('field_blackouts').insert({ field_id: whFieldId, blackout_date: date, reason: reason || null });
+  if (!dateStart) { showToast('اختر تاريخاً','error'); return; }
+  if (dateEnd < dateStart) { showToast('تاريخ النهاية لازم يكون بعد تاريخ البداية','error'); return; }
+
+  const rows = [];
+  let d = new Date(dateStart);
+  const end = new Date(dateEnd);
+  let guard = 0;
+  while (d <= end && guard < 366) {
+    rows.push({ field_id: whFieldId, blackout_date: d.toISOString().split('T')[0], reason: reason || null });
+    d.setDate(d.getDate()+1); guard++;
+  }
+  const { error } = await sb.from('field_blackouts').upsert(rows, { onConflict: 'field_id,blackout_date' });
   if (error) { showToast('تعذّر الإضافة: ' + error.message, 'error'); return; }
-  showToast('تم إغلاق هذا التاريخ ✓');
+  showToast(rows.length>1 ? `تم إغلاق ${rows.length} يومًا ✓` : 'تم إغلاق هذا التاريخ ✓');
   openWorkingHours(whFieldId);
 }
 
@@ -2599,6 +2815,200 @@ async function adminView(kind) {
         </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد عمليات دفع بعد</div>'}
     `;
   }
+
+  else if (kind === 'analytics') {
+    titleEl.textContent = '📈 تحليلات المنصة';
+    const since = new Date(Date.now() - 13*24*60*60*1000).toISOString().split('T')[0];
+    const [{ data: recentBookings }, { data: fieldStats }] = await Promise.all([
+      sb.from('bookings').select('booking_date').gte('booking_date', since),
+      sb.from('bookings').select('field_id, total_price, fields(name, facilities(city))').in('status',['confirmed','completed'])
+    ]);
+    // حجوزات آخر 14 يوم
+    const dayCounts = {};
+    for (let i=0;i<14;i++){ const d=new Date(); d.setDate(d.getDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
+    (recentBookings||[]).forEach(b=>{ if (dayCounts[b.booking_date]!==undefined) dayCounts[b.booking_date]++; });
+    const days = Object.keys(dayCounts).sort();
+    const maxCount = Math.max(1, ...days.map(d=>dayCounts[d]));
+    const barsHtml = days.map(d=>{
+      const h = Math.round((dayCounts[d]/maxCount)*60)+4;
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="width:100%;max-width:16px;height:${h}px;background:var(--brand);border-radius:3px 3px 0 0" title="${d}: ${dayCounts[d]}"></div>
+        <span style="font-size:8px;color:var(--ink-dim)">${d.slice(8,10)}</span>
+      </div>`;
+    }).join('');
+
+    // أكثر الملاعب حجزاً وأعلاها إيراداً
+    const byField = {};
+    (fieldStats||[]).forEach(b=>{
+      const key = b.field_id;
+      if (!byField[key]) byField[key] = { name: b.fields?.name||'—', city: b.fields?.facilities?.city||'', count:0, revenue:0 };
+      byField[key].count++; byField[key].revenue += Number(b.total_price||0);
+    });
+    const topFields = Object.values(byField).sort((a,b)=>b.revenue-a.revenue).slice(0,5);
+
+    // الإيراد حسب المدينة
+    const byCity = {};
+    (fieldStats||[]).forEach(b=>{
+      const city = b.fields?.facilities?.city || 'غير محدد';
+      byCity[city] = (byCity[city]||0) + Number(b.total_price||0);
+    });
+    const cityRows = Object.entries(byCity).sort((a,b)=>b[1]-a[1]);
+    const maxCity = Math.max(1, ...cityRows.map(r=>r[1]));
+
+    bodyEl.innerHTML = backBtn + `
+      <div class="dlabel">📅 الحجوزات آخر 14 يوم</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:80px;background:var(--bg-soft);border-radius:10px;padding:10px 8px;margin-bottom:20px">${barsHtml}</div>
+
+      <div class="dlabel">🏆 الأعلى إيرادًا</div>
+      ${topFields.length ? topFields.map((f,i)=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
+          <span style="font-size:12.5px"><b>${i+1}.</b> ${f.name} <span style="color:var(--ink-dim);font-size:11px">${f.city}</span></span>
+          <span style="font-size:12px"><b style="color:var(--flood)">${f.revenue} ر</b> · ${f.count} حجز</span>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:8px">لا توجد بيانات كافية بعد</div>'}
+
+      <div class="dlabel" style="margin-top:18px">🗺️ الإيراد حسب المدينة</div>
+      ${cityRows.length ? cityRows.map(([city,rev])=>`
+        <div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${city}</span><b style="color:var(--flood)">${rev} ر</b></div>
+          <div style="height:6px;background:var(--bg-soft);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(rev/maxCity*100)}%;background:var(--brand)"></div></div>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:8px">لا توجد بيانات كافية بعد</div>'}
+    `;
+  }
+
+  else if (kind === 'coupons') {
+    titleEl.textContent = '🎟️ كوبونات الخصم';
+    const { data: coupons } = await sb.from('coupons').select('*').order('created_at',{ascending:false});
+    bodyEl.innerHTML = backBtn + `
+      <div class="dlabel">➕ كوبون جديد</div>
+      <div class="field"><label>الكود *</label><input id="cp-code" type="text" placeholder="RAMADAN20" style="text-transform:uppercase"></div>
+      <div style="display:flex;gap:8px">
+        <div class="field" style="flex:1">
+          <label>نوع الخصم</label>
+          <select id="cp-type" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
+            <option value="percent">نسبة %</option>
+            <option value="fixed">مبلغ ثابت (ريال)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1"><label>القيمة *</label><input id="cp-value" type="number" placeholder="20"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="field" style="flex:1"><label>حد الاستخدام</label><input id="cp-maxuses" type="number" placeholder="بلا حد"></div>
+        <div class="field" style="flex:1"><label>ينتهي في</label><input id="cp-expires" type="date"></div>
+      </div>
+      <button class="btn btn-brand btn-block" onclick="saveCoupon()">💾 إنشاء الكوبون</button>
+
+      <div class="dlabel" style="margin-top:18px">📋 الكوبونات الحالية</div>
+      ${(coupons&&coupons.length)? coupons.map(c=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+          <div>
+            <b class="mono" style="font-size:13px">${c.code}</b>
+            <div style="font-size:11px;color:var(--ink-dim)">${c.discount_type==='percent'?c.discount_value+'%':c.discount_value+' ر'} · استُخدم ${c.used_count}${c.max_uses?'/'+c.max_uses:''} مرة${c.expires_at?' · ينتهي '+c.expires_at:''}</div>
+          </div>
+          <button class="btn ${c.active?'btn-danger':'btn-soft'} btn-sm" onclick="toggleCoupon(${c.id}, ${!c.active})">${c.active?'إيقاف':'تفعيل'}</button>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد كوبونات بعد</div>'}
+    `;
+  }
+
+  else if (kind === 'approvals') {
+    titleEl.textContent = '✅ موافقة الملاعب الجديدة';
+    const { data: pending } = await sb.from('fields')
+      .select('id, name, price_per_hour, type, facilities(name, city, district, profiles(name, phone))')
+      .eq('approved', false);
+    if (!pending || !pending.length) {
+      bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)"><div style="font-size:30px;margin-bottom:8px">✅</div>لا توجد ملاعب بانتظار الموافقة</div>';
+      return;
+    }
+    bodyEl.innerHTML = backBtn + pending.map(f=>`
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <b style="font-size:14px">${f.name}</b>
+            <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.facilities?.district||''}، ${f.facilities?.city||''} · ${f.price_per_hour} ر/ساعة</div>
+            <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${f.facilities?.profiles?.name||'—'} · ${f.facilities?.profiles?.phone||''}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-brand btn-sm" style="flex:1" onclick="approveField(${f.id})">✅ موافقة ونشر</button>
+          <button class="btn btn-danger btn-sm" style="flex:1" onclick="rejectField(${f.id})">رفض وحذف</button>
+        </div>
+      </div>`).join('');
+  }
+}
+
+async function saveCoupon(){
+  const code = document.getElementById('cp-code').value.trim().toUpperCase();
+  const type = document.getElementById('cp-type').value;
+  const value = parseFloat(document.getElementById('cp-value').value);
+  const maxUses = parseInt(document.getElementById('cp-maxuses').value) || null;
+  const expires = document.getElementById('cp-expires').value || null;
+  if (!code || !value) { showToast('أدخل الكود والقيمة','error'); return; }
+  const { error } = await sb.from('coupons').insert({ code, discount_type:type, discount_value:value, max_uses:maxUses, expires_at:expires });
+  if (error) {
+    if (error.code==='23505') { showToast('هذا الكود مستخدم مسبقاً','error'); return; }
+    showToast('تعذّر الحفظ: '+error.message,'error'); return;
+  }
+  showToast('تم إنشاء الكوبون ✓ 🎟️');
+  adminView('coupons');
+}
+async function toggleCoupon(id, newActive){
+  const { error } = await sb.from('coupons').update({ active: newActive }).eq('id', id);
+  if (error) { showToast('تعذّر التحديث','error'); return; }
+  showToast(newActive? 'تم التفعيل ✓' : 'تم الإيقاف ✓');
+  adminView('coupons');
+}
+async function approveField(fieldId){
+  const { error } = await sb.from('fields').update({ approved:true }).eq('id', fieldId);
+  if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  showToast('تمت الموافقة ونُشر الملعب ✓');
+  loadRealFields();
+  adminView('approvals');
+}
+async function rejectField(fieldId){
+  if (!confirm('رفض هذا الملعب وحذفه نهائياً؟')) return;
+  const { error } = await sb.from('fields').delete().eq('id', fieldId);
+  if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  showToast('تم الرفض والحذف ✓');
+  adminView('approvals');
+}
+
+// ── إشعار جماعي (Broadcast) ──
+function showBroadcastForm(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📢 إرسال إشعار جماعي';
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('admin')" style="margin-bottom:14px">→ رجوع للوحة</button>
+    <div class="field">
+      <label>إرسال إلى</label>
+      <select id="bc-target" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
+        <option value="all">جميع المستخدمين</option>
+        <option value="owner">أصحاب الملاعب فقط</option>
+        <option value="customer">اللاعبين فقط</option>
+      </select>
+    </div>
+    <div class="field"><label>عنوان الإشعار *</label><input id="bc-title" type="text" placeholder="إعلان مهم"></div>
+    <div class="field"><label>نص الإشعار</label><input id="bc-body" type="text" placeholder="تفاصيل الإعلان..."></div>
+    <button class="btn btn-brand btn-block" onclick="sendBroadcast()">📢 إرسال للجميع</button>
+    <div class="legal-note">⚠️ سيصل هذا الإشعار لكل من يطابق الفئة المختارة داخل قسم "التنبيهات" في حساباتهم.</div>
+  `;
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+async function sendBroadcast(){
+  const target = document.getElementById('bc-target').value;
+  const title = document.getElementById('bc-title').value.trim();
+  const body = document.getElementById('bc-body').value.trim();
+  if (!title) { showToast('أدخل عنوان الإشعار','error'); return; }
+  showToast('جارٍ الإرسال...');
+  let q = sb.from('profiles').select('id');
+  if (target !== 'all') q = q.eq('role', target);
+  const { data: targets, error } = await q;
+  if (error || !targets) { showToast('تعذّر جلب المستخدمين','error'); return; }
+  const rows = targets.map(t => ({ user_id: t.id, title, body: body||null }));
+  if (!rows.length) { showToast('لا يوجد مستخدمون مطابقون','error'); return; }
+  const { error: insErr } = await sb.from('notifications').insert(rows);
+  if (insErr) { showToast('تعذّر الإرسال: '+insErr.message,'error'); return; }
+  showToast(`تم إرسال الإشعار إلى ${rows.length} مستخدم ✓`);
+  closeAll();
 }
 
 async function sendTestSms(){
