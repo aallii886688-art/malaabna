@@ -10,9 +10,7 @@
 
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
-/* ══════════ THEME TOKENS ══════════ */
 :root{
-  /* النهاري (افتراضي) */
   --bg:           #f4f7f5;
   --bg-elev:      #ffffff;
   --bg-soft:      #eef3ef;
@@ -28,7 +26,7 @@
   --flood-soft:   #fdf0d6;
   --danger:       #d64545;
   --danger-soft:  #fbe6e6;
-  --neon:         #1f9d57;       /* في النهاري نستخدم الأخضر العادي */
+  --neon:         #1f9d57;
   --shadow:       0 4px 24px rgba(20,60,40,.08);
   --shadow-lg:    0 18px 50px rgba(20,60,40,.14);
   --radius:       16px;
@@ -73,11 +71,9 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 ::-webkit-scrollbar-track{background:var(--bg-soft)}
 ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 
-/* glow only in dark */
 html[data-theme="dark"] .neon-glow{box-shadow:0 0 24px rgba(57,255,20,.25)}
 html[data-theme="dark"] .neon-text{text-shadow:0 0 14px rgba(57,255,20,.5)}
 
-/* ══════════ BUTTONS ══════════ */
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   padding:12px 24px;border-radius:30px;font-weight:700;font-size:14px;
@@ -97,8 +93,9 @@ html[data-theme="dark"] .btn-soft{color:var(--brand)}
 .btn-lg{padding:15px 32px;font-size:15px}
 .btn-sm{padding:8px 16px;font-size:12.5px}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{filter:brightness(1.08)}
 
-/* ══════════ NAV ══════════ */
 .nav{
   position:fixed;top:0;left:0;right:0;z-index:600;
   display:flex;align-items:center;gap:20px;
@@ -121,7 +118,6 @@ html[data-theme="dark"] .brand-logo{box-shadow:0 0 18px rgba(57,255,20,.4)}
 .nav-links a:hover{color:var(--brand)}
 .nav-right{margin-right:auto;display:flex;align-items:center;gap:12px}
 
-/* theme switch */
 .theme-toggle{
   width:54px;height:30px;border-radius:30px;background:var(--bg-soft);
   border:1px solid var(--line);position:relative;cursor:pointer;transition:all .3s;flex-shrink:0;
@@ -137,7 +133,6 @@ html[data-theme="dark"] .theme-toggle .knob{transform:translateX(-24px);backgrou
 
 .menu-btn{display:none;font-size:22px;color:var(--ink)}
 
-/* ══════════ HERO ══════════ */
 .hero{position:relative;padding:130px 40px 80px;overflow:hidden}
 .hero::before{
   content:'';position:absolute;inset:0;z-index:0;
@@ -164,7 +159,6 @@ html[data-theme="dark"] .hero h1 .g{text-shadow:0 0 18px rgba(57,255,20,.45)}
 .hstat .n span{color:var(--brand)}
 .hstat .l{font-size:12px;color:var(--ink-dim);margin-top:3px}
 
-/* hero card */
 .hcard{
   background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius-lg);
   padding:24px;box-shadow:var(--shadow-lg);position:relative;
@@ -187,7 +181,6 @@ html[data-theme="dark"] .live{color:var(--brand)}
 .floaty-2{bottom:24px;right:-30px;animation-delay:1.5s}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 
-/* ══════════ SECTIONS ══════════ */
 .section{padding:90px 40px;position:relative}
 .container{max-width:1280px;margin:0 auto}
 .shead{max-width:640px;margin:0 auto 50px;text-align:center}
@@ -195,7 +188,6 @@ html[data-theme="dark"] .live{color:var(--brand)}
 .stitle{font-size:clamp(26px,3.2vw,38px);font-weight:900;line-height:1.2;margin-bottom:14px}
 .ssub{font-size:15px;color:var(--ink-soft);line-height:1.7}
 
-/* tabs (modules) */
 .mod-tabs{display:flex;gap:10px;justify-content:center;margin-bottom:40px;flex-wrap:wrap}
 .mod-tab{
   display:flex;align-items:center;gap:8px;padding:12px 22px;border-radius:30px;
@@ -208,14 +200,12 @@ html[data-theme="dark"] .mod-tab.active{color:#0a1408}
 .mod-panel.active{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* filter bar */
 .fbar{display:flex;gap:11px;margin-bottom:30px;flex-wrap:wrap;align-items:center}
 .fsearch{flex:1;min-width:220px;display:flex;align-items:center;gap:9px;background:var(--bg-elev);border:1px solid var(--line);border-radius:30px;padding:12px 18px}
 .fsearch input{flex:1;background:none;border:none;outline:none;color:var(--ink);font-family:inherit;font-size:14px}
 .fsearch input::placeholder{color:var(--ink-dim)}
 .fsel{background:var(--bg-elev);border:1px solid var(--line);border-radius:30px;padding:12px 18px;color:var(--ink-soft);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;outline:none}
 
-/* ══════════ CARDS GRID ══════════ */
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
 .card{
   background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius);
@@ -238,7 +228,6 @@ html[data-theme="dark"] .tag-tr{color:var(--brand)}
 .cprice .a{font-size:18px;font-weight:900;color:var(--flood)}
 .cprice .p{font-size:11px;color:var(--ink-dim)}
 
-/* ══════════ STAR OF WEEK ══════════ */
 .star-band{margin:0 40px;border-radius:var(--radius-lg);overflow:hidden;position:relative;
   background:linear-gradient(120deg,var(--brand-deep),var(--brand) 80%)}
 html[data-theme="dark"] .star-band{background:linear-gradient(120deg,#0d2a0a,#103810)}
@@ -252,7 +241,6 @@ html[data-theme="dark"] .star-band{background:linear-gradient(120deg,#0d2a0a,#10
 .star-pts .v{font-size:42px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--flood)}
 .star-pts .k{font-size:12px;opacity:.85}
 
-/* ══════════ HOW ══════════ */
 .how3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
 .hstep{background:var(--bg-elev);padding:34px 30px}
 .hnum{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--flood);margin-bottom:16px}
@@ -260,13 +248,11 @@ html[data-theme="dark"] .star-band{background:linear-gradient(120deg,#0d2a0a,#10
 .htitle{font-size:17px;font-weight:800;margin-bottom:9px}
 .htext{font-size:13.5px;color:var(--ink-soft);line-height:1.7}
 
-/* trust */
 .trust4{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;text-align:center}
 .titem .b{font-size:36px;font-weight:900;color:var(--brand);font-family:'JetBrains Mono',monospace}
 html[data-theme="dark"] .titem .b{text-shadow:0 0 16px rgba(57,255,20,.4)}
 .titem .s{font-size:13px;color:var(--ink-soft);margin-top:6px}
 
-/* ══════════ FOOTER ══════════ */
 footer{padding:56px 40px 28px;border-top:1px solid var(--line);margin-top:40px}
 .fgrid{max-width:1280px;margin:0 auto 40px;display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:36px}
 .fbrand{font-size:19px;font-weight:900;margin-bottom:13px;display:flex;align-items:center;gap:9px}
@@ -279,7 +265,6 @@ footer{padding:56px 40px 28px;border-top:1px solid var(--line);margin-top:40px}
 .vat-badge{display:inline-flex;align-items:center;gap:6px;background:var(--brand-soft);color:var(--brand-deep);padding:5px 12px;border-radius:20px;font-weight:700;font-size:12px}
 html[data-theme="dark"] .vat-badge{color:var(--brand)}
 
-/* ══════════ OVERLAY / DRAWER / MODAL ══════════ */
 .ov{position:fixed;inset:0;z-index:900;background:rgba(8,18,12,.6);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity .25s}
 .ov.open{opacity:1;pointer-events:all}
 
@@ -310,7 +295,6 @@ html[data-theme="dark"] .dpill.active{color:#0a1408}
 .slot.free:hover{border-color:var(--brand);color:var(--brand)}
 .slot.sel{background:var(--flood);color:#3a2700;border-color:var(--flood);transform:scale(1.05)}
 
-/* smart split */
 .split-box{margin-top:22px;padding:20px;border-radius:var(--radius);background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 30%,transparent)}
 .split-head{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;margin-bottom:14px;color:var(--brand-deep)}
 html[data-theme="dark"] .split-head{color:var(--brand)}
@@ -329,7 +313,6 @@ html[data-theme="dark"] .split-head{color:var(--brand)}
 .srow.tot{font-size:17px;font-weight:900;color:var(--ink);padding-top:11px;border-top:1px solid var(--line);margin-top:3px}
 .srow.tot .amt{color:var(--flood)}
 
-/* modal */
 .modal{position:fixed;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s}
 .modal.open{opacity:1;pointer-events:all}
 .mcard{width:430px;max-width:100%;background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius-lg);padding:32px 28px;transform:translateY(16px) scale(.97);transition:transform .3s cubic-bezier(.2,.8,.2,1);max-height:90vh;overflow-y:auto}
@@ -341,13 +324,11 @@ html[data-theme="dark"] .split-head{color:var(--brand)}
 .receipt .r{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;color:var(--ink-soft)}
 .receipt .r b{color:var(--ink)}
 
-/* pay methods */
 .pays{display:flex;gap:10px;margin-bottom:18px}
 .pay{flex:1;padding:14px;border:1px solid var(--line);border-radius:12px;text-align:center;cursor:pointer;transition:all .2s;font-weight:700;font-size:13px}
 .pay.sel{border-color:var(--brand);background:var(--brand-soft)}
 .pay .ic{font-size:22px;margin-bottom:5px}
 
-/* auth */
 .tabs{display:flex;gap:4px;background:var(--bg-soft);border-radius:30px;padding:4px;margin-bottom:22px}
 .tab{flex:1;text-align:center;padding:9px;border-radius:26px;font-size:13px;font-weight:700;color:var(--ink-dim);transition:all .2s;cursor:pointer}
 .tab.active{background:var(--brand);color:#fff}
@@ -357,14 +338,12 @@ html[data-theme="dark"] .tab.active{color:#0a1408}
 .field input{width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none;transition:border-color .2s}
 .field input:focus{border-color:var(--brand)}
 
-/* legal modal */
 .legal-body{text-align:right;max-height:60vh;overflow-y:auto;padding-left:8px}
 .legal-body h4{font-size:15px;font-weight:800;margin:18px 0 8px;color:var(--brand-deep)}
 html[data-theme="dark"] .legal-body h4{color:var(--brand)}
 .legal-body p{font-size:13.5px;color:var(--ink-soft);line-height:1.8;margin-bottom:10px;text-align:right}
 .legal-note{background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:10px;padding:13px 15px;font-size:12.5px;color:var(--ink-soft);line-height:1.7;margin-top:14px}
 
-/* map placeholder */
 .map-wrap{height:300px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);position:relative;background:var(--bg-soft)}
 .map-grid-bg{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:40px 40px;opacity:.5}
 .map-pin{position:absolute;transform:translate(-50%,-100%);text-align:center;cursor:pointer}
@@ -372,9 +351,7 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
 .map-pin .lab{font-size:11px;font-weight:700;background:var(--bg-elev);border:1px solid var(--line);padding:3px 8px;border-radius:8px;margin-top:-6px;white-space:nowrap;box-shadow:var(--shadow)}
 .map-you{position:absolute;width:18px;height:18px;background:var(--brand);border-radius:50%;border:3px solid var(--bg-elev);transform:translate(-50%,-50%);box-shadow:0 0 0 6px var(--brand-soft)}
 
-/* toast */
 .toasts{position:fixed;bottom:22px;left:22px;z-index:999;display:flex;flex-direction:column;gap:9px}
-/* sidebar */
 .sidebar{position:fixed;top:0;right:0;height:100vh;width:300px;max-width:85vw;z-index:920;background:var(--bg-elev);border-left:1px solid var(--line);transform:translateX(100%);transition:transform .3s cubic-bezier(.2,.8,.2,1);overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.15)}
 .sidebar.open{transform:translateX(0)}
 .side-top{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)}
@@ -389,11 +366,19 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
 .toast.error{border-right-color:var(--danger)}
 @keyframes tin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 
-/* mobile menu */
 .mmenu{position:fixed;top:0;left:0;right:0;z-index:590;background:var(--bg-elev);border-bottom:1px solid var(--line);padding:80px 30px 30px;transform:translateY(-100%);transition:transform .3s;display:flex;flex-direction:column;gap:4px}
 .mmenu.open{transform:translateY(0)}
 .mmenu a{padding:14px;font-size:16px;font-weight:600;border-radius:10px}
 .mmenu a:hover{background:var(--bg-soft)}
+
+.stat-click{cursor:pointer;transition:transform .15s,border-color .15s}
+.stat-click:hover{transform:translateY(-3px);border-color:var(--brand)}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-weight:700}
+.badge.available{background:var(--brand-soft);color:var(--brand-deep)}
+html[data-theme="dark"] .badge.available{color:var(--brand)}
+.badge.pending{background:var(--flood-soft);color:#8a5a00}
+html[data-theme="dark"] .badge.pending{color:var(--flood)}
+.badge.closed{background:var(--danger-soft);color:var(--danger)}
 
 @media(max-width:980px){
   .hero-inner{grid-template-columns:1fr;gap:44px}
@@ -416,12 +401,10 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   .hero-ctas .btn{width:100%}
 }
 </style>
-<!-- مكتبة Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-<!-- ═══ NAV ═══ -->
 <nav class="nav" id="nav">
   <div class="brand"><div class="brand-logo">⚽</div> ملاعبنا</div>
   <div class="nav-links">
@@ -448,7 +431,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   <a onclick="scrollToId('map');toggleMenu()">📍 الخريطة</a>
 </div>
 
-<!-- ═══ HERO ═══ -->
 <section class="hero">
   <div class="hero-inner">
     <div>
@@ -486,7 +468,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </section>
 
-<!-- ═══ MODULES (Stadiums / Academies / Tournaments) ═══ -->
 <section class="section" id="modules">
   <div class="container">
     <div class="shead">
@@ -501,7 +482,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
       <button class="mod-tab" data-mod="tournaments" onclick="switchMod('tournaments',this)">🏆 البطولات</button>
     </div>
 
-    <!-- filter bar -->
     <div class="fbar">
       <div class="fsearch">
         <span>🔍</span>
@@ -521,14 +501,12 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
       </select>
     </div>
 
-    <!-- panels -->
     <div class="mod-panel active" id="panel-stadiums"><div class="grid3" id="grid-stadiums"></div></div>
     <div class="mod-panel" id="panel-academies"><div class="grid3" id="grid-academies"></div></div>
     <div class="mod-panel" id="panel-tournaments"><div class="grid3" id="grid-tournaments"></div></div>
   </div>
 </section>
 
-<!-- ═══ STAR OF THE WEEK ═══ -->
 <div class="star-band">
   <div class="star-inner">
     <div class="star-photo">⭐</div>
@@ -541,7 +519,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </div>
 
-<!-- ═══ MAP ═══ -->
 <section class="section" id="map">
   <div class="container">
     <div class="shead">
@@ -562,7 +539,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </section>
 
-<!-- ═══ HOW ═══ -->
 <section class="section" id="how">
   <div class="container">
     <div class="shead">
@@ -577,7 +553,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </section>
 
-<!-- ═══ TRUST ═══ -->
 <section class="section">
   <div class="container">
     <div class="trust4">
@@ -589,7 +564,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </section>
 
-<!-- ═══ FOOTER ═══ -->
 <footer>
   <div class="fgrid">
     <div>
@@ -621,7 +595,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </footer>
 
-<!-- ═══ OVERLAY + DRAWER + MODALS ═══ -->
 <div class="ov" id="ov" onclick="closeAll()"></div>
 
 <div class="drawer" id="drawer">
@@ -629,7 +602,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   <div class="dbody" id="drawerBody"></div>
 </div>
 
-<!-- confirm modal -->
 <div class="modal" id="mConfirm">
   <div class="mcard">
     <div class="micon">✅</div>
@@ -640,7 +612,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </div>
 
-<!-- auth modal -->
 <div class="modal" id="mAuth">
   <div class="mcard" style="text-align:right">
     <div class="dclose" style="margin-bottom:12px;margin-right:auto" onclick="closeAll()">✕</div>
@@ -669,7 +640,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </div>
 
-<!-- legal modal -->
 <div class="modal" id="mLegal">
   <div class="mcard" style="width:560px">
     <div class="dclose" style="margin-bottom:8px;margin-right:auto" onclick="closeAll()">✕</div>
@@ -679,7 +649,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </div>
 
-<!-- owner/admin panel modal -->
 <div class="modal" id="mOwner">
   <div class="mcard" style="width:560px;max-height:88vh;overflow-y:auto">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
@@ -690,7 +659,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
   </div>
 </div>
 
-<!-- sidebar -->
 <div class="sidebar" id="sidebar">
   <div class="side-top">
     <span style="font-weight:800;font-size:15px">القائمة</span>
@@ -702,7 +670,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
 <div class="toasts" id="toasts"></div>
 
 <script>
-// ════════════════ DATA ════════════════
 const DATA = {
   stadiums: [
     { id:1, name:"ملعب البحر الأخضر", region:"خميس البحر",    loc:"كورنيش البحر",   price:160, rating:4.9, tags:["إنارة ليلية","عشب صناعي"], icon:"🏟️" },
@@ -734,7 +701,6 @@ let loggedIn = false, authMode = 'login';
 
 function takenSlots(id, d){ const seed=id*7+d*3; return timeSlots.filter((_,i)=>(seed+i*13)%5===0); }
 
-// ════════════════ SMART SPLIT (من مواصفاتك) ════════════════
 function calculateSmartSplit(totalPrice, playersCount){
   if(playersCount <= 0) return { error:"يجب تحديد عدد اللاعبين بشكل صحيح" };
   const sharePerPlayer = totalPrice / playersCount;
@@ -742,21 +708,18 @@ function calculateSmartSplit(totalPrice, playersCount){
   return { totalAmount:totalPrice, numberOfPlayers:playersCount, sharePerPlayer:finalShare, currency:"SAR", taxRate:"0% VAT" };
 }
 
-// ════════════════ THEME ════════════════
 function toggleTheme(){
   const cur = document.documentElement.getAttribute('data-theme');
   const next = cur==='dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   document.getElementById('knob').textContent = next==='dark' ? '🌙' : '☀️';
 }
-// نظام التشغيل
 if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
   document.documentElement.setAttribute('data-theme','dark');
 }
 document.getElementById('knob').textContent =
   document.documentElement.getAttribute('data-theme')==='dark' ? '🌙' : '☀️';
 
-// ════════════════ MODULE SWITCH ════════════════
 function switchMod(mod, el){
   currentMod = mod;
   document.querySelectorAll('.mod-tab').forEach(t=>t.classList.remove('active'));
@@ -771,7 +734,6 @@ function goMod(mod){
   scrollToId('modules');
 }
 
-// ════════════════ RENDER ════════════════
 function renderActive(){
   const q = (document.getElementById('search').value||'').trim();
   const region = document.getElementById('regionFilter').value;
@@ -811,7 +773,6 @@ function renderActive(){
   }).join('');
 }
 
-// ════════════════ OPEN ITEM (DRAWER) ════════════════
 function openItem(type, id){
   activeType = type;
   active = DATA[type].find(x=>x.id===id);
@@ -911,10 +872,8 @@ function setDate(i){ selDate=i; selSlot=null; renderStadiumDrawer(); }
 function setSlot(t){ selSlot=t; renderStadiumDrawer(); }
 function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); renderStadiumDrawer(); }
 
-// ════════════════ PAYMENT / CONFIRM ════════════════
 function proceed(){
   if(!loggedIn){ showToast('سجّل الدخول أولًا لإتمام العملية','error'); closeDrawer(); openAuth('login'); return; }
-  // payment selection inline in confirm modal
   const it = active;
   const isStadium = activeType==='stadiums';
   let extraRow = '';
@@ -936,7 +895,6 @@ function proceed(){
     <div class="r"><span>الضريبة</span><b>0% VAT</b></div>
     <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>الإجمالي</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
   `;
-  // swap button
   const btn = document.querySelector('#mConfirm .btn-brand');
   btn.textContent = `ادفع ${it.price} ريال`;
   btn.onclick = finalizePayment;
@@ -967,7 +925,6 @@ function finalizePayment(){
   showToast(isStadium?'تم تأكيد الحجز ✓':'تم التسجيل ✓');
 }
 
-// ════════════════ AUTH ════════════════
 function openAuth(mode){ authTab(mode); document.getElementById('mAuth').classList.add('open'); document.getElementById('ov').classList.add('open'); }
 function authTab(mode){ authMode=mode;
   document.getElementById('tabLogin').classList.toggle('active',mode==='login');
@@ -991,7 +948,6 @@ function doAuth(){
   showToast(authMode==='login'?'تم تسجيل الدخول ✓':'تم إنشاء حسابك ✓');
 }
 
-// ════════════════ LEGAL PAGES ════════════════
 const LEGAL = {
   terms: { t:"الشروط والأحكام", html:`
     <h4>١. قبول الشروط</h4><p>باستخدامك منصة ملاعبنا فإنك توافق على هذه الشروط. المنصة تربط بين اللاعبين وأصحاب الملاعب والأكاديميات ومنظّمي البطولات.</p>
@@ -1024,7 +980,6 @@ function openLegal(key){
   document.getElementById('ov').classList.add('open');
 }
 
-// ════════════════ MAP / GEO ════════════════
 function locateMe(){
   showToast('جارٍ تحديد موقعك...');
   if(navigator.geolocation){
@@ -1035,7 +990,6 @@ function locateMe(){
   } else { showToast('المتصفح لا يدعم تحديد الموقع','error'); }
 }
 
-// ════════════════ HELPERS ════════════════
 function scrollToId(id){ document.getElementById(id).scrollIntoView({behavior:'smooth'}); }
 function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); }
 function closeAll(){ ['ov','drawer','mConfirm','mAuth','mLegal','mOwner','sidebar'].forEach(id=>document.getElementById(id).classList.remove('open')); }
@@ -1046,20 +1000,11 @@ function showToast(msg,type='success'){ const t=document.createElement('div'); t
 
 window.addEventListener('scroll',()=>document.getElementById('nav').classList.toggle('scrolled',window.scrollY>30));
 
-// init
 renderActive();
 
-/* ════════════════════════════════════════════════════════════════
- *  🔗 جسر الربط مع Supabase (Malaabna Backend Bridge)
- *  ────────────────────────────────────────────────────────────────
- *  ▼▼▼  ضع مفاتيحك هنا  ▼▼▼
- *  احصل عليهما من: Supabase → Settings → API
- * ════════════════════════════════════════════════════════════════ */
 const SUPABASE_URL      = 'https://lsgakyydqomzntoebqep.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZ2FreXlkcW9tem50b2VicWVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTkwMDEsImV4cCI6MjA5ODU5NTAwMX0.33DmQ23ab5hw3Y3iGtzXphopVMKmnOnTZZfxhtVZmcM';
-/* ▲▲▲  لا تعدّل شيئاً تحت هذا السطر  ▲▲▲ */
 
-// هل تم إدخال المفاتيح؟
 const BACKEND_READY =
   SUPABASE_URL.startsWith('https://') &&
   !SUPABASE_URL.includes('YOUR_PROJECT') &&
@@ -1068,7 +1013,9 @@ const BACKEND_READY =
 let sb = null;
 window.sb = null;
 if (BACKEND_READY && window.supabase) {
-  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'malaebna-auth' }
+  });
   window.sb = sb;
   console.log('✅ متصل بقاعدة البيانات Supabase');
   initBackend();
@@ -1077,8 +1024,6 @@ if (BACKEND_READY && window.supabase) {
 }
 
 function initBackend() {
-  // ── استعادة الجلسة عند تحديث الصفحة ──
-  // إذا كان المستخدم مسجّل دخول مسبقاً، أعِد تسجيله تلقائياً
   (async function restoreSession() {
     try {
       const { data: { session } } = await sb.auth.getSession();
@@ -1089,23 +1034,35 @@ function initBackend() {
     } catch(e) { console.log('لا توجد جلسة سابقة'); }
   })();
 
-  // تحويل رقم الجوال إلى بريد داخلي ثابت (للاستخدام مع Supabase Auth)
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && !window.currentUser) {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session && session.user) { loggedIn = true; await afterLogin(); }
+      } catch(e){}
+    }
+  });
+
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      window.currentUser = null;
+      loggedIn = false;
+    }
+  });
+
   function phoneToEmail(phone) {
-    return 'p' + phone + '@malaebna.local';   // مثال: p0501234567@malaebna.local
+    return 'p' + phone + '@malaebna.local';
   }
-  // التحقق من صيغة رقم الجوال السعودي (يبدأ بـ 05 ويتبعه 8 أرقام)
   function isValidSaudiPhone(phone) {
     return /^05[0-9]{8}$/.test(phone);
   }
 
-  // ── استبدال تسجيل الدخول/التسجيل بالحقيقي (بالجوال) ──
   window.doAuth = async function () {
     const phone = (document.getElementById('au-phone')?.value || '').trim();
     const pass  = document.getElementById('au-pass')?.value || '';
     const name  = (document.getElementById('au-name')?.value || '').trim();
     const emailInput = (document.getElementById('au-email')?.value || '').trim();
 
-    // تحقق من رقم الجوال
     if (!phone) { showToast('أدخل رقم الجوال','error'); return; }
     if (!isValidSaudiPhone(phone)) { showToast('رقم الجوال يجب أن يبدأ بـ 05 ويتكوّن من 10 أرقام','error'); return; }
     if (!pass) { showToast('أدخل كلمة المرور','error'); return; }
@@ -1114,9 +1071,7 @@ function initBackend() {
     }
 
     if (authMode === 'signup') {
-      // الإيميل اختياري: لو أُدخل نستخدمه، وإلا نولّد إيميل داخلي من الجوال
       const loginEmail = emailInput || phoneToEmail(phone);
-      // صاحب الملعب يبدأ كـ owner لكن حسابه "قيد المراجعة" حتى يفعّله المالك
       const chosenRole = (selectedRole === 'owner') ? 'owner' : 'customer';
       const { data, error } = await sb.auth.signUp({
         email: loginEmail,
@@ -1125,7 +1080,6 @@ function initBackend() {
       });
       if (error) { showToast(translateErr(error.message),'error'); return; }
 
-      // حفظ رقم الجوال والدور في جدول profiles
       if (data.user) {
         await sb.from('profiles').update({ phone, name, role: chosenRole }).eq('id', data.user.id);
       }
@@ -1137,12 +1091,9 @@ function initBackend() {
       }
       await afterLogin();
     } else {
-      // تسجيل الدخول: نبني الإيميل من الجوال (نفس طريقة التسجيل)
-      // ملاحظة: من سجّل بإيميل حقيقي يسجّل الدخول بنفس رقم جواله
       const loginEmail = phoneToEmail(phone);
       let { data, error } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
 
-      // احتياط: لو المستخدم سجّل بإيميل حقيقي بدل الداخلي
       if (error && emailInput) {
         ({ data, error } = await sb.auth.signInWithPassword({ email: emailInput, password: pass }));
       }
@@ -1154,7 +1105,6 @@ function initBackend() {
     }
   };
 
-  // بعد الدخول: اقرأ الدور وابنِ زر يفتح القائمة الجانبية
   async function afterLogin() {
     closeAll();
     const { data: { user } } = await sb.auth.getUser();
@@ -1167,14 +1117,12 @@ function initBackend() {
     const role = profile?.role || 'customer';
     const initial = name.trim().charAt(0) || 'م';
 
-    // خزّن بيانات المستخدم عالمياً للاستخدام في القائمة
     window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial };
 
     let roleBadge = '';
     if (role === 'super_admin') roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
     else if (role === 'owner' || role === 'staff') roleBadge = '<span style="font-size:10px;color:var(--brand);font-weight:700">🏟️ صاحب ملعب</span>';
 
-    // زر المستخدم يفتح القائمة الجانبية
     document.getElementById('navAuth').innerHTML = `
       <div class="nav-user" onclick="openSidebar()" style="cursor:pointer">
         <div class="av">${initial}</div>
@@ -1187,25 +1135,21 @@ function initBackend() {
     if (role === 'super_admin') showToast('مرحباً بك أيها المالك 🛡️');
     else if (role === 'owner' || role === 'staff') showToast('مرحباً صاحب الملعب 🏟️');
 
-    // فعّل مراقبة الإشعارات للمالك وصاحب الملعب
     if (role === 'super_admin' || role === 'owner') startNotificationsWatch();
   }
   window.afterLogin = afterLogin;
 
-  // ── نسيت كلمة المرور ──
   window.forgotPassword = async function () {
     const phone = (document.getElementById('au-phone')?.value || '').trim();
     const emailInput = (document.getElementById('au-email')?.value || '').trim();
 
-    // نحتاج بريد لإرسال رابط الاستعادة
     let email = emailInput;
     if (!email && phone && isValidSaudiPhone(phone)) {
-      email = phoneToEmail(phone);  // البريد الداخلي المرتبط بالجوال
+      email = phoneToEmail(phone);
     }
     if (!email) {
       showToast('أدخل رقم جوالك أولاً في الخانة أعلاه','error'); return;
     }
-    // البريد الداخلي (.local) لا يستقبل رسائل فعلية
     if (email.endsWith('@malaebna.local')) {
       showToast('حسابك مسجّل بالجوال فقط. تواصل مع الدعم لاستعادة كلمة المرور','error');
       return;
@@ -1217,12 +1161,10 @@ function initBackend() {
     showToast('تم إرسال رابط استعادة كلمة المرور لبريدك ✓');
   };
 
-  // ── استبدال إنشاء الحجز بالحقيقي ──
   const _finalizePayment = window.finalizePayment;
   window.proceed = async function () {
     if (!loggedIn) { showToast('سجّل الدخول أولاً','error'); closeDrawer(); openAuth('login'); return; }
 
-    // فقط الملاعب تُحفظ كحجز فعلي (الأكاديميات/البطولات لاحقاً)
     if (activeType === 'stadiums') {
       const { data: { user } } = await sb.auth.getUser();
       if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); openAuth('login'); return; }
@@ -1230,7 +1172,6 @@ function initBackend() {
       const today = new Date(); today.setDate(today.getDate() + selDate);
       const dateStr = today.toISOString().split('T')[0];
 
-      // ملاحظة: يحتاج ربط الملعب بـ field_id حقيقي من قاعدة البيانات
       const { data: newBooking, error } = await sb.from('bookings').insert({
         user_id: user.id,
         field_id: active.id,
@@ -1250,13 +1191,11 @@ function initBackend() {
           showToast('الملعب مغلق أو تحت الصيانة','error'); return;
         }
         if (error.message.includes('foreign key') || error.code === '23503') {
-          // الملعب التجريبي غير موجود في قاعدة البيانات بعد
           showToast('أضف الملاعب لقاعدة البيانات أولاً (راجع الدليل)','error'); return;
         }
         showToast('تعذّر الحجز: ' + error.message,'error'); return;
       }
 
-      // أرسل إشعاراً لصاحب الملعب بالحجز الجديد
       try {
         const { data: fieldInfo } = await sb.from('fields')
           .select('name, facilities(owner_id)').eq('id', active.id).single();
@@ -1269,11 +1208,9 @@ function initBackend() {
         }
       } catch(e){}
     }
-    // أكمل تدفق الدفع/التأكيد المعتاد
     _proceedUI();
   };
 
-  // نحتفظ بمنطق واجهة الدفع الأصلي
   function _proceedUI() {
     const it = active;
     const isStadium = activeType === 'stadiums';
@@ -1303,7 +1240,6 @@ function initBackend() {
     document.getElementById('ov').classList.add('open');
   }
 
-  // ── تحميل الملاعب الحقيقية من قاعدة البيانات (إن وُجدت) ──
   loadRealFields();
   async function loadRealFields() {
     const { data, error } = await sb
@@ -1314,7 +1250,6 @@ function initBackend() {
       console.log('ℹ️ لا توجد ملاعب في قاعدة البيانات بعد — عرض البيانات التجريبية');
       return;
     }
-    // حوّل بيانات قاعدة البيانات لصيغة الموقع
     DATA.stadiums = data.map(f => ({
       id: f.id,
       name: f.name,
@@ -1330,8 +1265,6 @@ function initBackend() {
   }
 }
 
-// ترجمة أخطاء Supabase الشائعة لرسائل عربية واضحة
-// ════════════════ القائمة الجانبية (Sidebar) ════════════════
 function openSidebar() {
   if (!window.currentUser) return;
   const u = window.currentUser;
@@ -1380,7 +1313,6 @@ async function sideGo(where) {
   }
 }
 
-// فتح نافذة عامة بمحتوى
 function openInfoModal(title, html) {
   document.getElementById('ownerTitle').textContent = title;
   document.getElementById('ownerBody').innerHTML = html;
@@ -1388,7 +1320,6 @@ function openInfoModal(title, html) {
   document.getElementById('ov').classList.add('open');
 }
 
-// ── الملف الشخصي ──
 function showProfile() {
   const u = window.currentUser;
   openInfoModal('👤 الملف الشخصي', `
@@ -1403,7 +1334,6 @@ function showProfile() {
     </div>`);
 }
 
-// ── حجوزاتي (مع الإلغاء) ──
 async function showMyBookings() {
   openInfoModal('📅 حجوزاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const { data, error } = await sb
@@ -1430,13 +1360,11 @@ async function showMyBookings() {
     </div>`).join('');
 }
 
-// ── إلغاء الحجز ──
 async function cancelMyBooking(bookingId) {
   if (!confirm('هل تريد إلغاء هذا الحجز؟')) return;
   const { error } = await sb.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
   if (error) { showToast('تعذّر الإلغاء','error'); return; }
 
-  // أنشئ إشعاراً للمالك عند الإلغاء
   try {
     const { data: booking } = await sb.from('bookings')
       .select('fields(name, facilities(owner_id))').eq('id', bookingId).single();
@@ -1453,7 +1381,6 @@ async function cancelMyBooking(bookingId) {
   showMyBookings();
 }
 
-// ── استعلام عن حجز برقمه ──
 function showBookingLookup() {
   openInfoModal('🔍 استعلام عن حجز', `
     <div class="field"><label>رقم الحجز</label><input id="lookup-id" type="number" placeholder="مثال: 1024"></div>
@@ -1480,7 +1407,6 @@ async function doLookup() {
     </div>`;
 }
 
-// ── التنبيهات ──
 async function showNotifications() {
   openInfoModal('🔔 التنبيهات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const { data, error } = await sb
@@ -1496,12 +1422,10 @@ async function showNotifications() {
         <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA')}</div>
       </div>`).join('');
   }
-  // علّم الكل كمقروء
   await sb.from('notifications').update({ is_read: true }).eq('is_read', false);
   refreshSideNotifBadge();
 }
 
-// عدّاد التنبيهات غير المقروءة
 async function refreshSideNotifBadge() {
   try {
     const { count } = await sb.from('notifications').select('*', { count:'exact', head:true }).eq('is_read', false);
@@ -1513,7 +1437,6 @@ async function refreshSideNotifBadge() {
   } catch(e){}
 }
 
-// مراقبة التنبيهات كل 30 ثانية (للمالك وصاحب الملعب)
 let notifTimer = null;
 function startNotificationsWatch() {
   if (notifTimer) clearInterval(notifTimer);
@@ -1521,7 +1444,6 @@ function startNotificationsWatch() {
   notifTimer = setInterval(refreshSideNotifBadge, 30000);
 }
 
-// ── مشاركة الموقع ──
 function shareSite() {
   const url = window.location.origin;
   if (navigator.share) {
@@ -1531,7 +1453,6 @@ function shareSite() {
   }
 }
 
-// ── تواصل معنا ──
 function showContact() {
   openInfoModal('✉️ تواصل معنا', `
     <div style="text-align:center;padding:10px">
@@ -1548,7 +1469,6 @@ function showContact() {
     </div>`);
 }
 
-// ── عن الموقع ──
 function showAbout() {
   openInfoModal('ℹ️ عن ملاعبنا', `
     <div style="text-align:center;padding:10px">
@@ -1564,7 +1484,6 @@ function showAbout() {
     </div>`);
 }
 
-// ── تسجيل الخروج ──
 async function doLogout() {
   if (!confirm('هل تريد تسجيل الخروج؟')) return;
   if (notifTimer) clearInterval(notifTimer);
@@ -1575,7 +1494,6 @@ async function doLogout() {
   showToast('تم تسجيل الخروج ✓');
 }
 
-// ════════════════ لوحة صاحب الملعب / المالك ════════════════
 async function openOwnerPanel(kind) {
   const modal = document.getElementById('mOwner');
   const bodyEl = document.getElementById('ownerBody');
@@ -1588,42 +1506,32 @@ async function openOwnerPanel(kind) {
     bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
     modal.classList.add('open'); document.getElementById('ov').classList.add('open');
 
-    // إحصائيات عامة للمالك
-    const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { data: pendingOwners }] = await Promise.all([
+    const [{ count: usersCount }, { count: facCount }, { count: bookCount }] = await Promise.all([
       sb.from('profiles').select('*', { count: 'exact', head: true }),
       sb.from('facilities').select('*', { count: 'exact', head: true }),
       sb.from('bookings').select('*', { count: 'exact', head: true }),
-      sb.from('profiles').select('id, name, phone').eq('role', 'owner').limit(20),
     ]);
 
     bodyEl.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
-        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div class="stat-click" onclick="adminView('users')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
           <div style="font-size:26px;font-weight:900;color:var(--brand)">${usersCount||0}</div>
           <div style="font-size:12px;color:var(--ink-dim)">مستخدم</div></div>
-        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div class="stat-click" onclick="adminView('facilities')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
           <div style="font-size:26px;font-weight:900;color:var(--flood)">${facCount||0}</div>
           <div style="font-size:12px;color:var(--ink-dim)">منشأة</div></div>
-        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div class="stat-click" onclick="adminView('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
           <div style="font-size:26px;font-weight:900;color:var(--brand)">${bookCount||0}</div>
           <div style="font-size:12px;color:var(--ink-dim)">حجز</div></div>
       </div>
-      <div class="dlabel">🏟️ أصحاب الملاعب المسجّلون</div>
-      ${(pendingOwners&&pendingOwners.length)? pendingOwners.map(o=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-          <div><b>${o.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${o.phone||''}</div></div>
-          <span class="badge available" style="font-size:11px">صاحب ملعب</span>
-        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:13px;padding:10px">لا يوجد أصحاب ملاعب بعد</div>'}
-      <div class="legal-note" style="margin-top:16px">💡 لتعيين مالك جديد أو تفعيل صاحب ملعب، غيّر حقل role في جدول profiles من Supabase.</div>
+      <div class="legal-note">💡 اضغط على أي بطاقة أعلاه لعرض التفاصيل والتحكم الكامل.</div>
     `;
   } else {
-    // لوحة صاحب الملعب
     titleEl.textContent = '🏟️ لوحة ملاعبي';
     bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
     modal.classList.add('open'); document.getElementById('ov').classList.add('open');
 
     const { data: { user } } = await sb.auth.getUser();
-    // ملاعب هذا المالك مع عدد الملاعب الفرعية
     const { data: myFacilities } = await sb
       .from('facilities')
       .select('id, name, city, district, fields(id, name, price_per_hour, status)')
@@ -1653,7 +1561,92 @@ async function openOwnerPanel(kind) {
   }
 }
 
-// ── نموذج إضافة ملعب جديد ──
+async function adminView(kind) {
+  const titleEl = document.getElementById('ownerTitle');
+  const bodyEl = document.getElementById('ownerBody');
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('admin')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+
+  if (kind === 'users') {
+    titleEl.textContent = '👥 المستخدمون';
+    const { data, error } = await sb.from('profiles').select('id, name, phone, role').order('name');
+    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    const roleLabel = { customer:'⚽ لاعب', owner:'🏟️ صاحب ملعب', staff:'🏟️ موظف', super_admin:'🛡️ مالك' };
+    bodyEl.innerHTML = backBtn + data.map(u => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;gap:8px">
+        <div style="flex:1;min-width:0">
+          <b>${u.name||'—'}</b>
+          <div style="font-size:12px;color:var(--ink-dim)">${u.phone||''} · ${roleLabel[u.role]||u.role}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          ${u.role==='customer' ? `<button class="btn btn-soft btn-sm" onclick="ownerControl('${u.id}','owner')">ترقية لصاحب ملعب</button>` : ''}
+          ${u.role==='owner' ? `<button class="btn btn-danger btn-sm" onclick="ownerControl('${u.id}','customer')">إلغاء صفة صاحب ملعب</button>` : ''}
+        </div>
+      </div>`).join('');
+  }
+
+  else if (kind === 'facilities') {
+    titleEl.textContent = '🏟️ المنشآت';
+    const { data, error } = await sb.from('facilities').select('id, name, city, district, profiles(name, phone), fields(price_per_hour, status)');
+    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد منشآت بعد</div>'; return; }
+    bodyEl.innerHTML = backBtn + data.map(f => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between"><b>${f.name}</b><span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span></div>
+        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">📍 ${f.district||''}، ${f.city||''}</div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">👤 المالك: ${f.profiles?.name||'—'} · ${f.profiles?.phone||''}</div>
+      </div>`).join('');
+  }
+
+  else if (kind === 'bookings') {
+    titleEl.textContent = '📅 الحجوزات';
+    const { data, error } = await sb.from('bookings')
+      .select('id, booking_date, start_time, status, total_price, profiles(name, phone), fields(name)')
+      .order('booking_date', { ascending:false }).limit(50);
+    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
+    const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+    const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+    bodyEl.innerHTML = backBtn + data.map(b => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
+          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
+        </div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)||''}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
+          ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="adminCancelBooking(${b.id})">إلغاء الحجز</button>` : ''}
+        </div>
+      </div>`).join('');
+  }
+}
+
+async function ownerControl(userId, newRole) {
+  const confirmMsg = newRole==='owner' ? 'ترقية هذا المستخدم لصاحب ملعب؟' : 'إلغاء صفة صاحب الملعب لهذا الحساب؟ سيصبح لاعباً عادياً.';
+  if (!confirm(confirmMsg)) return;
+  const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', userId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  try {
+    await sb.from('notifications').insert({
+      user_id: userId,
+      title: newRole==='owner' ? 'تمت ترقيتك 🏟️' : 'تحديث في حسابك',
+      body: newRole==='owner' ? 'أصبح بإمكانك الآن إضافة ملاعبك من لوحة صاحب الملعب' : 'تم إلغاء صفة صاحب الملعب عن حسابك'
+    });
+  } catch(e){}
+  showToast('تم التحديث ✓');
+  adminView('users');
+}
+
+async function adminCancelBooking(bookingId) {
+  if (!confirm('هل تريد إلغاء هذا الحجز؟')) return;
+  const { error } = await sb.from('bookings').update({ status:'cancelled' }).eq('id', bookingId);
+  if (error) { showToast('تعذّر الإلغاء', 'error'); return; }
+  showToast('تم إلغاء الحجز ✓');
+  adminView('bookings');
+}
+
 function showAddStadiumForm() {
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '➕ إضافة ملعب جديد';
@@ -1714,7 +1707,6 @@ async function saveStadium() {
 
   showToast('جارٍ الحفظ...');
 
-  // رفع الصورة إلى Supabase Storage (إن وُجدت)
   let imageUrl = null;
   if (imgFile) {
     try {
@@ -1728,7 +1720,6 @@ async function saveStadium() {
     } catch(e){ console.log('تعذّر رفع الصورة:', e); }
   }
 
-  // 1) إنشاء المنشأة (facility)
   const facPayload = { owner_id: user.id, name, city, district, region };
   if (imageUrl) facPayload.images = [imageUrl];
   const { data: facility, error: facErr } = await sb
@@ -1736,7 +1727,6 @@ async function saveStadium() {
 
   if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
 
-  // 2) إنشاء الملعب (field) داخل المنشأة
   const fldPayload = { facility_id: facility.id, name, type: newFieldType, price_per_hour: price, status: 'available' };
   if (imageUrl) fldPayload.image_url = imageUrl;
   const { error: fldErr } = await sb.from('fields').insert(fldPayload);
