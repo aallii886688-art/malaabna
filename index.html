@@ -754,7 +754,7 @@ function renderActive(){
     const isStadium = currentMod==='stadiums';
     const isTourney = currentMod==='tournaments';
     const cta = isStadium ? 'احجز' : isTourney ? 'سجّل فريقك' : 'سجّل ابنك';
-    const ratingBadge = it.rating>0 ? `<div class="tag-tl">⭐ ${it.rating}</div>` : `<div class="tag-tl">🏆 ${it.teams}</div>`;
+    const ratingBadge = it.rating>0 ? `<div class="tag-tl">⭐ ${it.rating}</div>` : isTourney ? `<div class="tag-tl">🏆 ${it.teams}</div>` : `<div class="tag-tl">🆕 جديد</div>`;
     const priceLbl = isStadium ? 'ر/ساعة' : isTourney ? 'ر/فريق' : 'ر/شهر';
     return `<div class="card" onclick="openItem('${currentMod}',${it.id})">
       <div class="card-media">${it.icon}${ratingBadge}<div class="tag-tr">${it.region}</div></div>
@@ -771,25 +771,74 @@ function renderActive(){
   }).join('');
 }
 
-function openItem(type, id){
+async function openItem(type, id){
   activeType = type;
   active = DATA[type].find(x=>x.id===id);
   selDate=0; selSlot=null; playerCount=6;
-  if(type==='stadiums') renderStadiumDrawer();
+  if(type==='stadiums') await renderStadiumDrawer();
   else renderSimpleDrawer();
   document.getElementById('ov').classList.add('open');
   document.getElementById('drawer').classList.add('open');
 }
 
-function renderStadiumDrawer(){
+// يجلب أوقات العمل الحقيقية + أيام الإغلاق + الحجوزات الفعلية لهذا الملعب واليوم المحدد
+// يرجع للوضع التجريبي تلقائياً إذا لم تكن قاعدة البيانات متصلة أو الملعب غير حقيقي (بيانات تجريبية)
+async function getFieldAvailability(fieldId, dateStr, weekday){
+  if (!window.sb) return { slots: timeSlots, taken: takenSlots(fieldId, selDate), dayClosed: false };
+  try {
+    const [{ data: wh }, { data: bo }, { data: bookings }] = await Promise.all([
+      sb.from('field_working_hours').select('open_time,close_time,is_closed').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle(),
+      sb.from('field_blackouts').select('id,reason').eq('field_id', fieldId).eq('blackout_date', dateStr).maybeSingle(),
+      sb.from('bookings').select('start_time').eq('field_id', fieldId).eq('booking_date', dateStr).in('status', ['pending','confirmed'])
+    ]);
+    const dayClosed = !!bo || (wh && wh.is_closed);
+    let slots = timeSlots;
+    if (wh && wh.open_time && wh.close_time) {
+      const o = wh.open_time.slice(0,5), c = wh.close_time.slice(0,5);
+      slots = timeSlots.filter(t => t >= o && t < c);
+    }
+    const taken = (bookings||[]).map(b => (b.start_time||'').slice(0,5));
+    return { slots, taken, dayClosed, blackoutReason: bo?.reason || null };
+  } catch(e) {
+    // الملعب تجريبي (id غير موجود فعلياً في قاعدة البيانات) → استخدم البيانات الوهمية
+    return { slots: timeSlots, taken: takenSlots(fieldId, selDate), dayClosed: false };
+  }
+}
+
+async function renderStadiumDrawer(){
   const s = active;
   document.getElementById('drawerTitle').textContent = 'حجز ملعب';
   const today = new Date();
   let pills='';
   for(let i=0;i<7;i++){ const d=new Date(today);d.setDate(d.getDate()+i);
     pills+=`<div class="dpill ${i===selDate?'active':''}" onclick="setDate(${i})"><div class="dw">${dayNames[d.getDay()]}</div><div class="dd">${d.getDate()}</div></div>`; }
-  const taken = takenSlots(s.id, selDate);
-  const slots = timeSlots.map(t=>{ const tk=taken.includes(t); const sl=selSlot===t;
+
+  document.getElementById('drawerBody').innerHTML = `<div style="text-align:center;padding:40px;color:var(--ink-dim)">جارٍ تحميل الأوقات المتاحة...</div>`;
+
+  const dsel = new Date(today); dsel.setDate(dsel.getDate() + selDate);
+  const dateStr = dsel.toISOString().split('T')[0];
+  const weekday = dsel.getDay();
+  const avail = await getFieldAvailability(s.id, dateStr, weekday);
+
+  if (avail.dayClosed) {
+    document.getElementById('drawerBody').innerHTML = `
+      <div class="dmedia">${s.icon}</div>
+      <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
+      <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
+      <div class="dlabel">📅 اختر اليوم</div>
+      <div class="dates">${pills}</div>
+      <div style="text-align:center;padding:30px;background:var(--danger-soft);border-radius:12px;margin-top:14px">
+        <div style="font-size:30px;margin-bottom:8px">🚫</div>
+        <div style="font-weight:700;color:var(--danger)">الملعب مغلق في هذا اليوم</div>
+        ${avail.blackoutReason? `<div style="font-size:12.5px;color:var(--ink-dim);margin-top:4px">${avail.blackoutReason}</div>` : ''}
+        <div style="font-size:12.5px;color:var(--ink-dim);margin-top:4px">جرّب يومًا آخر</div>
+      </div>`;
+    return;
+  }
+
+  const taken = avail.taken;
+  const activeSlots = avail.slots.length ? avail.slots : timeSlots;
+  const slots = activeSlots.map(t=>{ const tk=taken.includes(t); const sl=selSlot===t;
     return `<div class="slot ${tk?'taken':sl?'sel':'free'}" ${tk?'':`onclick="setSlot('${t}')"`}>${t}</div>`; }).join('');
 
   const split = calculateSmartSplit(s.price, playerCount);
@@ -799,13 +848,13 @@ function renderStadiumDrawer(){
     <div class="dmedia">${s.icon}</div>
     <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
     <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
-    <div class="irow">⭐ <b>${s.rating}</b> · ${s.tags.join(' · ')}</div>
+    <div class="irow">⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
     <div class="irow">💰 <b>${s.price} ريال</b> / الساعة</div>
 
     <div class="dlabel">📅 اختر اليوم</div>
     <div class="dates">${pills}</div>
     <div class="dlabel">⏱️ اختر الوقت المتاح</div>
-    <div class="slots">${slots}</div>
+    <div class="slots">${slots || '<div style="grid-column:1/-1;text-align:center;color:var(--ink-dim);padding:14px">لا توجد أوقات معرّفة لهذا اليوم</div>'}</div>
 
     <div class="split-box">
       <div class="split-head">🤝 القطة الذكية — تقسيم التكلفة</div>
@@ -866,9 +915,9 @@ function renderSimpleDrawer(){
     <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()">💳 متابعة الدفع</button>`;
 }
 
-function setDate(i){ selDate=i; selSlot=null; renderStadiumDrawer(); }
+async function setDate(i){ selDate=i; selSlot=null; await renderStadiumDrawer(); }
 function setSlot(t){ selSlot=t; renderStadiumDrawer(); }
-function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); renderStadiumDrawer(); }
+async function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); await renderStadiumDrawer(); }
 
 function proceed(){
   if(!loggedIn){ showToast('سجّل الدخول أولًا لإتمام العملية','error'); closeDrawer(); openAuth('login'); return; }
@@ -1264,16 +1313,32 @@ function initBackend() {
       console.log('ℹ️ لا توجد ملاعب في قاعدة البيانات بعد — عرض البيانات التجريبية');
       return;
     }
-    DATA.stadiums = data.map(f => ({
-      id: f.id,
-      name: f.name,
-      region: f.facilities.region || f.facilities.district || f.facilities.city,
-      loc: f.facilities.district || f.facilities.city,
-      price: Number(f.price_per_hour),
-      rating: 4.7,
-      tags: [f.type === 'natural' ? 'عشب طبيعي' : f.type === 'indoor' ? 'مغلق' : 'عشب صناعي'],
-      icon: '🏟️'
-    }));
+
+    // اجلب متوسط التقييمات الحقيقية لكل الملاعب بضربة واحدة
+    let ratingsByField = {};
+    try {
+      const { data: reviewRows } = await sb.from('reviews').select('field_id, rating');
+      (reviewRows||[]).forEach(r => {
+        if (!ratingsByField[r.field_id]) ratingsByField[r.field_id] = { sum:0, count:0 };
+        ratingsByField[r.field_id].sum += r.rating;
+        ratingsByField[r.field_id].count += 1;
+      });
+    } catch(e){}
+
+    DATA.stadiums = data.map(f => {
+      const rv = ratingsByField[f.id];
+      return {
+        id: f.id,
+        name: f.name,
+        region: f.facilities.region || f.facilities.district || f.facilities.city,
+        loc: f.facilities.district || f.facilities.city,
+        price: Number(f.price_per_hour),
+        rating: rv ? Math.round((rv.sum/rv.count)*10)/10 : 0,
+        reviewCount: rv ? rv.count : 0,
+        tags: [f.type === 'natural' ? 'عشب طبيعي' : f.type === 'indoor' ? 'مغلق' : 'عشب صناعي'],
+        icon: '🏟️'
+      };
+    });
     if (currentMod === 'stadiums') renderActive();
     console.log(`✅ تم تحميل ${data.length} ملعب من قاعدة البيانات`);
   }
@@ -1352,12 +1417,20 @@ async function showMyBookings() {
   openInfoModal('📅 حجوزاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const { data, error } = await sb
     .from('bookings')
-    .select('id, booking_date, start_time, end_time, status, total_price, fields(name, facilities(name, city))')
+    .select('id, field_id, booking_date, start_time, end_time, status, total_price, fields(name, facilities(name, city))')
     .order('booking_date', { ascending: false });
   if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
     document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">📅</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد حجوزات بعد</div></div>`; return;
   }
+
+  let reviewedBookingIds = new Set();
+  try {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data: myReviews } = await sb.from('reviews').select('booking_id').eq('user_id', user.id);
+    reviewedBookingIds = new Set((myReviews||[]).map(r => r.booking_id));
+  } catch(e){}
+
   const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
   document.getElementById('ownerBody').innerHTML = data.map(b=>`
@@ -1369,9 +1442,49 @@ async function showMyBookings() {
       <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)} - ${b.end_time?.slice(0,5)}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
         <span style="color:var(--flood);font-weight:800">${b.total_price} ريال</span>
-        ${(b.status==='pending'||b.status==='confirmed')? `<button class="btn btn-danger btn-sm" onclick="cancelMyBooking(${b.id})">إلغاء الحجز</button>`:''}
+        <div style="display:flex;gap:6px">
+          ${(b.status==='pending'||b.status==='confirmed')? `<button class="btn btn-danger btn-sm" onclick="cancelMyBooking(${b.id})">إلغاء الحجز</button>`:''}
+          ${(b.status==='completed' && !reviewedBookingIds.has(b.id)) ? `<button class="btn btn-soft btn-sm" onclick="openRateBooking(${b.id},${b.field_id})">⭐ قيّم تجربتك</button>` : ''}
+          ${(b.status==='completed' && reviewedBookingIds.has(b.id)) ? `<span style="font-size:12px;color:var(--ink-dim)">✓ تم تقييمه</span>` : ''}
+        </div>
       </div>
     </div>`).join('');
+}
+
+// ── تقييم الملعب بعد اكتمال الحجز ──
+function openRateBooking(bookingId, fieldId) {
+  window._rateStars = 5;
+  openInfoModal('⭐ قيّم تجربتك', `
+    <div style="text-align:center;margin-bottom:16px">
+      <div id="starPicker" style="font-size:32px;letter-spacing:6px;cursor:pointer">★★★★★</div>
+      <div style="font-size:12px;color:var(--ink-dim);margin-top:6px">اضغط على النجوم لاختيار تقييمك</div>
+    </div>
+    <div class="field"><label>تعليقك (اختياري)</label><input id="rv-comment" type="text" placeholder="كيف كانت تجربتك في الملعب؟"></div>
+    <button class="btn btn-brand btn-block" onclick="submitReview(${bookingId},${fieldId})">إرسال التقييم</button>
+  `);
+  setupStarPicker();
+}
+function setupStarPicker(){
+  const el = document.getElementById('starPicker');
+  const paint = n => { el.textContent = '★★★★★'.slice(0,n) + '☆☆☆☆☆'.slice(0, 5-n); };
+  paint(5);
+  el.onclick = (e) => {
+    const rect = el.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const n = Math.max(1, Math.min(5, Math.ceil(ratio*5)));
+    window._rateStars = n; paint(n);
+  };
+}
+async function submitReview(bookingId, fieldId) {
+  const comment = document.getElementById('rv-comment').value.trim();
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('reviews').insert({
+    booking_id: bookingId, field_id: fieldId, user_id: user.id,
+    rating: window._rateStars || 5, comment: comment || null
+  });
+  if (error) { showToast('تعذّر إرسال التقييم: ' + error.message, 'error'); return; }
+  showToast('شكراً على تقييمك ✓ ⭐');
+  closeAll();
 }
 
 async function cancelMyBooking(bookingId) {
@@ -1520,14 +1633,16 @@ async function openOwnerPanel(kind) {
     bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
     modal.classList.add('open'); document.getElementById('ov').classList.add('open');
 
-    const [{ count: usersCount }, { count: facCount }, { count: bookCount }] = await Promise.all([
+    const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { data: earnRows }] = await Promise.all([
       sb.from('profiles').select('*', { count: 'exact', head: true }),
       sb.from('facilities').select('*', { count: 'exact', head: true }),
       sb.from('bookings').select('*', { count: 'exact', head: true }),
+      sb.from('bookings').select('total_price').in('status', ['confirmed','completed']),
     ]);
+    const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
 
     bodyEl.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
         <div class="stat-click" onclick="adminView('users')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
           <div style="font-size:26px;font-weight:900;color:var(--brand)">${usersCount||0}</div>
           <div style="font-size:12px;color:var(--ink-dim)">مستخدم</div></div>
@@ -1538,6 +1653,11 @@ async function openOwnerPanel(kind) {
           <div style="font-size:26px;font-weight:900;color:var(--brand)">${bookCount||0}</div>
           <div style="font-size:12px;color:var(--ink-dim)">حجز</div></div>
       </div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:10px">
+        <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue} ريال</div>
+        <div style="font-size:12px;color:var(--ink-dim)">إجمالي إيرادات المنصة (المؤكدة + المكتملة)</div>
+      </div>
+      <button class="btn btn-soft btn-block" style="margin-bottom:10px" onclick="adminView('reviews')">⭐ إشراف على التقييمات</button>
       <div class="legal-note">💡 اضغط على أي بطاقة أعلاه لعرض التفاصيل والتحكم الكامل.</div>
     `;
   } else {
@@ -1552,24 +1672,32 @@ async function openOwnerPanel(kind) {
       .eq('owner_id', user.id);
 
     const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
-    let pendingCount = 0;
+    let pendingCount = 0, totalRevenue = 0;
     if (myFieldIds.length) {
       const { count } = await sb.from('bookings').select('*', { count:'exact', head:true })
         .in('field_id', myFieldIds).eq('status', 'pending');
       pendingCount = count || 0;
+
+      const { data: earnRows } = await sb.from('bookings').select('total_price')
+        .in('field_id', myFieldIds).in('status', ['confirmed','completed']);
+      totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
     }
 
     const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
     const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
 
     bodyEl.innerHTML = `
-      <div class="stat-click" onclick="showOwnerBookings()" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-size:14px;font-weight:800">📅 حجوزات ملاعبي</div>
-          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">اضغط لعرض كل الحجوزات وتأكيدها أو إلغاؤها</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div class="stat-click" onclick="showOwnerBookings()" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--brand)">${pendingCount}</div>
+          <div style="font-size:12px;color:var(--ink-dim)">حجز قيد الانتظار</div>
         </div>
-        <span class="badge ${pendingCount>0?'pending':'available'}" style="font-size:12px">${pendingCount} قيد الانتظار</span>
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
+          <div style="font-size:12px;color:var(--ink-dim)">إجمالي الإيرادات (ريال)</div>
+        </div>
       </div>
+      <button class="btn btn-soft btn-block" style="margin-bottom:18px" onclick="showOwnerBookings()">📅 عرض كل حجوزات ملاعبي</button>
 
       <div class="dlabel">🏟️ ملاعبي</div>
       ${(myFacilities&&myFacilities.length)? myFacilities.map(f=>`
@@ -1592,6 +1720,7 @@ async function openOwnerPanel(kind) {
                 <button class="btn btn-ghost btn-sm" style="flex:1" onclick="toggleFieldStatus(${fd.id}, '${fd.status}')">${fd.status==='available' ? '⛔ إغلاق' : '✅ فتح'}</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteField(${fd.id})">🗑️</button>
               </div>
+              <button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="openWorkingHours(${fd.id})">⏰ أوقات العمل وأيام الإغلاق</button>
             </div>`).join('')}
         </div>`).join('') : `
         <div style="text-align:center;padding:24px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:12px">
@@ -1755,6 +1884,87 @@ async function updateStadium(facilityId) {
   openOwnerPanel('owner');
 }
 
+// ── أوقات العمل وأيام الإغلاق لكل ملعب ──
+const WEEKDAY_NAMES = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+let whFieldId = null;
+
+async function openWorkingHours(fieldId) {
+  whFieldId = fieldId;
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '⏰ أوقات العمل وأيام الإغلاق';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+
+  const [{ data: hours }, { data: blackouts }] = await Promise.all([
+    sb.from('field_working_hours').select('weekday, open_time, close_time, is_closed').eq('field_id', fieldId),
+    sb.from('field_blackouts').select('id, blackout_date, reason').eq('field_id', fieldId).gte('blackout_date', new Date().toISOString().split('T')[0]).order('blackout_date')
+  ]);
+  const hoursByDay = {};
+  (hours||[]).forEach(h => hoursByDay[h.weekday] = h);
+
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>
+
+    <div class="dlabel">🕐 أوقات العمل الأسبوعية</div>
+    ${WEEKDAY_NAMES.map((name,i)=>{
+      const h = hoursByDay[i] || { open_time:'14:00:00', close_time:'24:00:00', is_closed:false };
+      return `
+      <div style="display:flex;align-items:center;gap:8px;padding:9px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:6px">
+        <span style="width:70px;font-size:13px;font-weight:700">${name}</span>
+        <input type="time" id="wh-open-${i}" value="${(h.open_time||'14:00').slice(0,5)}" style="flex:1;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink);font-size:12px" ${h.is_closed?'disabled':''}>
+        <span style="font-size:12px;color:var(--ink-dim)">إلى</span>
+        <input type="time" id="wh-close-${i}" value="${(h.close_time||'23:59').slice(0,5)}" style="flex:1;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink);font-size:12px" ${h.is_closed?'disabled':''}>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-dim);white-space:nowrap">
+          <input type="checkbox" id="wh-closed-${i}" ${h.is_closed?'checked':''} onchange="document.getElementById('wh-open-${i}').disabled=this.checked;document.getElementById('wh-close-${i}').disabled=this.checked">
+          مغلق
+        </label>
+      </div>`;
+    }).join('')}
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="saveWorkingHours()">💾 حفظ أوقات العمل</button>
+
+    <div class="dlabel" style="margin-top:26px">🚫 إغلاق تاريخ محدد (صيانة / مناسبة)</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="date" id="bo-date" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
+      <input type="text" id="bo-reason" placeholder="السبب (اختياري)" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
+      <button class="btn btn-soft btn-sm" onclick="addBlackout()">إضافة</button>
+    </div>
+    ${(blackouts&&blackouts.length)? blackouts.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--danger-soft);border-radius:9px;margin-bottom:6px">
+        <span style="font-size:13px"><b>${b.blackout_date}</b>${b.reason? ' — '+b.reason : ''}</span>
+        <button class="btn btn-ghost btn-sm" onclick="removeBlackout(${b.id})">إلغاء</button>
+      </div>`).join('') : '<div style="font-size:12.5px;color:var(--ink-dim);padding:6px">لا توجد أيام إغلاق مجدولة</div>'}
+  `;
+}
+
+async function saveWorkingHours() {
+  const rows = WEEKDAY_NAMES.map((_,i) => ({
+    field_id: whFieldId,
+    weekday: i,
+    open_time: document.getElementById(`wh-open-${i}`).value || '14:00',
+    close_time: document.getElementById(`wh-close-${i}`).value || '23:59',
+    is_closed: document.getElementById(`wh-closed-${i}`).checked
+  }));
+  const { error } = await sb.from('field_working_hours').upsert(rows, { onConflict: 'field_id,weekday' });
+  if (error) { showToast('تعذّر الحفظ: ' + error.message, 'error'); return; }
+  showToast('تم حفظ أوقات العمل ✓');
+}
+
+async function addBlackout() {
+  const date = document.getElementById('bo-date').value;
+  const reason = document.getElementById('bo-reason').value.trim();
+  if (!date) { showToast('اختر تاريخاً','error'); return; }
+  const { error } = await sb.from('field_blackouts').insert({ field_id: whFieldId, blackout_date: date, reason: reason || null });
+  if (error) { showToast('تعذّر الإضافة: ' + error.message, 'error'); return; }
+  showToast('تم إغلاق هذا التاريخ ✓');
+  openWorkingHours(whFieldId);
+}
+
+async function removeBlackout(id) {
+  const { error } = await sb.from('field_blackouts').delete().eq('id', id);
+  if (error) { showToast('تعذّر الإلغاء', 'error'); return; }
+  showToast('تم إلغاء الإغلاق ✓');
+  openWorkingHours(whFieldId);
+}
+
 async function adminView(kind) {
   const titleEl = document.getElementById('ownerTitle');
   const bodyEl = document.getElementById('ownerBody');
@@ -1822,6 +2032,34 @@ async function adminView(kind) {
         </div>
       </div>`).join('');
   }
+
+  else if (kind === 'reviews') {
+    titleEl.textContent = '⭐ إشراف على التقييمات';
+    const { data, error } = await sb.from('reviews')
+      .select('id, rating, comment, created_at, profiles(name), fields(name)')
+      .order('created_at', { ascending:false }).limit(50);
+    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد تقييمات بعد</div>'; return; }
+    bodyEl.innerHTML = backBtn + data.map(r => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><b>${r.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${r.profiles?.name||'مستخدم'}</div></div>
+          <span style="color:var(--flood);font-weight:800">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
+        </div>
+        ${r.comment? `<div style="font-size:13px;color:var(--ink-soft);margin-top:6px">"${r.comment}"</div>` : ''}
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-danger btn-sm" onclick="adminDeleteReview(${r.id})">🗑️ حذف التقييم</button>
+        </div>
+      </div>`).join('');
+  }
+}
+
+async function adminDeleteReview(reviewId) {
+  if (!confirm('حذف هذا التقييم نهائياً؟')) return;
+  const { error } = await sb.from('reviews').delete().eq('id', reviewId);
+  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  showToast('تم حذف التقييم ✓');
+  adminView('reviews');
 }
 
 async function adminSetBookingStatus(bookingId, newStatus) {
