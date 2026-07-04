@@ -939,6 +939,17 @@ async function renderStadiumDrawer(){
     <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()" ${canBook?'':'disabled'}>
       ${canBook? '💳 متابعة الدفع' : 'اختر وقتًا أولًا'}
     </button>`;
+
+  // استعد حالة الكوبون المطبّق (إن وُجد) بعد إعادة الرسم، حتى يبقى السعر المعروض مطابقًا للمبلغ الفعلي
+  if (appliedCoupon) {
+    const discount = appliedCoupon.discount_type === 'percent' ? window.effectivePrice * (appliedCoupon.discount_value/100) : appliedCoupon.discount_value;
+    finalBookingPrice = Math.max(0, Math.round((window.effectivePrice - discount) * 100) / 100);
+    const codeInput = document.getElementById('coupon-code');
+    const msgEl = document.getElementById('couponMsg');
+    if (codeInput) codeInput.value = appliedCoupon.code;
+    if (msgEl) { msgEl.textContent = `✓ مطبّق (${appliedCoupon.discount_type==='percent'?appliedCoupon.discount_value+'%':appliedCoupon.discount_value+' ر'})`; msgEl.style.color = 'var(--brand)'; }
+    updateCouponUI(window.effectivePrice);
+  }
 }
 
 function renderSimpleDrawer(){
@@ -972,7 +983,7 @@ function renderSimpleDrawer(){
     <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()">💳 متابعة الدفع</button>`;
 }
 
-async function setDate(i){ selDate=i; selSlot=null; await renderStadiumDrawer(); }
+async function setDate(i){ selDate=i; selSlot=null; appliedCoupon=null; finalBookingPrice=null; await renderStadiumDrawer(); }
 function setSlot(t){ selSlot=t; renderStadiumDrawer(); }
 async function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); await renderStadiumDrawer(); }
 
@@ -1551,6 +1562,7 @@ function initBackend() {
     loadRealTrustStats();
     loadRealStarOfWeek();
   }
+  window.loadRealFields = loadRealFields;
 }
 
 // ── تحميل الأكاديميات الحقيقية (تحل محل القائمة التجريبية) ──
@@ -2083,10 +2095,24 @@ async function showMyAcademiesTournaments(){
   document.getElementById('ownerTitle').textContent = '🎓 أكاديمياتي وبطولاتي';
   bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
   const { data: { user } } = await sb.auth.getUser();
-  const [{ data: myAcad }, { data: myTourn }] = await Promise.all([
-    sb.from('academies').select('*').eq('owner_id', user.id),
-    sb.from('tournaments').select('*, tournament_teams(status)').eq('owner_id', user.id)
-  ]);
+
+  // صاحب الملعب: owner_id = هو نفسه. الموظف: نجيب مالك المنشأة اللي يعمل فيها ونعرض أكاديميات/بطولات ذلك المالك
+  let ownerIds = [user.id];
+  if (!window._isTrueOwner) {
+    const { data: staffFac } = await sb.from('facility_staff').select('facility_id').eq('user_id', user.id);
+    const facIds = (staffFac||[]).map(f=>f.facility_id);
+    if (facIds.length) {
+      const { data: facs } = await sb.from('facilities').select('owner_id').in('id', facIds);
+      ownerIds = [...new Set((facs||[]).map(f=>f.owner_id).filter(Boolean))];
+    } else {
+      ownerIds = [];
+    }
+  }
+
+  const [{ data: myAcad }, { data: myTourn }] = ownerIds.length ? await Promise.all([
+    sb.from('academies').select('*').in('owner_id', ownerIds),
+    sb.from('tournaments').select('*, tournament_teams(status)').in('owner_id', ownerIds)
+  ]) : [{ data: [] }, { data: [] }];
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
   bodyEl.innerHTML = backBtn + `
     <div class="dlabel">🎓 أكاديمياتي</div>
@@ -2228,13 +2254,19 @@ async function deleteMatch(id, tournamentId){
 async function deleteAcademy(id){
   if (!confirm('حذف هذه الأكاديمية نهائياً؟')) return;
   const { error } = await sb.from('academies').delete().eq('id', id);
-  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  if (error) {
+    if (error.code === '23503') { showToast('لا يمكن الحذف: يوجد لاعبون مسجّلون فعليًا في هذه الأكاديمية','error'); return; }
+    showToast('تعذّر الحذف: ' + error.message, 'error'); return;
+  }
   showToast('تم الحذف ✓'); showMyAcademiesTournaments();
 }
 async function deleteTournament(id){
   if (!confirm('حذف هذه البطولة نهائياً؟')) return;
   const { error } = await sb.from('tournaments').delete().eq('id', id);
-  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  if (error) {
+    if (error.code === '23503') { showToast('لا يمكن الحذف: يوجد فرق مسجّلة فعليًا في هذه البطولة','error'); return; }
+    showToast('تعذّر الحذف: ' + error.message, 'error'); return;
+  }
   showToast('تم الحذف ✓'); showMyAcademiesTournaments();
 }
 
@@ -2316,9 +2348,7 @@ async function showOwnerBookings() {
 
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
 
-  const { data: { user } } = await sb.auth.getUser();
-  const { data: myFacilities } = await sb.from('facilities').select('id, fields(id)').eq('owner_id', user.id);
-  const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
+  const myFieldIds = await getMyFieldIds();
 
   if (!myFieldIds.length) {
     bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>';
@@ -2381,6 +2411,7 @@ async function toggleFieldStatus(fieldId, currentStatus) {
   const { error } = await sb.from('fields').update({ status: newStatus }).eq('id', fieldId);
   if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
   showToast(newStatus === 'available' ? 'تم فتح الملعب ✓' : 'تم إغلاق الملعب ✓');
+  if (window.loadRealFields) window.loadRealFields();
   openOwnerPanel('owner');
 }
 
@@ -2388,8 +2419,25 @@ async function toggleFieldStatus(fieldId, currentStatus) {
 async function deleteField(fieldId) {
   if (!confirm('حذف هذا الملعب نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) return;
   const { error } = await sb.from('fields').delete().eq('id', fieldId);
-  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  if (error) {
+    if (error.code === '23503' || error.message.includes('bookings_field_id_fkey')) {
+      const wantsClose = confirm(
+        'لا يمكن حذف هذا الملعب لأن له حجوزات مسجّلة عليه (نحافظ على سجل الحجوزات والإيرادات).\n\n' +
+        'هل تريد إغلاق الملعب بدلاً من ذلك؟ (يختفي من الحجز الجديد فورًا، مع بقاء سجله محفوظًا)'
+      );
+      if (wantsClose) {
+        const { error: closeErr } = await sb.from('fields').update({ status: 'closed' }).eq('id', fieldId);
+        if (closeErr) { showToast('تعذّر الإغلاق: ' + closeErr.message, 'error'); return; }
+        showToast('تم إغلاق الملعب ✓ (سجله محفوظ)');
+        if (window.loadRealFields) window.loadRealFields();
+        openOwnerPanel('owner');
+      }
+      return;
+    }
+    showToast('تعذّر الحذف: ' + error.message, 'error'); return;
+  }
   showToast('تم حذف الملعب ✓');
+  if (window.loadRealFields) window.loadRealFields();
   openOwnerPanel('owner');
 }
 
@@ -2468,6 +2516,7 @@ async function updateStadium(facilityId) {
 
   showToast('تم حفظ التعديلات ✓ 🏟️');
   editingFieldId = null;
+  if (window.loadRealFields) window.loadRealFields();
   openOwnerPanel('owner');
 }
 
@@ -3045,7 +3094,13 @@ async function adminSetBookingStatus(bookingId, newStatus) {
 async function adminDeleteFacility(facilityId) {
   if (!confirm('حذف هذه المنشأة وكل ملاعبها نهائياً؟ لا يمكن التراجع.')) return;
   const { error } = await sb.from('facilities').delete().eq('id', facilityId);
-  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  if (error) {
+    if (error.code === '23503') {
+      showToast('لا يمكن الحذف: هذه المنشأة لها حجوزات حقيقية مسجّلة. أغلق ملاعبها بدلاً من حذف المنشأة كاملة','error');
+      return;
+    }
+    showToast('تعذّر الحذف: ' + error.message, 'error'); return;
+  }
   showToast('تم الحذف ✓');
   adminView('facilities');
 }
@@ -3222,6 +3277,7 @@ async function saveStadium() {
   if (fldErr) { showToast((isNewFacility?'حُفظت المنشأة لكن تعذّر حفظ الملعب: ':'تعذّر حفظ الملعب: ') + fldErr.message,'error'); return; }
 
   showToast(isNewFacility ? 'تمت الإضافة ✓ بانتظار موافقة المالك على المنشأة الجديدة' : 'تمت إضافة الملعب ونُشر فورًا ✓ 🏟️');
+  if (!isNewFacility && window.loadRealFields) window.loadRealFields();
   openOwnerPanel('owner');
 }
 
