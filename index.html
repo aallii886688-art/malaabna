@@ -1508,9 +1508,9 @@ function initBackend() {
     initRealMap();
     const { data, error } = await sb
       .from('fields')
-      .select('id, name, type, price_per_hour, facilities!inner(name, city, district, region, lat, lng)')
+      .select('id, name, type, price_per_hour, facilities!inner(name, city, district, region, lat, lng, approved)')
       .eq('status', 'available')
-      .eq('approved', true);
+      .eq('facilities.approved', true);
     if (error || !data || data.length === 0) {
       console.log('ℹ️ لا توجد ملاعب في قاعدة البيانات بعد — عرض البيانات التجريبية');
       document.getElementById('mapEmptyState').style.display = 'flex';
@@ -1877,7 +1877,7 @@ async function openOwnerPanel(kind) {
       sb.from('profiles').select('*', { count: 'exact', head: true }),
       sb.from('facilities').select('*', { count: 'exact', head: true }),
       sb.from('bookings').select('*', { count: 'exact', head: true }),
-      sb.from('fields').select('*', { count: 'exact', head: true }).eq('approved', false),
+      sb.from('facilities').select('*', { count: 'exact', head: true }).eq('approved', false),
       sb.from('bookings').select('total_price').in('status', ['confirmed','completed']),
     ]);
     const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
@@ -1896,7 +1896,7 @@ async function openOwnerPanel(kind) {
       </div>
       ${pendingFieldsCount>0 ? `
       <div class="stat-click" onclick="adminView('approvals')" style="background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:13px;font-weight:700">⏳ ${pendingFieldsCount} ملعب بانتظار موافقتك</span>
+        <span style="font-size:13px;font-weight:700">⏳ ${pendingFieldsCount} منشأة بانتظار موافقتك</span>
         <span style="font-size:12px">راجع الآن ←</span>
       </div>` : ''}
       <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:14px">
@@ -1907,7 +1907,7 @@ async function openOwnerPanel(kind) {
       <div class="dlabel">📊 الإدارة والنمو</div>
       <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('analytics')">📈 تحليلات المنصة</button>
       <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('coupons')">🎟️ كوبونات الخصم</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('approvals')">✅ موافقة الملاعب الجديدة${pendingFieldsCount>0?` (${pendingFieldsCount})`:''}</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('approvals')">✅ موافقة المنشآت الجديدة${pendingFieldsCount>0?` (${pendingFieldsCount})`:''}</button>
       <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('reviews')">⭐ إشراف على التقييمات</button>
       <button class="btn btn-soft btn-block" style="margin-bottom:14px" onclick="showBroadcastForm()">📢 إرسال إشعار جماعي</button>
 
@@ -1933,7 +1933,7 @@ async function openOwnerPanel(kind) {
 
     const { data: myFacilities } = allFacIds.length ? await sb
       .from('facilities')
-      .select('id, name, city, district, fields(id, name, price_per_hour, status)')
+      .select('id, name, city, district, approved, fields(id, name, price_per_hour, status)')
       .in('id', allFacIds) : { data: [] };
 
     const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
@@ -1969,7 +1969,7 @@ async function openOwnerPanel(kind) {
         <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div><b style="font-size:15px">${f.name}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district}، ${f.city}</div></div>
-            <span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span>
+            <span class="badge ${f.approved?'available':'pending'}" style="font-size:11px">${f.approved? (f.fields||[]).length+' ملعب' : 'بانتظار الموافقة'}</span>
           </div>
           ${(f.fields||[]).map(fd=>`
             <div style="margin-top:8px;padding:10px;background:var(--bg-elev);border-radius:8px">
@@ -2910,12 +2910,12 @@ async function adminView(kind) {
   }
 
   else if (kind === 'approvals') {
-    titleEl.textContent = '✅ موافقة الملاعب الجديدة';
-    const { data: pending } = await sb.from('fields')
-      .select('id, name, price_per_hour, type, facilities(name, city, district, profiles(name, phone))')
+    titleEl.textContent = '✅ موافقة المنشآت الجديدة';
+    const { data: pending } = await sb.from('facilities')
+      .select('id, name, city, district, profiles(name, phone), fields(id, name, price_per_hour)')
       .eq('approved', false);
     if (!pending || !pending.length) {
-      bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)"><div style="font-size:30px;margin-bottom:8px">✅</div>لا توجد ملاعب بانتظار الموافقة</div>';
+      bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)"><div style="font-size:30px;margin-bottom:8px">✅</div>لا توجد منشآت بانتظار الموافقة</div>';
       return;
     }
     bodyEl.innerHTML = backBtn + pending.map(f=>`
@@ -2923,13 +2923,13 @@ async function adminView(kind) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
             <b style="font-size:14px">${f.name}</b>
-            <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.facilities?.district||''}، ${f.facilities?.city||''} · ${f.price_per_hour} ر/ساعة</div>
-            <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${f.facilities?.profiles?.name||'—'} · ${f.facilities?.profiles?.phone||''}</div>
+            <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district||''}، ${f.city||''} · ${(f.fields||[]).length} ملعب</div>
+            <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${f.profiles?.name||'—'} · ${f.profiles?.phone||''}</div>
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn btn-brand btn-sm" style="flex:1" onclick="approveField(${f.id})">✅ موافقة ونشر</button>
-          <button class="btn btn-danger btn-sm" style="flex:1" onclick="rejectField(${f.id})">رفض وحذف</button>
+          <button class="btn btn-brand btn-sm" style="flex:1" onclick="approveFacility(${f.id})">✅ موافقة ونشر المنشأة</button>
+          <button class="btn btn-danger btn-sm" style="flex:1" onclick="rejectFacility(${f.id})">رفض وحذف</button>
         </div>
       </div>`).join('');
   }
@@ -2956,16 +2956,16 @@ async function toggleCoupon(id, newActive){
   showToast(newActive? 'تم التفعيل ✓' : 'تم الإيقاف ✓');
   adminView('coupons');
 }
-async function approveField(fieldId){
-  const { error } = await sb.from('fields').update({ approved:true }).eq('id', fieldId);
+async function approveFacility(facilityId){
+  const { error } = await sb.from('facilities').update({ approved:true }).eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
-  showToast('تمت الموافقة ونُشر الملعب ✓');
+  showToast('تمت الموافقة ونُشرت المنشأة وكل ملاعبها ✓');
   loadRealFields();
   adminView('approvals');
 }
-async function rejectField(fieldId){
-  if (!confirm('رفض هذا الملعب وحذفه نهائياً؟')) return;
-  const { error } = await sb.from('fields').delete().eq('id', fieldId);
+async function rejectFacility(facilityId){
+  if (!confirm('رفض هذه المنشأة وحذفها نهائياً مع كل ملاعبها؟')) return;
+  const { error } = await sb.from('facilities').delete().eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
@@ -3072,21 +3072,49 @@ async function adminCancelBooking(bookingId) {
   adminView('bookings');
 }
 
-function showAddStadiumForm() {
+async function showAddStadiumForm() {
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '➕ إضافة ملعب جديد';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: myFacilities } = await sb.from('facilities').select('id, name, city, district, approved').eq('owner_id', user.id);
+  const facOptions = (myFacilities||[]).map(f=>
+    `<option value="${f.id}">${f.name} — ${f.city}${!f.approved?' (بانتظار الموافقة)':''}</option>`).join('');
+
   bodyEl.innerHTML = `
-    <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" placeholder="مثال: ملعب النخيل"></div>
-    <div class="field"><label>المدينة *</label><input id="st-city" type="text" placeholder="خميس مشيط"></div>
-    <div class="field"><label>الحي *</label><input id="st-district" type="text" placeholder="حي الراقي"></div>
     <div class="field">
-      <label>المنطقة</label>
-      <select id="st-region" class="form-input" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
-        <option value="خميس البحر">خميس البحر</option>
-        <option value="بحر أبو سكينة">بحر أبو سكينة</option>
-        <option value="أبها">أبها</option>
-        <option value="خميس مشيط">خميس مشيط</option>
+      <label>أضف الملعب إلى</label>
+      <select id="st-existing-facility" onchange="toggleFacilityFields()" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        <option value="new">➕ منشأة جديدة (موقع/فرع جديد)</option>
+        ${facOptions}
       </select>
+      <div class="legal-note" style="margin-top:8px">💡 لو اخترت منشأة موجودة ومعتمدة، الملعب الجديد يُنشر فورًا بدون انتظار موافقة. المنشأة الجديدة فقط تحتاج موافقة المالك مرة واحدة.</div>
+    </div>
+    <div id="facilityLocationFields">
+      <div class="field"><label>اسم المنشأة/الملعب *</label><input id="st-name" type="text" placeholder="مثال: مجمع النخيل الرياضي"></div>
+      <div class="field"><label>المدينة *</label><input id="st-city" type="text" placeholder="خميس مشيط"></div>
+      <div class="field"><label>الحي *</label><input id="st-district" type="text" placeholder="حي الراقي"></div>
+      <div class="field">
+        <label>المنطقة</label>
+        <select id="st-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+          <option value="خميس البحر">خميس البحر</option>
+          <option value="بحر أبو سكينة">بحر أبو سكينة</option>
+          <option value="أبها">أبها</option>
+          <option value="خميس مشيط">خميس مشيط</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(مطلوب ليظهر في خريطة الموقع)</span></label>
+        <div style="display:flex;gap:8px">
+          <input id="st-lat" type="text" placeholder="خط العرض (lat)" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13px">
+          <input id="st-lng" type="text" placeholder="خط الطول (lng)" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13px">
+          <button class="btn btn-soft btn-sm" onclick="useMyLocationForField()" type="button">📍 موقعي الآن</button>
+        </div>
+      </div>
+    </div>
+    <div id="fieldNameOnly" style="display:none">
+      <div class="field"><label>اسم الملعب *</label><input id="st-name2" type="text" placeholder="مثال: الملعب رقم 2"></div>
     </div>
     <div class="field">
       <label>نوع الأرضية</label>
@@ -3098,14 +3126,6 @@ function showAddStadiumForm() {
     </div>
     <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" placeholder="150"></div>
     <div class="field">
-      <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(مطلوب ليظهر في خريطة الموقع)</span></label>
-      <div style="display:flex;gap:8px">
-        <input id="st-lat" type="text" placeholder="خط العرض (lat)" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13px">
-        <input id="st-lng" type="text" placeholder="خط الطول (lng)" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13px">
-        <button class="btn btn-soft btn-sm" onclick="useMyLocationForField()" type="button">📍 موقعي الآن</button>
-      </div>
-    </div>
-    <div class="field">
       <label>صورة الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
       <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
       <div id="st-image-preview" style="margin-top:8px"></div>
@@ -3115,6 +3135,12 @@ function showAddStadiumForm() {
       <button class="btn btn-brand" style="flex:2" onclick="saveStadium()">💾 حفظ الملعب</button>
     </div>
   `;
+}
+
+function toggleFacilityFields(){
+  const isNew = document.getElementById('st-existing-facility').value === 'new';
+  document.getElementById('facilityLocationFields').style.display = isNew ? 'block' : 'none';
+  document.getElementById('fieldNameOnly').style.display = isNew ? 'none' : 'block';
 }
 
 function useMyLocationForField(){
@@ -3138,14 +3164,11 @@ function selFieldType(t) {
 }
 
 async function saveStadium() {
-  const name     = document.getElementById('st-name').value.trim();
-  const city     = document.getElementById('st-city').value.trim();
-  const district = document.getElementById('st-district').value.trim();
-  const region   = document.getElementById('st-region').value;
-  const price    = parseFloat(document.getElementById('st-price').value);
-  const imgFile  = document.getElementById('st-image')?.files?.[0];
+  const existingFacilityId = document.getElementById('st-existing-facility').value;
+  const isNewFacility = existingFacilityId === 'new';
+  const price = parseFloat(document.getElementById('st-price').value);
+  const imgFile = document.getElementById('st-image')?.files?.[0];
 
-  if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
 
   const { data: { user } } = await sb.auth.getUser();
@@ -3166,24 +3189,37 @@ async function saveStadium() {
     } catch(e){ console.log('تعذّر رفع الصورة:', e); }
   }
 
-  const facPayload = { owner_id: user.id, name, city, district, region };
-  const latVal = parseFloat(document.getElementById('st-lat')?.value);
-  const lngVal = parseFloat(document.getElementById('st-lng')?.value);
-  if (!isNaN(latVal)) facPayload.lat = latVal;
-  if (!isNaN(lngVal)) facPayload.lng = lngVal;
-  if (imageUrl) facPayload.images = [imageUrl];
-  const { data: facility, error: facErr } = await sb
-    .from('facilities').insert(facPayload).select().single();
+  let facilityId = existingFacilityId;
+  let name;
 
-  if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
+  if (isNewFacility) {
+    name = document.getElementById('st-name').value.trim();
+    const city = document.getElementById('st-city').value.trim();
+    const district = document.getElementById('st-district').value.trim();
+    const region = document.getElementById('st-region').value;
+    if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
 
-  const fldPayload = { facility_id: facility.id, name, type: newFieldType, price_per_hour: price, status: 'available' };
+    const facPayload = { owner_id: user.id, name, city, district, region };
+    const latVal = parseFloat(document.getElementById('st-lat')?.value);
+    const lngVal = parseFloat(document.getElementById('st-lng')?.value);
+    if (!isNaN(latVal)) facPayload.lat = latVal;
+    if (!isNaN(lngVal)) facPayload.lng = lngVal;
+    if (imageUrl) facPayload.images = [imageUrl];
+    const { data: facility, error: facErr } = await sb.from('facilities').insert(facPayload).select().single();
+    if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
+    facilityId = facility.id;
+  } else {
+    name = document.getElementById('st-name2').value.trim();
+    if (!name) { showToast('أدخل اسم الملعب','error'); return; }
+  }
+
+  const fldPayload = { facility_id: facilityId, name, type: newFieldType, price_per_hour: price, status: 'available' };
   if (imageUrl) fldPayload.image_url = imageUrl;
   const { error: fldErr } = await sb.from('fields').insert(fldPayload);
 
-  if (fldErr) { showToast('حُفظت المنشأة لكن تعذّر حفظ الملعب: ' + fldErr.message,'error'); return; }
+  if (fldErr) { showToast((isNewFacility?'حُفظت المنشأة لكن تعذّر حفظ الملعب: ':'تعذّر حفظ الملعب: ') + fldErr.message,'error'); return; }
 
-  showToast('تمت إضافة الملعب بنجاح ✓ 🏟️');
+  showToast(isNewFacility ? 'تمت الإضافة ✓ بانتظار موافقة المالك على المنشأة الجديدة' : 'تمت إضافة الملعب ونُشر فورًا ✓ 🏟️');
   openOwnerPanel('owner');
 }
 
