@@ -1132,7 +1132,7 @@ function renderSimpleDrawer(){
   document.getElementById('drawerTitle').textContent = isTourney ? 'تسجيل في بطولة' : 'تسجيل في أكاديمية';
   const priceLbl = isTourney ? 'رسوم الفريق' : 'الاشتراك الشهري';
   document.getElementById('drawerBody').innerHTML = `
-    <div class="dmedia">${it.icon}</div>
+    <div class="dmedia">${it.image?`<img src="${it.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:it.icon}</div>
     <div style="font-size:20px;font-weight:900;margin-bottom:8px">${it.name}</div>
     <div class="irow">📍 <b>${it.loc}، ${it.region}</b></div>
     <div class="irow">📋 <b>${it.desc}</b></div>
@@ -1846,7 +1846,8 @@ async function loadRealAcademies(){
   DATA.academies = data.map(a => ({
     id: a.id, name: a.name, region: a.region || a.district || a.city, loc: a.district || a.city,
     price: Number(a.monthly_price), rating: 0, tags: (a.age_groups||'').split(',').map(s=>s.trim()).filter(Boolean),
-    icon: '🎓', desc: a.description || 'برنامج تدريبي'
+    icon: '🎓', desc: a.description || 'برنامج تدريبي', image: a.image_url || null,
+    lat: a.lat!=null ? Number(a.lat) : null, lng: a.lng!=null ? Number(a.lng) : null
   }));
   if (currentMod === 'academies') renderActive();
   console.log(`✅ تم تحميل ${data.length} أكاديمية من قاعدة البيانات`);
@@ -1862,7 +1863,8 @@ async function loadRealTournaments(){
     return {
       id: t.id, name: t.name, region: t.region || t.district || t.city, loc: t.venue_name || t.district || t.city,
       price: Number(t.team_fee), rating: 0, tags: [t.start_date? `يبدأ ${t.start_date}`:'قريبًا'],
-      icon: '🏆', desc: t.description || 'بطولة مفتوحة للتسجيل', teams: `${confirmed}/${t.max_teams}`
+      icon: '🏆', desc: t.description || 'بطولة مفتوحة للتسجيل', teams: `${confirmed}/${t.max_teams}`,
+      image: t.image_url || null, lat: t.lat!=null ? Number(t.lat) : null, lng: t.lng!=null ? Number(t.lng) : null
     };
   });
   if (currentMod === 'tournaments') renderActive();
@@ -2691,10 +2693,26 @@ function showAddAcademyForm(){
     <div class="field"><label>الاشتراك الشهري (ريال) *</label><input id="ac-price" type="number" placeholder="300"></div>
     <div class="field"><label>الفئات العمرية</label><input id="ac-ages" type="text" placeholder="تحت 12، تحت 16"></div>
     <div class="field"><label>وصف مختصر</label><input id="ac-desc" type="text" placeholder="برنامج تدريبي احترافي"></div>
+    <div class="field">
+      <label>صورة الأكاديمية <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
+      <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
+      <div id="st-image-preview" style="margin-top:8px"></div>
+    </div>
+    <div class="field">
+      <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(اضغط على الخريطة لتحديد المكان)</span></label>
+      <div id="pickerMap" style="height:220px;border-radius:12px;overflow:hidden;border:1px solid var(--line)"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <span id="pickerCoords" style="font-size:11.5px;color:var(--ink-dim)">لم يُحدَّد موقع بعد</span>
+        <button class="btn btn-soft btn-sm" onclick="useMyLocationForField()" type="button">📍 استخدم موقعي الآن</button>
+      </div>
+      <input id="st-lat" type="hidden">
+      <input id="st-lng" type="hidden">
+    </div>
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('academies')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveAcademy()">💾 حفظ الأكاديمية</button>
     </div>`;
+  initLocationPicker('pickerMap', null, null);
 }
 async function saveAcademy(){
   const name = document.getElementById('ac-name').value.trim();
@@ -2703,12 +2721,29 @@ async function saveAcademy(){
   const price = parseFloat(document.getElementById('ac-price').value);
   const ages = document.getElementById('ac-ages').value.trim();
   const desc = document.getElementById('ac-desc').value.trim();
+  const latVal = parseFloat(document.getElementById('st-lat')?.value);
+  const lngVal = parseFloat(document.getElementById('st-lng')?.value);
+  const imgFile = document.getElementById('st-image')?.files?.[0];
   if (!name || !city) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!price || price<=0) { showToast('أدخل اشتراكاً شهرياً صحيحاً','error'); return; }
+
+  showToast('جارٍ الحفظ...');
+  let imageUrl = null;
+  if (imgFile) {
+    try {
+      const base64 = await fileToBase64(imgFile);
+      const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
+      if (!upErr && uploadRes?.url) imageUrl = uploadRes.url;
+      else if (uploadRes?.error) { showToast('تعذّر رفع الصورة: ' + uploadRes.error,'error'); return; }
+    } catch(e){ console.log('تعذّر رفع الصورة:', e); }
+  }
+
   const { data: { user } } = await sb.auth.getUser();
-  const { error } = await sb.from('academies').insert({
-    owner_id:user.id, name, city, district, monthly_price:price, age_groups:ages||null, description:desc||null
-  });
+  const payload = { owner_id:user.id, name, city, district, monthly_price:price, age_groups:ages||null, description:desc||null };
+  if (imageUrl) payload.image_url = imageUrl;
+  if (!isNaN(latVal)) payload.lat = latVal;
+  if (!isNaN(lngVal)) payload.lng = lngVal;
+  const { error } = await sb.from('academies').insert(payload);
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
   showToast('تمت إضافة الأكاديمية ✓ 🎓');
   loadRealAcademies();
@@ -2721,15 +2756,31 @@ function showAddTournamentForm(){
   bodyEl.innerHTML = `
     <div class="field"><label>اسم البطولة *</label><input id="tn-name" type="text" placeholder="بطولة الحي الرمضانية"></div>
     <div class="field"><label>المدينة *</label><input id="tn-city" type="text" placeholder="مثال: الرياض"></div>
-    <div class="field"><label>الملعب / المكان</label><input id="tn-venue" type="text" placeholder="ملعب البحر الأخضر"></div>
+    <div class="field"><label>الملعب / المكان</label><input id="tn-venue" type="text" placeholder="ملعب النخيل الرياضي"></div>
     <div class="field"><label>رسوم الفريق (ريال) *</label><input id="tn-fee" type="number" placeholder="500"></div>
     <div class="field"><label>الحد الأقصى للفرق</label><input id="tn-maxteams" type="number" placeholder="16" value="16"></div>
     <div class="field"><label>تاريخ البداية</label><input id="tn-startdate" type="date"></div>
     <div class="field"><label>وصف مختصر</label><input id="tn-desc" type="text" placeholder="بطولة سداسي"></div>
+    <div class="field">
+      <label>صورة البطولة <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
+      <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
+      <div id="st-image-preview" style="margin-top:8px"></div>
+    </div>
+    <div class="field">
+      <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(اضغط على الخريطة لتحديد المكان)</span></label>
+      <div id="pickerMap" style="height:220px;border-radius:12px;overflow:hidden;border:1px solid var(--line)"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <span id="pickerCoords" style="font-size:11.5px;color:var(--ink-dim)">لم يُحدَّد موقع بعد</span>
+        <button class="btn btn-soft btn-sm" onclick="useMyLocationForField()" type="button">📍 استخدم موقعي الآن</button>
+      </div>
+      <input id="st-lat" type="hidden">
+      <input id="st-lng" type="hidden">
+    </div>
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('tournaments')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveTournament()">💾 حفظ البطولة</button>
     </div>`;
+  initLocationPicker('pickerMap', null, null);
 }
 async function saveTournament(){
   const name = document.getElementById('tn-name').value.trim();
@@ -2739,12 +2790,29 @@ async function saveTournament(){
   const maxTeams = parseInt(document.getElementById('tn-maxteams').value) || 16;
   const startDate = document.getElementById('tn-startdate').value || null;
   const desc = document.getElementById('tn-desc').value.trim();
+  const latVal = parseFloat(document.getElementById('st-lat')?.value);
+  const lngVal = parseFloat(document.getElementById('st-lng')?.value);
+  const imgFile = document.getElementById('st-image')?.files?.[0];
   if (!name || !city) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!fee || fee<=0) { showToast('أدخل رسوم فريق صحيحة','error'); return; }
+
+  showToast('جارٍ الحفظ...');
+  let imageUrl = null;
+  if (imgFile) {
+    try {
+      const base64 = await fileToBase64(imgFile);
+      const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
+      if (!upErr && uploadRes?.url) imageUrl = uploadRes.url;
+      else if (uploadRes?.error) { showToast('تعذّر رفع الصورة: ' + uploadRes.error,'error'); return; }
+    } catch(e){ console.log('تعذّر رفع الصورة:', e); }
+  }
+
   const { data: { user } } = await sb.auth.getUser();
-  const { error } = await sb.from('tournaments').insert({
-    owner_id:user.id, name, city, venue_name:venue||null, team_fee:fee, max_teams:maxTeams, start_date:startDate, description:desc||null
-  });
+  const payload = { owner_id:user.id, name, city, venue_name:venue||null, team_fee:fee, max_teams:maxTeams, start_date:startDate, description:desc||null };
+  if (imageUrl) payload.image_url = imageUrl;
+  if (!isNaN(latVal)) payload.lat = latVal;
+  if (!isNaN(lngVal)) payload.lng = lngVal;
+  const { error } = await sb.from('tournaments').insert(payload);
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
   showToast('تمت إضافة البطولة ✓ 🏆');
   loadRealTournaments();
