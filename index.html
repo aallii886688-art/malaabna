@@ -1702,7 +1702,7 @@ function openSidebar() {
     </div>
     <div class="side-links">
       <a class="side-link" onclick="sideGo('profile')"><span class="si">👤</span> الملف الشخصي</a>
-      <a class="side-link" onclick="sideGo('bookings')"><span class="si">📅</span> حجوزاتي</a>
+      <a class="side-link" onclick="sideGo('bookings')"><span class="si">🎽</span> ${isOwnerOrAdmin ? 'حجوزاتي كلاعب' : 'حجوزاتي'}</a>
       <a class="side-link" onclick="sideGo('lookup')"><span class="si">🔍</span> استعلام عن حجز</a>
       <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
       ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
@@ -1758,7 +1758,7 @@ function showProfile() {
 }
 
 async function showMyBookings() {
-  openInfoModal('📅 حجوزاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  openInfoModal((window.currentUser && (window.currentUser.role==='owner'||window.currentUser.role==='staff'||window.currentUser.role==='super_admin')) ? '🎽 حجوزاتي كلاعب' : '📅 حجوزاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const { data, error } = await sb
     .from('bookings')
     .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, fields(name, facilities(name, city))')
@@ -2002,181 +2002,234 @@ async function doLogout() {
 }
 
 async function openOwnerPanel(kind) {
-  const modal = document.getElementById('mOwner');
-  const bodyEl = document.getElementById('ownerBody');
-  const titleEl = document.getElementById('ownerTitle');
-
   if (!window.sb) { showToast('يتطلب اتصال قاعدة البيانات','error'); return; }
+  if (kind === 'admin') { await adminGoTab('overview'); }
+  else { await ownerGoTab('overview'); }
+}
 
-  if (kind === 'admin') {
-    titleEl.textContent = '🛡️ لوحة تحكم المالك';
-    bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
-    modal.classList.add('open'); document.getElementById('ov').classList.add('open');
-
-    const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFieldsCount }, { data: earnRows }] = await Promise.all([
-      sb.from('profiles').select('*', { count: 'exact', head: true }),
-      sb.from('facilities').select('*', { count: 'exact', head: true }),
-      sb.from('bookings').select('*', { count: 'exact', head: true }),
-      sb.from('facilities').select('*', { count: 'exact', head: true }).eq('approved', false),
-      sb.from('bookings').select('total_price').in('status', ['confirmed','completed']),
-    ]);
-    const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
-
-    bodyEl.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
-        <div class="stat-click" onclick="adminView('users')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
-          <div style="font-size:26px;font-weight:900;color:var(--brand)">${usersCount||0}</div>
-          <div style="font-size:12px;color:var(--ink-dim)">مستخدم</div></div>
-        <div class="stat-click" onclick="adminView('facilities')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
-          <div style="font-size:26px;font-weight:900;color:var(--flood)">${facCount||0}</div>
-          <div style="font-size:12px;color:var(--ink-dim)">منشأة</div></div>
-        <div class="stat-click" onclick="adminView('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
-          <div style="font-size:26px;font-weight:900;color:var(--brand)">${bookCount||0}</div>
-          <div style="font-size:12px;color:var(--ink-dim)">حجز</div></div>
-      </div>
-      ${pendingFieldsCount>0 ? `
-      <div class="stat-click" onclick="adminView('approvals')" style="background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:13px;font-weight:700">⏳ ${pendingFieldsCount} منشأة بانتظار موافقتك</span>
-        <span style="font-size:12px">راجع الآن ←</span>
-      </div>` : ''}
-      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:14px">
-        <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue} ريال</div>
-        <div style="font-size:12px;color:var(--ink-dim)">إجمالي إيرادات المنصة (المؤكدة + المكتملة)</div>
-      </div>
-
-      <div class="dlabel">📊 الإدارة والنمو</div>
-      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('analytics')">📈 تحليلات المنصة</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('commission')">⚙️ نسبة عمولة المنصة</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('payouts')">💸 تنفيذ التحويلات المستحقة</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('approvals')">✅ موافقة المنشآت الجديدة${pendingFieldsCount>0?` (${pendingFieldsCount})`:''}</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('reviews')">⭐ إشراف على التقييمات</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:14px" onclick="showBroadcastForm()">📢 إرسال إشعار جماعي</button>
-
-      <div class="dlabel">🔌 تكاملات (لاحقًا)</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="adminView('sms')">📱 الرسائل</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="adminView('payment')">💳 الدفع</button>
-      </div>
-    `;
-  } else {
-    titleEl.textContent = '🏟️ لوحة ملاعبي';
-    bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
-    modal.classList.add('open'); document.getElementById('ov').classList.add('open');
-
-    const { data: { user } } = await sb.auth.getUser();
-    const [{ data: ownFac }, { data: staffFac }] = await Promise.all([
-      sb.from('facilities').select('id').eq('owner_id', user.id),
-      sb.from('facility_staff').select('facility_id').eq('user_id', user.id)
-    ]);
-    const ownFacIds = (ownFac||[]).map(f=>f.id);
-    const allFacIds = [...new Set([...ownFacIds, ...(staffFac||[]).map(f=>f.facility_id)])];
-    // "المالك الحقيقي" يُحدَّد من نوع حسابه (owner/super_admin)، وليس من امتلاكه لمنشأة موجودة —
-    // وإلا كل صاحب ملعب جديد (بدون منشآت بعد) كان يُصنَّف خطأً كموظف وتختفي عنه أزرار الإضافة
-    window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
-
-    const { data: myFacilities } = allFacIds.length ? await sb
-      .from('facilities')
-      .select('id, name, city, district, approved, fields(id, name, price_per_hour, status)')
-      .in('id', allFacIds) : { data: [] };
-
-    const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
-    let pendingCount = 0, totalRevenue = 0, netOwed = 0, nextPayoutDate = '—';
-    const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
-    const commissionPct = commSetting ? Number(commSetting.value) : 20;
-
-    if (myFieldIds.length) {
-      const { count } = await sb.from('bookings').select('*', { count:'exact', head:true })
-        .in('field_id', myFieldIds).eq('status', 'pending');
-      pendingCount = count || 0;
-
-      const { data: earnRows } = await sb.from('bookings').select('total_price')
-        .in('field_id', myFieldIds).in('status', ['confirmed','completed']);
-      totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
-
-      const { data: paidOutRows } = await sb.from('payouts').select('net_amount').eq('owner_id', window.currentUser.id);
-      const alreadyPaidOut = (paidOutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0), 0);
-      const grossNet = totalRevenue * (1 - commissionPct/100);
-      netOwed = Math.max(0, Math.round((grossNet - alreadyPaidOut) * 100) / 100);
-
-      // أقرب موعد تحويل (المنصة تحوّل مرتين أسبوعيًا)
-      const now = new Date(); const day = now.getDay(); // 0=Sunday
-      const daysToNext = [ (3-day+7)%7 || 7, (0-day+7)%7 || 7 ].sort((a,b)=>a-b)[0];
-      const nd = new Date(now); nd.setDate(now.getDate() + daysToNext);
-      nextPayoutDate = nd.toLocaleDateString('ar-SA', { weekday:'long', day:'numeric', month:'long' });
-    }
-
-    const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
-    const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
-
-    bodyEl.innerHTML = `
-      <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
-        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">مستحق لك (بعد عمولة المنصة ${commissionPct}%)</div>
-        <div style="font-size:32px;font-weight:900;color:var(--brand-deep)">${netOwed} <span style="font-size:16px">ريال</span></div>
-        <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">أقرب تحويل: ${nextPayoutDate}</div>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerPayouts()">💰 تحويلاتي</button>
-        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-        <div class="stat-click" onclick="showOwnerBookings()" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
-          <div style="font-size:24px;font-weight:900;color:var(--brand)">${pendingCount}</div>
-          <div style="font-size:12px;color:var(--ink-dim)">حجز قيد الانتظار</div>
-        </div>
-        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
-          <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
-          <div style="font-size:12px;color:var(--ink-dim)">إجمالي الإيرادات (ريال)</div>
-        </div>
-      </div>
-      <button class="btn btn-soft btn-block" style="margin-bottom:18px" onclick="showOwnerBookings()">📅 عرض كل حجوزات ملاعبي</button>
-
-      <div class="dlabel">🏟️ ملاعبي</div>
-      ${(myFacilities&&myFacilities.length)? myFacilities.map(f=>`
-        <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div><b style="font-size:15px">${f.name}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district}، ${f.city}</div></div>
-            <span class="badge ${f.approved?'available':'pending'}" style="font-size:11px">${f.approved? (f.fields||[]).length+' ملعب' : 'بانتظار الموافقة'}</span>
-          </div>
-          ${(f.fields||[]).map(fd=>`
-            <div style="margin-top:8px;padding:10px;background:var(--bg-elev);border-radius:8px">
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
-                <span>${fd.name}</span>
-                <span style="display:flex;align-items:center;gap:6px">
-                  <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
-                  <span class="badge ${statusClass[fd.status]||'available'}" style="font-size:10px">${statusLabel[fd.status]||fd.status}</span>
-                </span>
-              </div>
-              <div style="display:flex;gap:6px;margin-top:8px">
-                <button class="btn btn-soft btn-sm" style="flex:1" onclick="editStadiumForm(${fd.id})">✏️ تعديل</button>
-                <button class="btn btn-ghost btn-sm" style="flex:1" onclick="toggleFieldStatus(${fd.id}, '${fd.status}')">${fd.status==='available' ? '⛔ إغلاق' : '✅ فتح'}</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteField(${fd.id})">🗑️</button>
-              </div>
-              <button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="openWorkingHours(${fd.id})">⏰ أوقات العمل وأيام الإغلاق</button>
-            </div>`).join('')}
-        </div>`).join('') : `
-        <div style="text-align:center;padding:24px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:12px">
-          <div style="font-size:32px;margin-bottom:8px">🏟️</div>
-          <div style="font-size:14px;font-weight:600;margin-bottom:4px">لا توجد ملاعب بعد</div>
-          <div style="font-size:12px;color:var(--ink-dim)">أضف أول ملعب لك لتبدأ استقبال الحجوزات</div>
-        </div>`}
-      ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>` : ''}
-
-      <div class="dlabel" style="margin-top:24px">🎓 أكاديمياتي وبطولاتي</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showMyAcademiesTournaments()">📋 إدارتها والجدولة</button>
-        ${window._isTrueOwner ? `<button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddAcademyForm()">+ أكاديمية</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAddTournamentForm()">+ بطولة</button>` : ''}
-      </div>
-      <div class="dlabel" style="margin-top:22px">📊 النمو والعملاء</div>
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerAnalytics()">📈 تحليلاتي</button>
-        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerCustomers()">👥 عملائي</button>
-      </div>
-
-      ${window._isTrueOwner ? `<button class="btn btn-ghost btn-block" onclick="showStaffManagement()">👥 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف على هذه المنشأة — إدارة الموظفين وإضافة منشآت جديدة تخص المالك فقط.</div>`}
-    `;
+// ════════════════ لوحة صاحب الملعب — نظام تبويبات منظّم ════════════════
+const OWNER_TABS = [
+  {key:'overview', label:'🏠 نظرة عامة'},
+  {key:'fields', label:'🏟️ ملاعبي'},
+  {key:'bookings', label:'📅 الحجوزات'},
+  {key:'academies', label:'🎓 الأكاديميات'},
+  {key:'tournaments', label:'🏆 البطولات'},
+  {key:'finance', label:'💰 المالية'},
+  {key:'team', label:'👥 الفريق'},
+];
+function ownerTabsHtml(active){
+  return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
+    ${OWNER_TABS.map(t=>`<button onclick="ownerGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${t.label}</button>`).join('')}
+  </div>`;
+}
+async function ownerGoTab(tab){
+  window._ownerActiveTab = tab;
+  document.getElementById('ownerTitle').textContent = '🏟️ لوحة ملاعبي';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+  document.getElementById('ownerBody').innerHTML = ownerTabsHtml(tab) + '<div id="ownerTabInner" style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  switch(tab){
+    case 'overview':    await renderOwnerOverviewTab(); break;
+    case 'fields':      await renderOwnerFieldsTab(); break;
+    case 'bookings':    await renderOwnerBookingsTab(); break;
+    case 'academies':   await renderOwnerAcademiesTab(); break;
+    case 'tournaments': await renderOwnerTournamentsTab(); break;
+    case 'finance':     await renderOwnerFinanceTab(); break;
+    case 'team':        await renderOwnerTeamTab(); break;
   }
 }
+
+// كل تبويب يكتب محتواه هنا فقط، وشريط التبويبات يبقى ثابتًا فوقه
+function ownerInner(){ return document.getElementById('ownerTabInner'); }
+
+async function getMyFacilitiesData(){
+  const { data: { user } } = await sb.auth.getUser();
+  const [{ data: ownFac }, { data: staffFac }] = await Promise.all([
+    sb.from('facilities').select('id').eq('owner_id', user.id),
+    sb.from('facility_staff').select('facility_id').eq('user_id', user.id)
+  ]);
+  const ownFacIds = (ownFac||[]).map(f=>f.id);
+  const allFacIds = [...new Set([...ownFacIds, ...(staffFac||[]).map(f=>f.facility_id)])];
+  window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
+  const { data: myFacilities } = allFacIds.length ? await sb
+    .from('facilities')
+    .select('id, name, city, district, approved, fields(id, name, price_per_hour, status)')
+    .in('id', allFacIds) : { data: [] };
+  return { user, myFacilities: myFacilities||[], myFieldIds: (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id)) };
+}
+
+async function renderOwnerOverviewTab(){
+  const { myFieldIds } = await getMyFacilitiesData();
+  let pendingCount = 0, totalRevenue = 0, netOwed = 0, nextPayoutDate = '—';
+  const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  if (myFieldIds.length) {
+    const { count } = await sb.from('bookings').select('*', { count:'exact', head:true }).in('field_id', myFieldIds).eq('status', 'pending');
+    pendingCount = count || 0;
+    const { data: earnRows } = await sb.from('bookings').select('total_price').in('field_id', myFieldIds).in('status', ['confirmed','completed']);
+    totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
+    const { data: paidOutRows } = await sb.from('payouts').select('net_amount').eq('owner_id', window.currentUser.id);
+    const alreadyPaidOut = (paidOutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0), 0);
+    const grossNet = totalRevenue * (1 - commissionPct/100);
+    netOwed = Math.max(0, Math.round((grossNet - alreadyPaidOut) * 100) / 100);
+    const now = new Date(); const day = now.getDay();
+    const daysToNext = [ (3-day+7)%7 || 7, (0-day+7)%7 || 7 ].sort((a,b)=>a-b)[0];
+    const nd = new Date(now); nd.setDate(now.getDate() + daysToNext);
+    nextPayoutDate = nd.toLocaleDateString('ar-SA', { weekday:'long', day:'numeric', month:'long' });
+  }
+
+  ownerInner().innerHTML = `
+    <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">مستحق لك (بعد عمولة المنصة ${commissionPct}%)</div>
+      <div style="font-size:32px;font-weight:900;color:var(--brand-deep)">${netOwed} <span style="font-size:16px">ريال</span></div>
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">أقرب تحويل: ${nextPayoutDate}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="stat-click" onclick="ownerGoTab('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:var(--brand)">${pendingCount}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">حجز قيد الانتظار</div>
+      </div>
+      <div class="stat-click" onclick="ownerGoTab('finance')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">إجمالي الإيرادات (ريال)</div>
+      </div>
+    </div>
+    <div class="legal-note">استخدم التبويبات فوق للتنقّل: ملاعبك، حجوزاتك، أكاديمياتك، بطولاتك، ماليتك، وفريقك — كل قسم مستقل بذاته.</div>
+  `;
+}
+
+async function renderOwnerFieldsTab(){
+  const { myFacilities } = await getMyFacilitiesData();
+  const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
+  const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
+  ownerInner().innerHTML = `
+    ${(myFacilities&&myFacilities.length)? myFacilities.map(f=>`
+      <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><b style="font-size:15px">${f.name}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district}، ${f.city}</div></div>
+          <span class="badge ${f.approved?'available':'pending'}" style="font-size:11px">${f.approved? (f.fields||[]).length+' ملعب' : 'بانتظار الموافقة'}</span>
+        </div>
+        ${(f.fields||[]).map(fd=>`
+          <div style="margin-top:8px;padding:10px;background:var(--bg-elev);border-radius:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+              <span>${fd.name}</span>
+              <span style="display:flex;align-items:center;gap:6px">
+                <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
+                <span class="badge ${statusClass[fd.status]||'available'}" style="font-size:10px">${statusLabel[fd.status]||fd.status}</span>
+              </span>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-soft btn-sm" style="flex:1" onclick="editStadiumForm(${fd.id})">✏️ تعديل</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="toggleFieldStatus(${fd.id}, '${fd.status}')">${fd.status==='available' ? '⛔ إغلاق' : '✅ فتح'}</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteField(${fd.id})">🗑️</button>
+            </div>
+            <button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="openWorkingHours(${fd.id})">⏰ أوقات العمل وأيام الإغلاق</button>
+          </div>`).join('')}
+      </div>`).join('') : `
+      <div style="text-align:center;padding:24px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:12px">
+        <div style="font-size:32px;margin-bottom:8px">🏟️</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">لا توجد ملاعب بعد</div>
+        <div style="font-size:12px;color:var(--ink-dim)">أضف أول ملعب لك لتبدأ استقبال الحجوزات</div>
+      </div>`}
+    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>` : ''}
+  `;
+}
+
+async function renderOwnerAcademiesTab(){
+  const { data: { user } } = await sb.auth.getUser();
+  let ownerIds = [user.id];
+  if (!window._isTrueOwner) {
+    const { data: staffFac } = await sb.from('facility_staff').select('facility_id').eq('user_id', user.id);
+    const facIds = (staffFac||[]).map(f=>f.facility_id);
+    if (facIds.length) {
+      const { data: facs } = await sb.from('facilities').select('owner_id').in('id', facIds);
+      ownerIds = [...new Set((facs||[]).map(f=>f.owner_id).filter(Boolean))];
+    } else ownerIds = [];
+  }
+  const { data: myAcad } = ownerIds.length ? await sb.from('academies').select('*').in('owner_id', ownerIds) : { data: [] };
+  ownerInner().innerHTML = `
+    ${(myAcad&&myAcad.length)? myAcad.map(a=>`
+      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><b style="font-size:13px">${a.name}</b><div style="font-size:11px;color:var(--ink-dim)">${a.city} · ${a.monthly_price} ر/شهر</div></div>
+          ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteAcademy(${a.id})">حذف</button>` : ''}
+        </div>
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleAcademySession(${a.id})">⏱️ جدولة موعد تدريب</button>
+      </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد أكاديميات بعد</div>'}
+    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="showAddAcademyForm()">+ إضافة أكاديمية</button>` : ''}
+  `;
+}
+
+async function renderOwnerTournamentsTab(){
+  const { data: { user } } = await sb.auth.getUser();
+  let ownerIds = [user.id];
+  if (!window._isTrueOwner) {
+    const { data: staffFac } = await sb.from('facility_staff').select('facility_id').eq('user_id', user.id);
+    const facIds = (staffFac||[]).map(f=>f.facility_id);
+    if (facIds.length) {
+      const { data: facs } = await sb.from('facilities').select('owner_id').in('id', facIds);
+      ownerIds = [...new Set((facs||[]).map(f=>f.owner_id).filter(Boolean))];
+    } else ownerIds = [];
+  }
+  const { data: myTourn } = ownerIds.length ? await sb.from('tournaments').select('*, tournament_teams(status)').in('owner_id', ownerIds) : { data: [] };
+  ownerInner().innerHTML = `
+    ${(myTourn&&myTourn.length)? myTourn.map(t=>{
+      const confirmed = (t.tournament_teams||[]).filter(x=>x.status==='confirmed').length;
+      return `
+      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><b style="font-size:13px">${t.name}</b><div style="font-size:11px;color:var(--ink-dim)">${t.city} · ${confirmed}/${t.max_teams} فريق · ${t.team_fee} ر/فريق</div></div>
+          ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteTournament(${t.id})">حذف</button>` : ''}
+        </div>
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleMatch(${t.id})">📅 جدولة مباراة</button>
+      </div>`;
+    }).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد بطولات بعد</div>'}
+    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="showAddTournamentForm()">+ إضافة بطولة</button>` : ''}
+  `;
+}
+
+async function renderOwnerFinanceTab(){
+  ownerInner().innerHTML = `
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerAnalytics()">📈 تحليلات الإيرادات</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">💰 التحويلات المستلمة</button>
+    <button class="btn btn-soft btn-block" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
+  `;
+}
+
+async function renderOwnerTeamTab(){
+  ownerInner().innerHTML = `
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerCustomers()">👥 عملائي</button>
+    ${window._isTrueOwner ? `<button class="btn btn-soft btn-block" onclick="showStaffManagement()">🧑‍💼 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف — إدارة الموظفين تخص المالك الحقيقي فقط.</div>`}
+  `;
+}
+
+async function renderOwnerBookingsTab(){
+  const myFieldIds = await getMyFieldIds();
+  if (!myFieldIds.length) { ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
+  const { data, error } = await sb.from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, players_count, profiles(name, phone), fields(name)')
+    .in('field_id', myFieldIds).order('booking_date', { ascending: false });
+  if (error) { ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>'; return; }
+  const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+  ownerInner().innerHTML = data.map(b => `
+    <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
+        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)||''} - ${b.end_time?.slice(0,5)||''} · 👥 ${b.players_count||''} لاعب</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
+        <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
+        <div style="display:flex;gap:6px">
+          ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="ownerSetBookingStatus(${b.id},'cancelled')">إلغاء</button>` : ''}
+          ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="ownerSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
 
 // ── إدارة الموظفين (للمالك الحقيقي فقط) ──
 async function showStaffManagement(){
@@ -2189,7 +2242,7 @@ async function showStaffManagement(){
   const { data: staffRows } = facIds.length ? await sb
     .from('facility_staff').select('id, facility_id, user_id, profiles(name, phone)').in('facility_id', facIds) : { data: [] };
 
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('team')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
   const facOptions = (ownFac||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
 
   bodyEl.innerHTML = backBtn + `
@@ -2242,56 +2295,6 @@ async function removeStaffMember(staffRowId){
 }
 
 // ── إدارة أكاديميات وبطولات صاحب الملعب ──
-async function showMyAcademiesTournaments(){
-  const bodyEl = document.getElementById('ownerBody');
-  document.getElementById('ownerTitle').textContent = '🎓 أكاديمياتي وبطولاتي';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
-  const { data: { user } } = await sb.auth.getUser();
-
-  // صاحب الملعب: owner_id = هو نفسه. الموظف: نجيب مالك المنشأة اللي يعمل فيها ونعرض أكاديميات/بطولات ذلك المالك
-  let ownerIds = [user.id];
-  if (!window._isTrueOwner) {
-    const { data: staffFac } = await sb.from('facility_staff').select('facility_id').eq('user_id', user.id);
-    const facIds = (staffFac||[]).map(f=>f.facility_id);
-    if (facIds.length) {
-      const { data: facs } = await sb.from('facilities').select('owner_id').in('id', facIds);
-      ownerIds = [...new Set((facs||[]).map(f=>f.owner_id).filter(Boolean))];
-    } else {
-      ownerIds = [];
-    }
-  }
-
-  const [{ data: myAcad }, { data: myTourn }] = ownerIds.length ? await Promise.all([
-    sb.from('academies').select('*').in('owner_id', ownerIds),
-    sb.from('tournaments').select('*, tournament_teams(status)').in('owner_id', ownerIds)
-  ]) : [{ data: [] }, { data: [] }];
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
-  bodyEl.innerHTML = backBtn + `
-    <div class="dlabel">🎓 أكاديمياتي</div>
-    ${(myAcad&&myAcad.length)? myAcad.map(a=>`
-      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><b style="font-size:13px">${a.name}</b><div style="font-size:11px;color:var(--ink-dim)">${a.city} · ${a.monthly_price} ر/شهر</div></div>
-          <button class="btn btn-danger btn-sm" onclick="deleteAcademy(${a.id})">حذف</button>
-        </div>
-        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleAcademySession(${a.id})">⏱️ جدولة موعد تدريب</button>
-      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد أكاديميات بعد</div>'}
-
-    <div class="dlabel" style="margin-top:18px">🏆 بطولاتي</div>
-    ${(myTourn&&myTourn.length)? myTourn.map(t=>{
-      const confirmed = (t.tournament_teams||[]).filter(x=>x.status==='confirmed').length;
-      return `
-      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><b style="font-size:13px">${t.name}</b><div style="font-size:11px;color:var(--ink-dim)">${t.city} · ${confirmed}/${t.max_teams} فريق · ${t.team_fee} ر/فريق</div></div>
-          <button class="btn btn-danger btn-sm" onclick="deleteTournament(${t.id})">حذف</button>
-        </div>
-        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleMatch(${t.id})">📅 جدولة مباراة</button>
-      </div>`;
-    }).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد بطولات بعد</div>'}
-  `;
-}
-
 // ── قائمة ملاعب المالك (لاختيارها عند الجدولة) ──
 async function myFieldsOptionsHtml(){
   const { data: { user } } = await sb.auth.getUser();
@@ -2309,7 +2312,7 @@ async function showScheduleAcademySession(academyId){
   const fieldOpts = await myFieldsOptionsHtml();
   const { data: sessions } = await sb.from('academy_sessions').select('id, weekday, start_time, end_time, label, fields(name)').eq('academy_id', academyId);
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="showMyAcademiesTournaments()" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
     <div class="field"><label>الملعب *</label><select id="acs-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
     <div class="field"><label>يوم الأسبوع *</label><select id="acs-weekday" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${WD_NAMES.map((n,i)=>`<option value="${i}">${n}</option>`).join('')}</select></div>
     <div style="display:flex;gap:8px">
@@ -2357,7 +2360,7 @@ async function showScheduleMatch(tournamentId){
   const fieldOpts = await myFieldsOptionsHtml();
   const { data: matches } = await sb.from('tournament_matches').select('id, field_id, match_date, start_time, end_time, team_a, team_b, status, fields(name)').eq('tournament_id', tournamentId).order('match_date');
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="showMyAcademiesTournaments()" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('tournaments')" style="margin-bottom:14px">→ رجوع</button>
     <div class="field"><label>الملعب *</label><select id="tm-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
     <div class="field"><label>التاريخ *</label><input id="tm-date" type="date"></div>
     <div style="display:flex;gap:8px">
@@ -2410,7 +2413,7 @@ async function deleteAcademy(id){
     if (error.code === '23503') { showToast('لا يمكن الحذف: يوجد لاعبون مسجّلون فعليًا في هذه الأكاديمية','error'); return; }
     showToast('تعذّر الحذف: ' + error.message, 'error'); return;
   }
-  showToast('تم الحذف ✓'); showMyAcademiesTournaments();
+  showToast('تم الحذف ✓'); renderOwnerAcademiesTab();
 }
 async function deleteTournament(id){
   if (!confirm('حذف هذه البطولة نهائياً؟')) return;
@@ -2419,7 +2422,7 @@ async function deleteTournament(id){
     if (error.code === '23503') { showToast('لا يمكن الحذف: يوجد فرق مسجّلة فعليًا في هذه البطولة','error'); return; }
     showToast('تعذّر الحذف: ' + error.message, 'error'); return;
   }
-  showToast('تم الحذف ✓'); showMyAcademiesTournaments();
+  showToast('تم الحذف ✓'); renderOwnerTournamentsTab();
 }
 
 function showAddAcademyForm(){
@@ -2433,7 +2436,7 @@ function showAddAcademyForm(){
     <div class="field"><label>الفئات العمرية</label><input id="ac-ages" type="text" placeholder="تحت 12، تحت 16"></div>
     <div class="field"><label>وصف مختصر</label><input id="ac-desc" type="text" placeholder="برنامج تدريبي احترافي"></div>
     <div style="display:flex;gap:10px;margin-top:16px">
-      <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('academies')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveAcademy()">💾 حفظ الأكاديمية</button>
     </div>`;
 }
@@ -2453,7 +2456,7 @@ async function saveAcademy(){
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
   showToast('تمت إضافة الأكاديمية ✓ 🎓');
   loadRealAcademies();
-  openOwnerPanel('owner');
+  ownerGoTab('academies');
 }
 
 function showAddTournamentForm(){
@@ -2468,7 +2471,7 @@ function showAddTournamentForm(){
     <div class="field"><label>تاريخ البداية</label><input id="tn-startdate" type="date"></div>
     <div class="field"><label>وصف مختصر</label><input id="tn-desc" type="text" placeholder="بطولة سداسي"></div>
     <div style="display:flex;gap:10px;margin-top:16px">
-      <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('tournaments')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveTournament()">💾 حفظ البطولة</button>
     </div>`;
 }
@@ -2489,53 +2492,9 @@ async function saveTournament(){
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
   showToast('تمت إضافة البطولة ✓ 🏆');
   loadRealTournaments();
-  openOwnerPanel('owner');
+  ownerGoTab('tournaments');
 }
 // ── حجوزات ملاعب صاحب الملعب (يشوف حجوزات ملاعبه هو فقط، ويتحكم فيها) ──
-async function showOwnerBookings() {
-  const titleEl = document.getElementById('ownerTitle');
-  const bodyEl = document.getElementById('ownerBody');
-  titleEl.textContent = '📅 حجوزات ملاعبي';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
-
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
-
-  const myFieldIds = await getMyFieldIds();
-
-  if (!myFieldIds.length) {
-    bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>';
-    return;
-  }
-
-  const { data, error } = await sb.from('bookings')
-    .select('id, booking_date, start_time, end_time, status, total_price, players_count, profiles(name, phone), fields(name)')
-    .in('field_id', myFieldIds)
-    .order('booking_date', { ascending: false });
-
-  if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
-  if (!data || !data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
-
-  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
-  const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
-
-  bodyEl.innerHTML = backBtn + data.map(b => `
-    <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
-        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
-      </div>
-      <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)||''} - ${b.end_time?.slice(0,5)||''} · 👥 ${b.players_count||''} لاعب</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
-        <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
-        <div style="display:flex;gap:6px">
-          ${b.status==='pending' ? `<button class="btn btn-soft btn-sm" onclick="ownerSetBookingStatus(${b.id},'confirmed')">✅ تأكيد</button>` : ''}
-          ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="ownerSetBookingStatus(${b.id},'cancelled')">إلغاء</button>` : ''}
-          ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="ownerSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
-        </div>
-      </div>
-    </div>`).join('');
-}
-
 async function ownerSetBookingStatus(bookingId, newStatus) {
   const msgs = { confirmed:'تأكيد هذا الحجز؟', cancelled:'إلغاء هذا الحجز؟', completed:'تحديد هذا الحجز كمكتمل؟' };
   if (!confirm(msgs[newStatus] || 'تأكيد العملية؟')) return;
@@ -2554,7 +2513,7 @@ async function ownerSetBookingStatus(bookingId, newStatus) {
   } catch(e){}
 
   showToast('تم التحديث ✓');
-  showOwnerBookings();
+  renderOwnerBookingsTab();
 }
 
 // ── فتح/إغلاق ملعب فورياً ──
@@ -2564,7 +2523,7 @@ async function toggleFieldStatus(fieldId, currentStatus) {
   if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
   showToast(newStatus === 'available' ? 'تم فتح الملعب ✓' : 'تم إغلاق الملعب ✓');
   if (window.loadRealFields) window.loadRealFields();
-  openOwnerPanel('owner');
+  ownerGoTab('fields');
 }
 
 // ── حذف ملعب ──
@@ -2582,7 +2541,7 @@ async function deleteField(fieldId) {
         if (closeErr) { showToast('تعذّر الإغلاق: ' + closeErr.message, 'error'); return; }
         showToast('تم إغلاق الملعب ✓ (سجله محفوظ)');
         if (window.loadRealFields) window.loadRealFields();
-        openOwnerPanel('owner');
+        ownerGoTab('fields');
       }
       return;
     }
@@ -2590,7 +2549,7 @@ async function deleteField(fieldId) {
   }
   showToast('تم حذف الملعب ✓');
   if (window.loadRealFields) window.loadRealFields();
-  openOwnerPanel('owner');
+  ownerGoTab('fields');
 }
 
 // ── تعديل بيانات ملعب موجود ──
@@ -2604,7 +2563,7 @@ async function editStadiumForm(fieldId) {
   const { data: fd, error } = await sb.from('fields')
     .select('id, name, type, price_per_hour, facilities(id, name, city, district, region, lat, lng)')
     .eq('id', fieldId).single();
-  if (error || !fd) { showToast('تعذّر تحميل بيانات الملعب', 'error'); openOwnerPanel('owner'); return; }
+  if (error || !fd) { showToast('تعذّر تحميل بيانات الملعب', 'error'); ownerGoTab('fields'); return; }
 
   newFieldType = fd.type;
   bodyEl.innerHTML = `
@@ -2635,7 +2594,7 @@ async function editStadiumForm(fieldId) {
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px">
-      <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('fields')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="updateStadium(${fd.facilities?.id})">💾 حفظ التعديلات</button>
     </div>
   `;
@@ -2669,7 +2628,7 @@ async function updateStadium(facilityId) {
   showToast('تم حفظ التعديلات ✓ 🏟️');
   editingFieldId = null;
   if (window.loadRealFields) window.loadRealFields();
-  openOwnerPanel('owner');
+  ownerGoTab('fields');
 }
 
 // ── أوقات العمل وأيام الإغلاق لكل ملعب ──
@@ -2693,7 +2652,7 @@ async function openWorkingHours(fieldId) {
   (pricing||[]).forEach(p => pricingByDay[p.weekday] = p.price);
 
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('fields')" style="margin-bottom:14px">→ رجوع للوحة</button>
 
     <div class="dlabel">🕐 أوقات العمل الأسبوعية</div>
     ${WEEKDAY_NAMES.map((name,i)=>{
@@ -2760,7 +2719,7 @@ async function showOwnerAnalytics(){
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
 
   const fieldIds = await getMyFieldIds();
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
   if (!fieldIds.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك التحليلات</div>'; return; }
 
   const since = new Date(Date.now() - 13*24*60*60*1000).toISOString().split('T')[0];
@@ -2811,7 +2770,7 @@ async function showOwnerCustomers(){
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
 
   const fieldIds = await getMyFieldIds();
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('team')" style="margin-bottom:14px">→ رجوع</button>`;
   if (!fieldIds.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً ليظهر لك عملاؤك</div>'; return; }
 
   const { data: bookings } = await sb.from('bookings')
@@ -2892,12 +2851,94 @@ async function removeBlackout(id) {
   openWorkingHours(whFieldId);
 }
 
+// ════════════════ لوحة المالك — نظام تبويبات منظّم ════════════════
+const ADMIN_TABS = [
+  {key:'overview', label:'🏠 نظرة عامة'},
+  {key:'users', label:'👥 المستخدمون'},
+  {key:'facilities', label:'🏟️ المنشآت'},
+  {key:'bookings', label:'📅 الحجوزات'},
+  {key:'finance', label:'💰 المالية'},
+  {key:'reviews', label:'⭐ التقييمات'},
+  {key:'integrations', label:'🔌 التكاملات'},
+];
+function adminTabsHtml(active){
+  return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
+    ${ADMIN_TABS.map(t=>`<button onclick="adminGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${t.label}</button>`).join('')}
+  </div>`;
+}
+async function adminGoTab(tab){
+  document.getElementById('ownerTitle').textContent = '🛡️ لوحة تحكم المالك';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+  document.getElementById('ownerBody').innerHTML = adminTabsHtml(tab) + '<div id="adminTabInner" style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  switch(tab){
+    case 'overview':     await renderAdminOverviewTab(); break;
+    case 'users':        await adminView('users'); break;
+    case 'facilities':   await adminView('facilities'); break;
+    case 'bookings':     await adminView('bookings'); break;
+    case 'reviews':      await adminView('reviews'); break;
+    case 'finance':      await renderAdminFinanceTab(); break;
+    case 'integrations': await renderAdminIntegrationsTab(); break;
+  }
+}
+
+async function renderAdminOverviewTab(){
+  const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFacCount }, { data: earnRows }] = await Promise.all([
+    sb.from('profiles').select('*', { count: 'exact', head: true }),
+    sb.from('facilities').select('*', { count: 'exact', head: true }),
+    sb.from('bookings').select('*', { count: 'exact', head: true }),
+    sb.from('facilities').select('*', { count: 'exact', head: true }).eq('approved', false),
+    sb.from('bookings').select('total_price').in('status', ['confirmed','completed']),
+  ]);
+  const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
+
+  document.getElementById('adminTabInner').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="stat-click" onclick="adminGoTab('users')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--brand)">${usersCount||0}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">مستخدم</div></div>
+      <div class="stat-click" onclick="adminGoTab('facilities')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--flood)">${facCount||0}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">منشأة</div></div>
+      <div class="stat-click" onclick="adminGoTab('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--brand)">${bookCount||0}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">حجز</div></div>
+    </div>
+    ${pendingFacCount>0 ? `
+    <div class="stat-click" onclick="adminView('approvals')" style="background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;font-weight:700">⏳ ${pendingFacCount} منشأة بانتظار موافقتك</span>
+      <span style="font-size:12px">راجع الآن ←</span>
+    </div>` : ''}
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:14px">
+      <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue} ريال</div>
+      <div style="font-size:12px;color:var(--ink-dim)">إجمالي إيرادات المنصة (المؤكدة + المكتملة)</div>
+    </div>
+    <button class="btn btn-soft btn-block" onclick="showBroadcastForm()">📢 إرسال إشعار جماعي</button>
+  `;
+}
+
+async function renderAdminFinanceTab(){
+  document.getElementById('adminTabInner').innerHTML = `
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('analytics')">📈 تحليلات الإيرادات</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('commission')">⚙️ نسبة عمولة المنصة</button>
+    <button class="btn btn-soft btn-block" onclick="adminView('payouts')">💸 تنفيذ التحويلات المستحقة</button>
+  `;
+}
+
+async function renderAdminIntegrationsTab(){
+  document.getElementById('adminTabInner').innerHTML = `
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('sms')">📱 بوابة الرسائل النصية</button>
+    <button class="btn btn-soft btn-block" onclick="adminView('payment')">💳 بوابة الدفع الإلكتروني</button>
+  `;
+}
+
 async function adminView(kind) {
   const titleEl = document.getElementById('ownerTitle');
-  const bodyEl = document.getElementById('ownerBody');
+  const bodyEl = document.getElementById('adminTabInner') || document.getElementById('ownerBody');
   bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
 
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('admin')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const parentTabOf = { users:'users', facilities:'facilities', bookings:'bookings', reviews:'reviews',
+    sms:'integrations', payment:'integrations', analytics:'finance', commission:'finance', payouts:'finance', approvals:'facilities' };
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="adminGoTab('${parentTabOf[kind]||'overview'}')" style="margin-bottom:14px">→ رجوع</button>`;
 
   if (kind === 'users') {
     titleEl.textContent = '👥 المستخدمون';
@@ -3164,7 +3205,7 @@ async function showOwnerCoupons(){
   const { data: { user } } = await sb.auth.getUser();
   const fieldOpts = await myFieldsOptionsHtml();
   const { data: coupons } = await sb.from('coupons').select('*, fields(name)').eq('owner_id', user.id).order('created_at',{ascending:false});
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
 
   bodyEl.innerHTML = backBtn + `
     <div class="legal-note" style="margin-bottom:14px">💡 الخصم يُحسم من نصيبك أنت — عمولة المنصة تبقى محسوبة على السعر بعد الخصم بنفس النسبة الثابتة.</div>
@@ -3238,7 +3279,7 @@ async function showOwnerPayouts(){
 
   const { data: { user } } = await sb.auth.getUser();
   const { data: payoutsRows } = await sb.from('payouts').select('*').eq('owner_id', user.id).order('created_at',{ascending:false});
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
 
   bodyEl.innerHTML = backBtn + (payoutsRows&&payoutsRows.length ? payoutsRows.map(p=>`
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
@@ -3344,10 +3385,10 @@ async function rejectFacility(facilityId){
 
 // ── إشعار جماعي (Broadcast) ──
 function showBroadcastForm(){
-  const bodyEl = document.getElementById('ownerBody');
+  const bodyEl = document.getElementById('adminTabInner') || document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '📢 إرسال إشعار جماعي';
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('admin')" style="margin-bottom:14px">→ رجوع للوحة</button>
+    <button class="btn btn-ghost btn-sm" onclick="adminGoTab('overview')" style="margin-bottom:14px">→ رجوع</button>
     <div class="field">
       <label>إرسال إلى</label>
       <select id="bc-target" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
@@ -3508,7 +3549,7 @@ async function showAddStadiumForm() {
       <div id="st-image-preview" style="margin-top:8px"></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px">
-      <button class="btn btn-ghost" style="flex:1" onclick="openOwnerPanel('owner')">إلغاء</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('fields')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveStadium()">💾 حفظ الملعب</button>
     </div>
   `;
@@ -3598,7 +3639,7 @@ async function saveStadium() {
 
   showToast(isNewFacility ? 'تمت الإضافة ✓ بانتظار موافقة المالك على المنشأة الجديدة' : 'تمت إضافة الملعب ونُشر فورًا ✓ 🏟️');
   if (!isNewFacility && window.loadRealFields) window.loadRealFields();
-  openOwnerPanel('owner');
+  ownerGoTab('fields');
 }
 
 function previewStadiumImg(input) {
