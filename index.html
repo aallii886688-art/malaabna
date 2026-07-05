@@ -368,10 +368,6 @@ html[data-theme="dark"] .legal-body h4{color:var(--brand)}
 .toast.error{border-right-color:var(--danger)}
 @keyframes tin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 
-.mmenu{position:fixed;top:0;left:0;right:0;z-index:590;background:var(--bg-elev);border-bottom:1px solid var(--line);padding:80px 30px 30px;transform:translateY(-100%);transition:transform .3s;display:flex;flex-direction:column;gap:4px}
-.mmenu.open{transform:translateY(0)}
-.mmenu a{padding:14px;font-size:16px;font-weight:600;border-radius:10px}
-.mmenu a:hover{background:var(--bg-soft)}
 
 .stat-click{cursor:pointer;transition:transform .15s,border-color .15s}
 .stat-click:hover{transform:translateY(-3px);border-color:var(--brand)}
@@ -410,7 +406,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 <body>
 
 <nav class="nav" id="nav">
-  <div class="brand"><div class="brand-logo">⚽</div> ملاعبنا</div>
+  <div class="brand"><div class="brand-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22" stroke="#0a1408" stroke-width="1.6"/><circle cx="12" cy="12" r="5.2" stroke="#0a1408" stroke-width="1.6"/><circle cx="12" cy="12" r="1.4" fill="#0a1408"/></svg></div> ملاعبنا</div>
   <div class="nav-links">
     <a onclick="goMod('stadiums')">الملاعب</a>
     <a onclick="goMod('academies')">الأكاديميات</a>
@@ -423,17 +419,9 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
       <div class="knob" id="knob">☀️</div>
     </div>
     <div id="navAuth" style="opacity:0;transition:opacity .15s ease"></div>
-    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+    <button class="menu-btn" onclick="openSidebar()">☰</button>
   </div>
 </nav>
-
-<div class="mmenu" id="mmenu">
-  <a onclick="goMod('stadiums');toggleMenu()">🏟️ الملاعب</a>
-  <a onclick="goMod('academies');toggleMenu()">🎓 الأكاديميات</a>
-  <a onclick="goMod('tournaments');toggleMenu()">🏆 البطولات</a>
-  <a onclick="goMod('openmatches');toggleMenu()">🤝 أكمل الفريق</a>
-  <a onclick="scrollToId('map');toggleMenu()">📍 الخريطة</a>
-</div>
 
 <section class="hero">
   <div class="hero-inner">
@@ -587,7 +575,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 <footer>
   <div class="fgrid">
     <div>
-      <div class="fbrand"><div class="brand-logo" style="width:32px;height:32px;font-size:16px">⚽</div> ملاعبنا</div>
+      <div class="fbrand"><div class="brand-logo" style="width:32px;height:32px;font-size:16px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22" stroke="#0a1408" stroke-width="1.8"/><circle cx="12" cy="12" r="5.2" stroke="#0a1408" stroke-width="1.8"/><circle cx="12" cy="12" r="1.4" fill="#0a1408"/></svg></div> ملاعبنا</div>
       <p class="fdesc">منصة حجز الملاعب والأكاديميات والبطولات في جميع مناطق المملكة العربية السعودية. احجز، قسّم، والعب بدون تعقيد.</p>
       <div style="margin-top:14px"><span class="vat-badge">🔒 دفع إلكتروني آمن</span></div>
     </div>
@@ -944,7 +932,7 @@ function renderActive(){
     const isStadium = currentMod==='stadiums';
     const isTourney = currentMod==='tournaments';
     const cta = isStadium ? 'احجز' : isTourney ? 'سجّل فريقك' : 'سجّل ابنك';
-    const ratingBadge = it.rating>0 ? `<div class="tag-tl">⭐ ${it.rating}</div>` : isTourney ? `<div class="tag-tl">🏆 ${it.teams}</div>` : `<div class="tag-tl">🆕 جديد</div>`;
+    const ratingBadge = it.rating>0 ? `<div class="tag-tl" onclick="event.stopPropagation();showItemReviews('${currentMod}',${it.id})" style="cursor:pointer">⭐ ${it.rating}</div>` : isTourney ? `<div class="tag-tl">🏆 ${it.teams}</div>` : `<div class="tag-tl">🆕 جديد</div>`;
     const priceLbl = isStadium ? 'ر/ساعة' : isTourney ? 'ر/فريق' : 'ر/شهر';
     const mediaContent = it.image
       ? `<img src="${it.image}" alt="${it.name}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
@@ -1055,7 +1043,7 @@ async function renderStadiumDrawer(){
     <div class="dmedia">${s.image?`<img src="${s.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:s.icon}</div>
     <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
     <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
-    <div class="irow">⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
+    <div class="irow" ${s.reviewCount ? `onclick="showItemReviews('stadiums',${s.id})" style="cursor:pointer"` : ''}>⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
     <div class="irow">💰 <b>${window.effectivePrice} ريال</b> / الساعة${priceNote}</div>
     ${(s.amenities && s.amenities.length) ? `
     <div class="dlabel" style="margin:16px 0 10px">✨ مميزات الملعب</div>
@@ -1406,7 +1394,6 @@ async function loadRealStarOfWeek(){
 function scrollToId(id){ document.getElementById(id).scrollIntoView({behavior:'smooth'}); }
 function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); }
 function closeAll(){ ['ov','drawer','mConfirm','mAuth','mLegal','mOwner','sidebar'].forEach(id=>document.getElementById(id).classList.remove('open')); }
-function toggleMenu(){ document.getElementById('mmenu').classList.toggle('open'); }
 function showToast(msg,type='success'){ const t=document.createElement('div'); t.className=`toast ${type}`;
   t.innerHTML=`<span>${type==='success'?'✅':'⚠️'}</span><span>${msg}</span>`;
   document.getElementById('toasts').appendChild(t); setTimeout(()=>t.remove(),3600); }
@@ -1910,10 +1897,32 @@ async function loadRealTournaments(){
 }
 
 function openSidebar() {
-  if (!window.currentUser) return;
   const u = window.currentUser;
-  const isOwnerOrAdmin = (u.role === 'owner' || u.role === 'staff' || u.role === 'super_admin');
-  document.getElementById('sidebarContent').innerHTML = `
+  const isOwnerOrAdmin = u && (u.role === 'owner' || u.role === 'staff' || u.role === 'super_admin');
+  const navLinksHtml = `
+    <div class="side-links">
+      <a class="side-link" onclick="sideGo('nav-stadiums')"><span class="si">🏟️</span> الملاعب</a>
+      <a class="side-link" onclick="sideGo('nav-academies')"><span class="si">🎓</span> الأكاديميات</a>
+      <a class="side-link" onclick="sideGo('nav-tournaments')"><span class="si">🏆</span> البطولات</a>
+      <a class="side-link" onclick="sideGo('nav-openmatches')"><span class="si">🤝</span> أكمل الفريق</a>
+      <a class="side-link" onclick="sideGo('nav-map')"><span class="si">📍</span> الخريطة</a>
+    </div>
+    <div class="side-sep"></div>`;
+
+  if (!u) {
+    document.getElementById('sidebarContent').innerHTML = navLinksHtml + `
+      <div class="side-links">
+        <a class="side-link" onclick="sideGo('do-login')"><span class="si">🔑</span> تسجيل الدخول</a>
+        <a class="side-link" onclick="sideGo('contact')"><span class="si">✉️</span> تواصل معنا</a>
+        <a class="side-link" onclick="sideGo('about')"><span class="si">ℹ️</span> عن الموقع</a>
+        <a class="side-link" onclick="sideGo('terms')"><span class="si">📄</span> الشروط والأحكام</a>
+      </div>`;
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('ov').classList.add('open');
+    return;
+  }
+
+  document.getElementById('sidebarContent').innerHTML = navLinksHtml + `
     <div class="side-head">
       ${avatarHtml(u.avatarUrl, u.initial, 'width:52px;height:52px;font-size:22px')}
       <div>
@@ -1945,6 +1954,12 @@ function closeSidebar(){ document.getElementById('sidebar').classList.remove('op
 async function sideGo(where) {
   closeSidebar();
   switch(where) {
+    case 'nav-stadiums':     goMod('stadiums'); break;
+    case 'nav-academies':    goMod('academies'); break;
+    case 'nav-tournaments':  goMod('tournaments'); break;
+    case 'nav-openmatches':  goMod('openmatches'); break;
+    case 'nav-map':          scrollToId('map'); break;
+    case 'do-login':         openAuth('login'); break;
     case 'profile':       showProfile(); break;
     case 'bookings':      showMyBookings(); break;
     case 'registrations': showMyRegistrations(); break;
@@ -2098,6 +2113,33 @@ function setupStarPicker(){
     window._rateStars = n; paint(n);
   };
 }
+// ── عرض التقييمات الحقيقية لملعب/أكاديمية/بطولة عند الضغط على شارة التقييم ──
+async function showItemReviews(kind, itemId){
+  openInfoModal('⭐ التقييمات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  if (!window.sb) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--ink-dim);padding:14px">يتطلب اتصال قاعدة بيانات</div>'; return; }
+  const col = kind === 'stadiums' ? 'field_id' : kind === 'academies' ? 'academy_id' : 'tournament_id';
+  const { data, error } = await sb.from('reviews').select('rating, comment, created_at, profiles(name)').eq(col, itemId).order('created_at', { ascending:false });
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
+
+  const avg = Math.round((data.reduce((s,r)=>s+r.rating,0)/data.length)*10)/10;
+  document.getElementById('ownerBody').innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:28px;font-weight:900;color:var(--flood)">${avg} ⭐</div>
+      <div style="font-size:12px;color:var(--ink-dim)">${data.length} تقييم</div>
+    </div>
+    ${data.map(r=>`
+      <div style="padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:13px">${r.profiles?.name || 'لاعب'}</b>
+          <span style="color:var(--flood);font-size:13px">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
+        </div>
+        ${r.comment ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">${r.comment}</div>` : ''}
+        <div style="font-size:10.5px;color:var(--ink-dim);margin-top:6px">${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</div>
+      </div>`).join('')}
+  `;
+}
+
 async function submitReview(bookingId, fieldId) {
   const comment = document.getElementById('rv-comment').value.trim();
   const { data: { user } } = await sb.auth.getUser();
@@ -2335,7 +2377,7 @@ function showContact() {
 function showAbout() {
   openInfoModal('ℹ️ عن ملاعبنا', `
     <div style="text-align:center;padding:10px">
-      <div class="brand-logo" style="width:56px;height:56px;font-size:26px;margin:0 auto 14px">⚽</div>
+      <div class="brand-logo" style="width:56px;height:56px;font-size:26px;margin:0 auto 14px"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22" stroke="#0a1408" stroke-width="1.4"/><circle cx="12" cy="12" r="5.2" stroke="#0a1408" stroke-width="1.4"/><circle cx="12" cy="12" r="1.4" fill="#0a1408"/></svg></div>
       <div style="font-size:18px;font-weight:800;margin-bottom:8px">ملاعبنا</div>
       <div style="font-size:13.5px;color:var(--ink-soft);line-height:1.9">
         منصة سعودية لحجز الملاعب الرياضية والأكاديميات والبطولات.
