@@ -1090,6 +1090,7 @@ const LEGAL = {
     <h4>٣. الإلغاء قبل أقل من 6 ساعات أو عدم الحضور</h4><p>لا يوجد استرجاع.</p>
     <h4>٤. الإلغاء من الملعب</h4><p>إذا ألغى صاحب الملعب الحجز، يُسترد كامل المبلغ فورًا للاعب بغض النظر عن التوقيت.</p>
     <h4>٥. رسوم غير قابلة للاسترجاع</h4><p>رسوم بوابة الدفع في جميع الأحوال لا تُسترجع.</p>
+    <h4>٦. الحجز الذي لم يكتمل دفعه</h4><p>إذا لم يكتمل دفع الحجز (فرديًا أو قطة) قبل بداية وقت التمرين، يُلغى تلقائيًا ويُسترجع أي مبلغ سبق دفعه بالكامل (100%) — هذا الحجز لم يتأكد أصلاً، فلا تنطبق عليه نسب الإلغاء أعلاه.</p>
     <div class="legal-note">⚠️ مدة ظهور المبلغ المسترجع في حسابك البنكي تعتمد على بنكك وبوابة الدفع (عادة 3-14 يوم عمل).</div>` },
   pricing: { t:"سياسة الأسعار", html:`
     <h4>١. العملة</h4><p>جميع الأسعار بالريال السعودي (SAR).</p>
@@ -1788,11 +1789,15 @@ async function showMyBookings() {
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
       <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)} - ${b.end_time?.slice(0,5)}</div>
+      ${(!b.is_split && b.status==='pending' && b.payment_status==='unpaid') ? `
+        <div style="font-size:11px;color:var(--danger);margin-top:5px">⚠️ لم يكتمل الدفع بعد — سيُلغى الحجز تلقائيًا عند بداية وقت التمرين إذا لم يتم الدفع</div>
+      ` : ''}
       ${b.is_split ? `
         <div style="background:var(--bg-elev);border-radius:8px;height:8px;overflow:hidden;margin-top:9px">
           <div style="height:100%;width:${pct}%;background:var(--brand)"></div>
         </div>
         <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">تم دفع ${b.amount_paid} من ${b.total_price} ريال (${pct}%)</div>
+        ${(b.status==='pending' && b.payment_status!=='paid') ? `<div style="font-size:11px;color:var(--danger);margin-top:3px">⚠️ يُلغى الحجز تلقائيًا ويُسترجع المدفوع بالكامل إذا لم يكتمل قبل بداية وقت التمرين</div>` : ''}
       ` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
         <span style="color:var(--flood);font-weight:800">${b.total_price} ريال</span>
