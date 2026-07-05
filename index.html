@@ -1548,8 +1548,8 @@ function initBackend() {
     else if (role === 'owner' || role === 'staff') roleBadge = '<span style="font-size:10px;color:var(--brand);font-weight:700">🏟️ صاحب ملعب</span>';
 
     document.getElementById('navAuth').innerHTML = `
-      <div class="nav-user" onclick="openSidebar()" style="cursor:pointer">
-        <div class="av">${initial}</div>
+      <div class="nav-user" onclick="openSidebar()" style="cursor:pointer;position:relative">
+        <div class="av" style="position:relative">${initial}<span id="navNotifDot" style="display:none;position:absolute;top:-2px;left:-2px;width:9px;height:9px;border-radius:50%;background:var(--danger);border:1.5px solid var(--bg)"></span></div>
         <div style="display:flex;flex-direction:column;line-height:1.1">
           <span>${name.split(' ')[0]}</span>${roleBadge}
         </div>
@@ -1560,7 +1560,8 @@ function initBackend() {
     if (role === 'super_admin') showToast('مرحباً بك أيها المالك 🛡️');
     else if (role === 'owner' || role === 'staff') showToast('مرحباً 🏟️');
 
-    if (role === 'super_admin' || role === 'owner' || role === 'staff') startNotificationsWatch();
+    // إشعارات لحظية حقيقية (Realtime) لكل الأدوار — كان يقتصر خطأً على المالك وصاحب الملعب فقط
+    startNotificationsWatch(user.id);
   }
   window.afterLogin = afterLogin;
 
@@ -2046,9 +2047,14 @@ async function showNotifications() {
   } else {
     document.getElementById('ownerBody').innerHTML = data.map(n=>`
       <div style="padding:13px;background:${n.is_read?'var(--bg-soft)':'var(--brand-soft)'};border:1px solid var(--line);border-radius:11px;margin-bottom:8px">
-        <div style="font-weight:700;font-size:14px">${n.title}</div>
-        ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${n.body}</div>`:''}
-        <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <span style="font-size:18px;flex-shrink:0">${notifIcon(n.title)}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px">${n.title}</div>
+            ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${n.body}</div>`:''}
+            <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
+          </div>
+        </div>
       </div>`).join('');
   }
   await sb.from('notifications').update({ is_read: true }).eq('is_read', false);
@@ -2058,19 +2064,45 @@ async function showNotifications() {
 async function refreshSideNotifBadge() {
   try {
     const { count } = await sb.from('notifications').select('*', { count:'exact', head:true }).eq('is_read', false);
-    const badge = document.getElementById('sideNotifBadge');
-    if (badge) {
-      if (count && count>0) { badge.textContent = count; badge.style.display='inline-block'; }
-      else badge.style.display='none';
+    const sideBadge = document.getElementById('sideNotifBadge');
+    if (sideBadge) {
+      if (count && count>0) { sideBadge.textContent = count; sideBadge.style.display='inline-block'; }
+      else sideBadge.style.display='none';
     }
+    const navBadge = document.getElementById('navNotifDot');
+    if (navBadge) navBadge.style.display = (count && count>0) ? 'block' : 'none';
   } catch(e){}
 }
 
+// أيقونة مناسبة لكل نوع إشعار حسب كلمات مفتاحية بعنوانه (لتمييز بصري سريع بالقائمة)
+function notifIcon(title){
+  if (!title) return '🔔';
+  if (title.includes('تأكيد') || title.includes('مؤكد')) return '✅';
+  if (title.includes('إلغاء') || title.includes('ألغى')) return '❌';
+  if (title.includes('تحويل') || title.includes('دفع') || title.includes('مستحق')) return '💰';
+  if (title.includes('حجز جديد')) return '📅';
+  if (title.includes('ترقية') || title.includes('موظف')) return '👥';
+  return '🔔';
+}
+
 let notifTimer = null;
-function startNotificationsWatch() {
-  if (notifTimer) clearInterval(notifTimer);
+let notifRealtimeChannel = null;
+function startNotificationsWatch(userId){
   refreshSideNotifBadge();
-  notifTimer = setInterval(refreshSideNotifBadge, 30000);
+
+  // إشعارات لحظية حقيقية عبر Supabase Realtime — تظهر فورًا بدون انتظار أي تحديث دوري
+  if (notifRealtimeChannel) sb.removeChannel(notifRealtimeChannel);
+  notifRealtimeChannel = sb.channel('notifications-' + userId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
+      const n = payload.new;
+      showToast(`${notifIcon(n.title)} ${n.title}`);
+      refreshSideNotifBadge();
+    })
+    .subscribe();
+
+  // احتياط بسيط لو انقطع الاتصال اللحظي لأي سبب (شبكة ضعيفة، إلخ)
+  if (notifTimer) clearInterval(notifTimer);
+  notifTimer = setInterval(refreshSideNotifBadge, 60000);
 }
 
 function shareSite() {
@@ -2116,6 +2148,7 @@ function showAbout() {
 async function doLogout() {
   if (!confirm('هل تريد تسجيل الخروج؟')) return;
   if (notifTimer) clearInterval(notifTimer);
+  if (notifRealtimeChannel) { sb.removeChannel(notifRealtimeChannel); notifRealtimeChannel = null; }
   await sb.auth.signOut();
   window.currentUser = null;
   loggedIn = false;
@@ -3195,16 +3228,16 @@ async function adminView(kind) {
 
   else if (kind === 'payment') {
     titleEl.textContent = '💳 بوابة الدفع الإلكتروني';
-    const { data: payRows } = await sb.from('payments').select('*, bookings(id)').order('created_at',{ascending:false}).limit(30);
-    const activated = (payRows||[]).some(p=>p.status==='paid'||p.status==='initiated');
+    const { data: payRows } = await sb.from('booking_payments').select('*').order('created_at',{ascending:false}).limit(30);
+    const activated = (payRows||[]).some(p=>p.status==='paid');
     bodyEl.innerHTML = backBtn + `
       <div class="legal-note">
-        ${activated ? '✅ البوابة متصلة (Moyasar).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب تاجر في <b>moyasar.com</b>، وانشر Edge Functions باسم <code>create-payment</code> و<code>payment-webhook</code> (الكود جاهز في مجلد edge-functions)، وأضف مفتاحك كـ Secret باسم <code>MOYASAR_SECRET_KEY</code>.'}
+        ${activated ? '✅ البوابة متصلة وتعمل فعليًا (Moyasar).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب تاجر في <b>moyasar.com</b>، وأضف مفتاحك كـ Secret باسم <code>MOYASAR_SECRET_KEY</code> في Project Settings → Edge Functions.'}
       </div>
       <div class="dlabel">📋 آخر عمليات الدفع</div>
       ${(payRows&&payRows.length)? payRows.map(p=>`
         <div style="display:flex;justify-content:space-between;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
-          <span>حجز #${p.booking_id} — ${p.amount} ر</span>
+          <span>حجز #${p.booking_id} — ${p.amount} ر ${p.is_organizer?'(منظّم)':'(مشارك)'}</span>
           <span class="badge ${p.status==='paid'?'available':p.status==='failed'?'closed':'pending'}" style="font-size:10px">${p.status}</span>
         </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد عمليات دفع بعد</div>'}
     `;
