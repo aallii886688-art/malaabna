@@ -771,6 +771,15 @@ function amenityBadgesHtml(amenities, max){
   return shown + extra;
 }
 
+// صورة رمزية للمستخدم: افتراضية (ذكر/أنثى) أو صورة شخصية مرفوعة أو حرف الاسم كحل أخير
+function avatarHtml(avatarUrl, initial, sizeStyle){
+  sizeStyle = sizeStyle || '';
+  if (avatarUrl === 'default:male') return `<div class="av" style="${sizeStyle};background:#2b6cb0;font-size:inherit">👨</div>`;
+  if (avatarUrl === 'default:female') return `<div class="av" style="${sizeStyle};background:#b83280;font-size:inherit">👩</div>`;
+  if (avatarUrl && avatarUrl.startsWith('http')) return `<div class="av" style="${sizeStyle};padding:0;overflow:hidden"><img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`;
+  return `<div class="av" style="${sizeStyle}">${initial}</div>`;
+}
+
 // تحويل الوقت من صيغة 24 ساعة (المخزّنة بالقاعدة) إلى صيغة 12 ساعة بصباحًا/مساءً (الأنسب للمستخدم السعودي)
 function formatTime12(t){
   if (!t) return '';
@@ -1579,7 +1588,7 @@ function initBackend() {
     if (!user) return;
 
     const { data: profile } = await sb
-      .from('profiles').select('name, role, phone').eq('id', user.id).single();
+      .from('profiles').select('name, role, phone, avatar_url').eq('id', user.id).single();
 
     const name = profile?.name || user.user_metadata?.name || 'مستخدم';
     let role = profile?.role || 'customer';
@@ -1593,7 +1602,7 @@ function initBackend() {
     } catch(e){}
     if (isStaffMember && role === 'customer') role = 'staff';
 
-    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial, isStaffMember };
+    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial, isStaffMember, avatarUrl: profile?.avatar_url || null };
 
     let roleBadge = '';
     if (role === 'super_admin') roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
@@ -1601,7 +1610,7 @@ function initBackend() {
 
     document.getElementById('navAuth').innerHTML = `
       <div class="nav-user" onclick="openSidebar()" style="cursor:pointer;position:relative">
-        <div class="av" style="position:relative">${initial}<span id="navNotifDot" style="display:none;position:absolute;top:-2px;left:-2px;width:9px;height:9px;border-radius:50%;background:var(--danger);border:1.5px solid var(--bg)"></span></div>
+        <div style="position:relative">${avatarHtml(profile?.avatar_url, initial, 'position:relative')}<span id="navNotifDot" style="display:none;position:absolute;top:-2px;left:-2px;width:9px;height:9px;border-radius:50%;background:var(--danger);border:1.5px solid var(--bg);z-index:2"></span></div>
         <div style="display:flex;flex-direction:column;line-height:1.1">
           <span>${name.split(' ')[0]}</span>${roleBadge}
         </div>
@@ -1866,7 +1875,7 @@ function openSidebar() {
   const isOwnerOrAdmin = (u.role === 'owner' || u.role === 'staff' || u.role === 'super_admin');
   document.getElementById('sidebarContent').innerHTML = `
     <div class="side-head">
-      <div class="av" style="width:52px;height:52px;font-size:22px">${u.initial}</div>
+      ${avatarHtml(u.avatarUrl, u.initial, 'width:52px;height:52px;font-size:22px')}
       <div>
         <div style="font-size:16px;font-weight:800">${u.name}</div>
         <div style="font-size:12px;color:var(--ink-dim)">${u.phone || ''}</div>
@@ -1918,15 +1927,50 @@ function openInfoModal(title, html) {
 function showProfile() {
   const u = window.currentUser;
   openInfoModal('👤 الملف الشخصي', `
-    <div style="text-align:center;margin-bottom:20px">
-      <div class="av" style="width:70px;height:70px;font-size:30px;margin:0 auto 10px">${u.initial}</div>
-      <div style="font-size:18px;font-weight:800">${u.name}</div>
+    <div style="text-align:center;margin-bottom:16px">
+      <div id="profileAvatarBox">${avatarHtml(u.avatarUrl, u.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto')}</div>
+      <div style="font-size:18px;font-weight:800;margin-top:10px">${u.name}</div>
     </div>
-    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px">
+    <div class="dlabel" style="justify-content:center">🖼️ الصورة الرمزية</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">
+      <button class="btn btn-soft btn-sm" onclick="setDefaultAvatar('default:male')">👨 افتراضية (ذكر)</button>
+      <button class="btn btn-soft btn-sm" onclick="setDefaultAvatar('default:female')">👩 افتراضية (أنثى)</button>
+    </div>
+    <label class="btn btn-ghost btn-block btn-sm" style="cursor:pointer;display:block;text-align:center">
+      📷 ارفع صورتك الشخصية
+      <input id="avatar-upload-input" type="file" accept="image/*" style="display:none" onchange="uploadPersonalAvatar(this)">
+    </label>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px">
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">الاسم</span><b>${u.name}</b></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">رقم الجوال</span><b>${u.phone||'—'}</b></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--ink-dim)">نوع الحساب</span><b>${u.role==='super_admin'?'🛡️ مالك':u.role==='owner'?'🏟️ صاحب ملعب':'⚽ لاعب'}</b></div>
     </div>`);
+}
+
+async function setDefaultAvatar(kind){
+  const { error } = await sb.from('profiles').update({ avatar_url: kind }).eq('id', window.currentUser.id);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  window.currentUser.avatarUrl = kind;
+  document.getElementById('profileAvatarBox').innerHTML = avatarHtml(kind, window.currentUser.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto');
+  showToast('تم تحديث الصورة الرمزية ✓');
+  if (typeof afterLogin === 'function') afterLogin();
+}
+
+async function uploadPersonalAvatar(input){
+  const file = input.files?.[0];
+  if (!file) return;
+  showToast('جارٍ رفع الصورة...');
+  try {
+    const base64 = await fileToBase64(file);
+    const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
+    if (upErr || !uploadRes?.url) { showToast('تعذّر رفع الصورة: ' + (uploadRes?.error||'خطأ غير معروف'), 'error'); return; }
+    const { error } = await sb.from('profiles').update({ avatar_url: uploadRes.url }).eq('id', window.currentUser.id);
+    if (error) { showToast('تعذّر الحفظ: ' + error.message, 'error'); return; }
+    window.currentUser.avatarUrl = uploadRes.url;
+    document.getElementById('profileAvatarBox').innerHTML = avatarHtml(uploadRes.url, window.currentUser.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto');
+    showToast('تم تحديث صورتك الشخصية ✓');
+    if (typeof afterLogin === 'function') afterLogin();
+  } catch(e) { showToast('تعذّر رفع الصورة', 'error'); }
 }
 
 async function showMyBookings() {
