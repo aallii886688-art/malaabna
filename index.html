@@ -889,8 +889,11 @@ function renderActive(){
     const cta = isStadium ? 'احجز' : isTourney ? 'سجّل فريقك' : 'سجّل ابنك';
     const ratingBadge = it.rating>0 ? `<div class="tag-tl">⭐ ${it.rating}</div>` : isTourney ? `<div class="tag-tl">🏆 ${it.teams}</div>` : `<div class="tag-tl">🆕 جديد</div>`;
     const priceLbl = isStadium ? 'ر/ساعة' : isTourney ? 'ر/فريق' : 'ر/شهر';
+    const mediaContent = it.image
+      ? `<img src="${it.image}" alt="${it.name}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
+      : it.icon;
     return `<div class="card" onclick="openItem('${currentMod}',${it.id})">
-      <div class="card-media">${it.icon}${ratingBadge}<div class="tag-tr">${it.region}</div></div>
+      <div class="card-media">${mediaContent}${ratingBadge}<div class="tag-tr">${it.region}</div></div>
       <div class="card-b">
         <div class="card-name">${it.name}</div>
         <div class="card-loc">📍 ${it.loc}، ${it.region}</div>
@@ -964,7 +967,7 @@ async function renderStadiumDrawer(){
 
   if (avail.dayClosed) {
     document.getElementById('drawerBody').innerHTML = `
-      <div class="dmedia">${s.icon}</div>
+      <div class="dmedia">${s.image?`<img src="${s.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:s.icon}</div>
       <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
       <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
       <div class="dlabel">📅 اختر اليوم</div>
@@ -992,7 +995,7 @@ async function renderStadiumDrawer(){
   const myShare = bookingMode==='split' ? split.sharePerPlayer : totalForSplit;
 
   document.getElementById('drawerBody').innerHTML = `
-    <div class="dmedia">${s.icon}</div>
+    <div class="dmedia">${s.image?`<img src="${s.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:s.icon}</div>
     <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
     <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
     <div class="irow">⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
@@ -1724,7 +1727,7 @@ function initBackend() {
     initRealMap();
     const { data, error } = await sb
       .from('fields')
-      .select('id, name, type, price_per_hour, facilities!inner(name, city, district, region, lat, lng, approved)')
+      .select('id, name, type, price_per_hour, image_url, facilities!inner(name, city, district, region, lat, lng, approved)')
       .eq('status', 'available')
       .eq('is_deleted', false)
       .eq('facilities.approved', true);
@@ -1759,7 +1762,8 @@ function initBackend() {
         rating: rv ? Math.round((rv.sum/rv.count)*10)/10 : 0,
         reviewCount: rv ? rv.count : 0,
         tags: [f.type === 'natural' ? 'عشب طبيعي' : f.type === 'indoor' ? 'مغلق' : 'عشب صناعي'],
-        icon: '🏟️'
+        icon: '🏟️',
+        image: f.image_url || null
       };
     });
     if (currentMod === 'stadiums') renderActive();
@@ -2685,7 +2689,7 @@ async function editStadiumForm(fieldId) {
   bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
 
   const { data: fd, error } = await sb.from('fields')
-    .select('id, name, type, price_per_hour, facilities(id, name, city, district, region, lat, lng)')
+    .select('id, name, type, price_per_hour, image_url, facilities(id, name, city, district, region, lat, lng)')
     .eq('id', fieldId).single();
   if (error || !fd) { showToast('تعذّر تحميل بيانات الملعب', 'error'); ownerGoTab('fields'); return; }
 
@@ -2709,6 +2713,11 @@ async function editStadiumForm(fieldId) {
       </div>
     </div>
     <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" value="${fd.price_per_hour}"></div>
+    <div class="field">
+      <label>صورة الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — ارفع صورة جديدة لتغيير الحالية)</span></label>
+      <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
+      <div id="st-image-preview" style="margin-top:8px">${fd.image_url ? `<img src="${fd.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">` : ''}</div>
+    </div>
     <div class="field">
       <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(اضغط لتحديث الموقع)</span></label>
       <div id="pickerMap" style="height:220px;border-radius:12px;overflow:hidden;border:1px solid var(--line)"></div>
@@ -2735,11 +2744,22 @@ async function updateStadium(facilityId) {
   const price    = parseFloat(document.getElementById('st-price').value);
   const latVal   = parseFloat(document.getElementById('st-lat')?.value);
   const lngVal   = parseFloat(document.getElementById('st-lng')?.value);
+  const imgFile  = document.getElementById('st-image')?.files?.[0];
 
   if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
 
   showToast('جارٍ الحفظ...');
+
+  let imageUrl = null;
+  if (imgFile) {
+    try {
+      const base64 = await fileToBase64(imgFile);
+      const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
+      if (!upErr && uploadRes?.url) imageUrl = uploadRes.url;
+      else if (uploadRes?.error) { showToast('تعذّر رفع الصورة: ' + uploadRes.error, 'error'); return; }
+    } catch(e){ console.log('تعذّر رفع الصورة:', e); }
+  }
 
   const facUpdate = { city, district, region };
   if (!isNaN(latVal)) facUpdate.lat = latVal;
@@ -2747,8 +2767,10 @@ async function updateStadium(facilityId) {
   const { error: facErr } = await sb.from('facilities').update(facUpdate).eq('id', facilityId);
   if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
 
+  const fldUpdate = { name, type: newFieldType, price_per_hour: price };
+  if (imageUrl) fldUpdate.image_url = imageUrl;
   const { error: fldErr } = await sb.from('fields')
-    .update({ name, type: newFieldType, price_per_hour: price })
+    .update(fldUpdate)
     .eq('id', editingFieldId);
   if (fldErr) { showToast('تعذّر الحفظ: ' + fldErr.message,'error'); return; }
 
