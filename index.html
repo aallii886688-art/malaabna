@@ -1613,6 +1613,7 @@ function initBackend() {
       .from('fields')
       .select('id, name, type, price_per_hour, facilities!inner(name, city, district, region, lat, lng, approved)')
       .eq('status', 'available')
+      .eq('is_deleted', false)
       .eq('facilities.approved', true);
     if (error || !data || data.length === 0) {
       console.log('ℹ️ لا توجد ملاعب في قاعدة البيانات بعد — عرض البيانات التجريبية');
@@ -2052,8 +2053,10 @@ async function getMyFacilitiesData(){
   window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
   const { data: myFacilities } = allFacIds.length ? await sb
     .from('facilities')
-    .select('id, name, city, district, approved, fields(id, name, price_per_hour, status)')
+    .select('id, name, city, district, approved, fields(id, name, price_per_hour, status, is_deleted)')
     .in('id', allFacIds) : { data: [] };
+  // ملاحظة: myFieldIds يشمل كل الملاعب (حتى المحذوفة) عمدًا — حتى تبقى حساباتك المالية وسجل حجوزاتك دقيقة.
+  // الملاعب المحذوفة تُخفى فقط من قائمة "ملاعبي" النشطة، لا من حساباتك.
   return { user, myFacilities: myFacilities||[], myFieldIds: (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id)) };
 }
 
@@ -2100,10 +2103,12 @@ async function renderOwnerOverviewTab(){
 
 async function renderOwnerFieldsTab(){
   const { myFacilities } = await getMyFacilitiesData();
+  // اعرض فقط الملاعب غير المحذوفة في هذي القائمة النشطة (الملاعب المحذوفة تبقى في السجلات المالية فقط)
+  const visibleFacilities = myFacilities.map(f => ({ ...f, fields: (f.fields||[]).filter(fd => !fd.is_deleted) }));
   const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
   const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
   ownerInner().innerHTML = `
-    ${(myFacilities&&myFacilities.length)? myFacilities.map(f=>`
+    ${(visibleFacilities&&visibleFacilities.length)? visibleFacilities.map(f=>`
       <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div><b style="font-size:15px">${f.name}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district}، ${f.city}</div></div>
@@ -2528,28 +2533,30 @@ async function toggleFieldStatus(fieldId, currentStatus) {
 
 // ── حذف ملعب ──
 async function deleteField(fieldId) {
-  if (!confirm('حذف هذا الملعب نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+  if (!confirm('حذف هذا الملعب؟ لو كان له حجوزات سابقة، سيُحفظ سجله (باسم مُعلَّم "محذوف") للحماية القانونية والمالية، ويختفي فورًا من لوحتك ومن الموقع.')) return;
+
   const { error } = await sb.from('fields').delete().eq('id', fieldId);
-  if (error) {
-    if (error.code === '23503' || error.message.includes('bookings_field_id_fkey')) {
-      const wantsClose = confirm(
-        'لا يمكن حذف هذا الملعب لأن له حجوزات مسجّلة عليه (نحافظ على سجل الحجوزات والإيرادات).\n\n' +
-        'هل تريد إغلاق الملعب بدلاً من ذلك؟ (يختفي من الحجز الجديد فورًا، مع بقاء سجله محفوظًا)'
-      );
-      if (wantsClose) {
-        const { error: closeErr } = await sb.from('fields').update({ status: 'closed' }).eq('id', fieldId);
-        if (closeErr) { showToast('تعذّر الإغلاق: ' + closeErr.message, 'error'); return; }
-        showToast('تم إغلاق الملعب ✓ (سجله محفوظ)');
-        if (window.loadRealFields) window.loadRealFields();
-        ownerGoTab('fields');
-      }
-      return;
-    }
-    showToast('تعذّر الحذف: ' + error.message, 'error'); return;
+  if (!error) {
+    showToast('تم حذف الملعب نهائيًا ✓ (لا سجلات سابقة عليه)');
+    if (window.loadRealFields) window.loadRealFields();
+    ownerGoTab('fields');
+    return;
   }
-  showToast('تم حذف الملعب ✓');
-  if (window.loadRealFields) window.loadRealFields();
-  ownerGoTab('fields');
+
+  if (error.code === '23503' || error.message.includes('bookings_field_id_fkey')) {
+    // حذف آمن: يبقى السجل موثّقًا للحجوزات/الإيرادات القديمة، لكنه يختفي من كل مكان فعّال
+    const { data: current } = await sb.from('fields').select('name').eq('id', fieldId).single();
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${current?.name||'ملعب'} (محذوف)`;
+    const { error: softErr } = await sb.from('fields')
+      .update({ name: markedName, status: 'closed', is_deleted: true })
+      .eq('id', fieldId);
+    if (softErr) { showToast('تعذّر الحذف: ' + softErr.message, 'error'); return; }
+    showToast('تم حذف الملعب ✓ — سجل حجوزاته السابقة محفوظ للحماية المالية والقانونية');
+    if (window.loadRealFields) window.loadRealFields();
+    ownerGoTab('fields');
+    return;
+  }
+  showToast('تعذّر الحذف: ' + error.message, 'error');
 }
 
 // ── تعديل بيانات ملعب موجود ──
@@ -2960,8 +2967,9 @@ async function adminView(kind) {
 
   else if (kind === 'facilities') {
     titleEl.textContent = '🏟️ المنشآت';
-    const { data, error } = await sb.from('facilities').select('id, name, city, district, profiles(name, phone), fields(price_per_hour, status)');
-    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    const { data: rawData, error } = await sb.from('facilities').select('id, name, city, district, is_deleted, profiles(name, phone), fields(price_per_hour, status)');
+    const data = (rawData||[]).filter(f => !f.is_deleted);
+    if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
     if (!data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد منشآت بعد</div>'; return; }
     bodyEl.innerHTML = backBtn + data.map(f => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
@@ -3453,17 +3461,30 @@ async function adminSetBookingStatus(bookingId, newStatus) {
 }
 
 async function adminDeleteFacility(facilityId) {
-  if (!confirm('حذف هذه المنشأة وكل ملاعبها نهائياً؟ لا يمكن التراجع.')) return;
+  if (!confirm('حذف هذه المنشأة؟ لو كان لملاعبها حجوزات سابقة، سيُحفظ سجلها (معلَّمة "محذوف") للحماية القانونية والمالية، وتختفي فورًا من الموقع.')) return;
+
   const { error } = await sb.from('facilities').delete().eq('id', facilityId);
-  if (error) {
-    if (error.code === '23503') {
-      showToast('لا يمكن الحذف: هذه المنشأة لها حجوزات حقيقية مسجّلة. أغلق ملاعبها بدلاً من حذف المنشأة كاملة','error');
-      return;
-    }
-    showToast('تعذّر الحذف: ' + error.message, 'error'); return;
+  if (!error) {
+    showToast('تم حذف المنشأة نهائيًا ✓ (لا سجلات سابقة عليها)');
+    adminView('facilities');
+    return;
   }
-  showToast('تم الحذف ✓');
-  adminView('facilities');
+
+  if (error.code === '23503') {
+    const { data: current } = await sb.from('facilities').select('name').eq('id', facilityId).single();
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${current?.name||'منشأة'} (محذوف)`;
+    const { error: softErr } = await sb.from('facilities')
+      .update({ name: markedName, is_deleted: true, approved: false })
+      .eq('id', facilityId);
+    if (softErr) { showToast('تعذّر الحذف: ' + softErr.message, 'error'); return; }
+    // أغلق كل ملاعبها أيضًا حتى تختفي فعليًا من الموقع العام
+    await sb.from('fields').update({ status: 'closed' }).eq('facility_id', facilityId);
+    showToast('تم حذف المنشأة ✓ — سجل حجوزاتها السابقة محفوظ للحماية المالية والقانونية');
+    if (window.loadRealFields) window.loadRealFields();
+    adminView('facilities');
+    return;
+  }
+  showToast('تعذّر الحذف: ' + error.message, 'error');
 }
 
 async function ownerControl(userId, newRole) {
