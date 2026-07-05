@@ -444,7 +444,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
       <div class="hero-stats">
         <div class="hstat"><div class="n"><span>1,240</span>+</div><div class="l">حجز هذا الشهر</div></div>
         <div class="hstat"><div class="n"><span>8</span></div><div class="l">ملاعب وأكاديميات</div></div>
-        <div class="hstat"><div class="n"><span>0%</span></div><div class="l">ضريبة مضافة</div></div>
+        <div class="hstat"><div class="n"><span>100%</span></div><div class="l">دفع إلكتروني آمن</div></div>
       </div>
     </div>
     <div class="hero-visual" style="position:relative">
@@ -571,7 +571,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     <div>
       <div class="fbrand"><div class="brand-logo" style="width:32px;height:32px;font-size:16px">⚽</div> ملاعبنا</div>
       <p class="fdesc">منصة حجز الملاعب والأكاديميات والبطولات في منطقة عسير. احجز، قسّم، والعب بدون تعقيد.</p>
-      <div style="margin-top:14px"><span class="vat-badge">🧾 أسعار صافية · 0% VAT</span></div>
+      <div style="margin-top:14px"><span class="vat-badge">🔒 دفع إلكتروني آمن</span></div>
     </div>
     <div>
       <div class="fh">المنصة</div>
@@ -698,6 +698,8 @@ const timeSlots = ["14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:0
 
 let currentMod = 'stadiums';
 let appliedCoupon = null, finalBookingPrice = null;
+let bookingMode = 'solo';
+function setBookingMode(m){ bookingMode = m; renderStadiumDrawer(); }
 let active = null, activeType = null;
 let selDate = 0, selSlot = null, playerCount = 6, payMethod = 'mada';
 let loggedIn = false, authMode = 'login';
@@ -708,7 +710,7 @@ function calculateSmartSplit(totalPrice, playersCount){
   if(playersCount <= 0) return { error:"يجب تحديد عدد اللاعبين بشكل صحيح" };
   const sharePerPlayer = totalPrice / playersCount;
   const finalShare = Math.round(sharePerPlayer * 100) / 100;
-  return { totalAmount:totalPrice, numberOfPlayers:playersCount, sharePerPlayer:finalShare, currency:"SAR", taxRate:"0% VAT" };
+  return { totalAmount:totalPrice, numberOfPlayers:playersCount, sharePerPlayer:finalShare, currency:"SAR" };
 }
 
 async function applyCoupon(basePrice){
@@ -720,6 +722,7 @@ async function applyCoupon(basePrice){
 
   const { data: coupon, error } = await sb.from('coupons').select('*').eq('code', code).eq('active', true).maybeSingle();
   if (error || !coupon) { msgEl.textContent = 'كود غير صحيح أو منتهي'; msgEl.style.color='var(--danger)'; appliedCoupon=null; finalBookingPrice=null; updateCouponUI(basePrice); return; }
+  if (coupon.field_id && active && coupon.field_id !== active.id) { msgEl.textContent = 'هذا الكود غير صالح لهذا الملعب'; msgEl.style.color='var(--danger)'; return; }
   if (coupon.expires_at && coupon.expires_at < new Date().toISOString().split('T')[0]) { msgEl.textContent = 'انتهت صلاحية هذا الكود'; msgEl.style.color='var(--danger)'; return; }
   if (coupon.max_uses && coupon.used_count >= coupon.max_uses) { msgEl.textContent = 'تم استنفاد هذا الكود'; msgEl.style.color='var(--danger)'; return; }
 
@@ -814,7 +817,7 @@ async function openItem(type, id){
   activeType = type;
   active = DATA[type].find(x=>x.id===id);
   selDate=0; selSlot=null; playerCount=6;
-  appliedCoupon=null; finalBookingPrice=null;
+  appliedCoupon=null; finalBookingPrice=null; bookingMode='solo';
   if(type==='stadiums') await renderStadiumDrawer();
   else renderSimpleDrawer();
   document.getElementById('ov').classList.add('open');
@@ -890,9 +893,12 @@ async function renderStadiumDrawer(){
     return `<div class="slot ${tk?'taken':sl?'sel':'free'}" ${tk?'':`onclick="setSlot('${t}')"`}>${t}</div>`; }).join('');
 
   window.effectivePrice = avail.priceOverride!=null ? avail.priceOverride : s.price;
-  const split = calculateSmartSplit(window.effectivePrice, playerCount);
+  const totalForSplit = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : window.effectivePrice;
+  const split = calculateSmartSplit(totalForSplit, playerCount);
   const canBook = !!selSlot;
   const priceNote = avail.priceOverride!=null ? ` <span style="font-size:11px;color:var(--flood)">(سعر ${dayNames[weekday]})</span>` : '';
+
+  const myShare = bookingMode==='split' ? split.sharePerPlayer : totalForSplit;
 
   document.getElementById('drawerBody').innerHTML = `
     <div class="dmedia">${s.icon}</div>
@@ -906,8 +912,15 @@ async function renderStadiumDrawer(){
     <div class="dlabel">⏱️ اختر الوقت المتاح</div>
     <div class="slots">${slots || '<div style="grid-column:1/-1;text-align:center;color:var(--ink-dim);padding:14px">لا توجد أوقات معرّفة لهذا اليوم</div>'}</div>
 
+    <div class="dlabel">💳 طريقة الدفع</div>
+    <div class="pays" style="margin-bottom:0">
+      <div class="pay ${bookingMode==='solo'?'sel':''}" id="mode-solo" onclick="setBookingMode('solo')"><div class="ic">🧍</div>أدفع كامل المبلغ</div>
+      <div class="pay ${bookingMode==='split'?'sel':''}" id="mode-split" onclick="setBookingMode('split')"><div class="ic">🤝</div>قطة مع أصحابي</div>
+    </div>
+
+    ${bookingMode==='split' ? `
     <div class="split-box">
-      <div class="split-head">🤝 القطة الذكية — تقسيم التكلفة</div>
+      <div class="split-head">🤝 أدفع نصيبي فقط، والباقي عبر رابط</div>
       <div class="split-ctrl">
         <span class="lbl">عدد اللاعبين</span>
         <div class="stepper">
@@ -917,10 +930,12 @@ async function renderStadiumDrawer(){
         </div>
       </div>
       <div class="split-result">
-        <span class="each">نصيب كل لاعب</span>
+        <span class="each">نصيبك أنت (تدفعه الآن)</span>
         <span class="amt">${split.sharePerPlayer} <span style="font-size:13px">ر</span></span>
       </div>
     </div>
+    <div class="legal-note">بعد الدفع، بتحصل رابط تشاركه مع الباقين ليكمّلوا المبلغ. الحجز يتأكد فقط بعد اكتمال المبلغ بالكامل.</div>
+    ` : ''}
 
     <div class="field" style="display:flex;gap:8px;align-items:flex-end;margin-top:14px">
       <div style="flex:1"><label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px">لديك كود خصم؟</label><input id="coupon-code" type="text" placeholder="مثال: RAMADAN20" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13px"></div>
@@ -932,12 +947,12 @@ async function renderStadiumDrawer(){
       <div class="srow"><span>الملعب</span><span>${s.name}</span></div>
       <div class="srow"><span>الوقت</span><span>${selSlot? selSlot+' - '+(parseInt(selSlot)+1)+':00' : '— اختر وقتًا —'}</span></div>
       <div class="srow" id="couponRow" style="display:none"><span>خصم الكوبون</span><span id="couponDiscount">0 ر</span></div>
-      <div class="srow"><span>الضريبة</span><span>0% VAT</span></div>
-      <div class="srow tot"><span>الإجمالي</span><span class="amt" id="finalPrice">${window.effectivePrice} ريال</span></div>
+      ${bookingMode==='split' ? `<div class="srow"><span>الإجمالي الكامل</span><span>${totalForSplit} ريال</span></div>` : ''}
+      <div class="srow tot"><span>${bookingMode==='split' ? 'تدفعه أنت الآن' : 'الإجمالي'}</span><span class="amt" id="finalPrice">${myShare} ريال</span></div>
     </div>
 
     <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()" ${canBook?'':'disabled'}>
-      ${canBook? '💳 متابعة الدفع' : 'اختر وقتًا أولًا'}
+      ${canBook? (bookingMode==='split' ? '💳 ادفع نصيبك واحصل على الرابط' : '💳 ادفع وأكّد الحجز') : 'اختر وقتًا أولًا'}
     </button>`;
 
   // استعد حالة الكوبون المطبّق (إن وُجد) بعد إعادة الرسم، حتى يبقى السعر المعروض مطابقًا للمبلغ الفعلي
@@ -977,7 +992,6 @@ function renderSimpleDrawer(){
 
     <div class="summary">
       <div class="srow"><span>${priceLbl}</span><span>${it.price} ريال</span></div>
-      <div class="srow"><span>الضريبة</span><span>0% VAT</span></div>
       <div class="srow tot"><span>الإجمالي</span><span class="amt">${it.price} ريال</span></div>
     </div>
     <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()">💳 متابعة الدفع</button>`;
@@ -1003,7 +1017,6 @@ function proceed(){
     <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
     ${isStadium? `<div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
     ${extraRow}
-    <div class="r"><span>الضريبة</span><b>0% VAT</b></div>
     <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق عند الملعب</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
   `;
   const btn = document.querySelector('#mConfirm .btn-brand');
@@ -1027,7 +1040,7 @@ function finalizePayment(){
     ${isStadium? `<div class="r"><span>التاريخ</span><b>${dateStr}</b></div><div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
     <div class="r"><span>رقم الحجز</span><b class="mono">#${Math.floor(10000+Math.random()*89999)}</b></div>
     <div class="r"><span>طريقة الدفع</span><b>عند الملعب (نقدًا / تحويل)</b></div>
-    <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق</span><b style="color:var(--flood);font-size:16px">${it.price} ريال · 0% VAT</b></div>
+    <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
   `;
   const btn = document.querySelector('#mConfirm .btn-brand');
   btn.textContent = 'تم';
@@ -1072,15 +1085,16 @@ const LEGAL = {
     <h4>٤. حقوقك</h4><p>يحق لك الاطلاع على بياناتك أو طلب حذفها في أي وقت.</p>
     <div class="legal-note">⚠️ راجِع متطلبات نظام حماية البيانات الشخصية السعودي (PDPL) مع مختص قبل الاعتماد.</div>` },
   refund: { t:"سياسة الإلغاء والاسترداد", html:`
-    <h4>١. الإلغاء من اللاعب</h4><p>عند الإلغاء ضمن المهلة المسموحة، يُعاد المبلغ آليًا إلى محفظتك الإلكترونية في المنصة.</p>
-    <h4>٢. الإلغاء من الملعب</h4><p>إذا ألغى الملعب الحجز، يُسترد كامل المبلغ فورًا وتلقائيًا لمحفظة اللاعب.</p>
-    <h4>٣. مدة المعالجة</h4><p>تتم إعادة المبالغ للمحفظة فورًا، والتحويل البنكي خلال المدة المعتادة لبوابة الدفع.</p>
-    <div class="legal-note">⚠️ آلية الاسترداد الفعلية تعتمد على بوابة الدفع المرخّصة. تُضبط التفاصيل عند التكامل مع البوابة.</div>` },
+    <h4>١. الإلغاء قبل 24 ساعة أو أكثر من الموعد</h4><p>استرجاع كامل المبلغ (100%) مباشرة إلى بطاقتك عبر بوابة الدفع.</p>
+    <h4>٢. الإلغاء بين 6 و24 ساعة من الموعد</h4><p>استرجاع نصف المبلغ (50%).</p>
+    <h4>٣. الإلغاء قبل أقل من 6 ساعات أو عدم الحضور</h4><p>لا يوجد استرجاع.</p>
+    <h4>٤. الإلغاء من الملعب</h4><p>إذا ألغى صاحب الملعب الحجز، يُسترد كامل المبلغ فورًا للاعب بغض النظر عن التوقيت.</p>
+    <h4>٥. رسوم غير قابلة للاسترجاع</h4><p>رسوم بوابة الدفع في جميع الأحوال لا تُسترجع.</p>
+    <div class="legal-note">⚠️ مدة ظهور المبلغ المسترجع في حسابك البنكي تعتمد على بنكك وبوابة الدفع (عادة 3-14 يوم عمل).</div>` },
   pricing: { t:"سياسة الأسعار", html:`
     <h4>١. العملة</h4><p>جميع الأسعار بالريال السعودي (SAR).</p>
-    <h4>٢. الضريبة</h4><p>تُعرض الأسعار صافية. يظهر معدل 0% VAT في الفواتير الحالية.</p>
-    <h4>٣. الشفافية</h4><p>لا توجد رسوم خفية. السعر الظاهر عند الحجز هو السعر النهائي.</p>
-    <div class="legal-note">⚠️ مهم: الإعفاء من ضريبة القيمة المضافة ليس تلقائيًا. يرتبط بحد التسجيل الإلزامي (375,000 ريال سنويًا) وقواعد هيئة الزكاة والضريبة والجمارك. راجِع محاسبًا قانونيًا للتأكد من وضعك الضريبي قبل إصدار فواتير بـ 0%.</div>` },
+    <h4>٢. الشفافية</h4><p>لا توجد رسوم خفية. السعر الظاهر عند الحجز هو السعر النهائي الذي تدفعه.</p>
+    <div class="legal-note">⚠️ الأسعار قد تشمل أو لا تشمل الضريبة حسب الوضع الضريبي لصاحب الملعب — راجع صاحب الملعب أو محاسبك للتفاصيل.</div>` },
 };
 function openLegal(key){
   const L = LEGAL[key];
@@ -1208,6 +1222,72 @@ window.addEventListener('scroll',()=>document.getElementById('nav').classList.to
 
 renderActive();
 setTimeout(()=>{ if (typeof initRealMap==='function') initRealMap(); }, 0);
+
+// ── رابط "أكمل القطة" — صفحة عامة بدون حساب ──
+(function checkJoinLink(){
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('join');
+  if (token) setTimeout(()=>openJoinPage(token), 300);
+})();
+
+async function openJoinPage(token){
+  if (!window.sb) { showToast('الرابط يحتاج اتصال قاعدة بيانات فعّال','error'); return; }
+  document.getElementById('ownerTitle').textContent = '🤝 أكمل القطة';
+  document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+
+  try {
+    const { data, error } = await sb.functions.invoke('share-link-info', { body: { token } });
+    if (error || data?.error) {
+      document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">${data?.error || 'تعذّر تحميل الرابط'}</div>`;
+      return;
+    }
+    const pct = Math.min(100, Math.round((data.amount_paid/data.total_price)*100));
+    document.getElementById('ownerBody').innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:800">${data.field_name||'ملعب'}</div>
+        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">${data.facility_name||''} · ${data.city||''}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">📅 ${data.date} · ⏱️ ${(data.start_time||'').slice(0,5)} - ${(data.end_time||'').slice(0,5)}</div>
+      </div>
+      <div style="background:var(--bg-soft);border-radius:10px;height:10px;overflow:hidden;margin-bottom:8px">
+        <div style="height:100%;width:${pct}%;background:var(--brand)"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-dim);margin-bottom:18px">
+        <span>تم دفع ${data.amount_paid} ريال</span><span>الإجمالي ${data.total_price} ريال</span>
+      </div>
+      <div class="summary" style="margin-bottom:16px">
+        <div class="srow tot"><span>المبلغ المتبقي</span><span class="amt">${data.remaining} ريال</span></div>
+      </div>
+      <div class="field"><label>اسمك *</label><input id="join-name" type="text" placeholder="اسمك"></div>
+      <div class="field"><label>المبلغ اللي بتدفعه (ريال) *</label><input id="join-amount" type="number" value="${data.remaining}" max="${data.remaining}" min="1"></div>
+      <button class="btn btn-brand btn-block btn-lg" onclick="submitJoinPayment('${token}', ${data.remaining})">💳 ادفع الآن</button>
+    `;
+  } catch(e) {
+    document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">تعذّر الاتصال بالخادم</div>';
+  }
+}
+
+async function submitJoinPayment(token, remaining){
+  const name = document.getElementById('join-name').value.trim();
+  const amount = parseFloat(document.getElementById('join-amount').value);
+  if (!name) { showToast('أدخل اسمك','error'); return; }
+  if (!amount || amount <= 0 || amount > remaining + 0.01) { showToast('أدخل مبلغاً صحيحاً لا يتجاوز المتبقي','error'); return; }
+
+  try {
+    const { data: info, error: infoErr } = await sb.functions.invoke('share-link-info', { body: { token } });
+    if (infoErr || info?.error) { showToast(info?.error || 'الرابط لم يعد صالحًا','error'); return; }
+
+    showToast('جارٍ تجهيز صفحة الدفع...');
+    const { data, error } = await sb.functions.invoke('create-payment', {
+      body: { booking_id: info.booking_id, amount, payer_name: name, is_organizer: false }
+    });
+    if (error || data?.error) { showToast(data?.error || 'تعذّر تجهيز الدفع','error'); return; }
+    window.location.href = data.payment_url;
+  } catch(e) {
+    showToast('تعذّر الاتصال ببوابة الدفع','error');
+  }
+}
 
 // يُستدعى فقط بعد أن نتأكد فعلياً أن لا توجد جلسة نشطة —
 // هذا يمنع "ومضة" ظهور زر الدخول ثم اختفائه عند من هو مسجّل دخول أصلاً
@@ -1403,18 +1483,26 @@ function initBackend() {
       const today = new Date(); today.setDate(today.getDate() + selDate);
       const dateStr = today.toISOString().split('T')[0];
       const basePrice = window.effectivePrice != null ? window.effectivePrice : active.price;
-      const bookedPrice = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePrice;
+      const totalPrice = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePrice;
+      const isSplit = bookingMode === 'split';
+      const myShareAmount = isSplit ? Math.round((totalPrice/playerCount)*100)/100 : totalPrice;
+      const shareToken = isSplit ? (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2))) : null;
 
-      const { data: newBooking, error } = await sb.from('bookings').insert({
+      const insertPayload = {
         user_id: user.id,
         field_id: active.id,
         booking_date: dateStr,
         start_time: selSlot,
         end_time: (parseInt(selSlot)+1)+':00',
         players_count: playerCount,
-        total_price: bookedPrice,
-        status: 'pending'
-      }).select().single();
+        total_price: totalPrice,
+        status: 'pending',
+        is_split: isSplit,
+        payment_status: 'unpaid'
+      };
+      if (shareToken) insertPayload.share_link_token = shareToken;
+
+      const { data: newBooking, error } = await sb.from('bookings').insert(insertPayload).select().single();
 
       if (error) {
         if (error.message.includes('BOOKING_OVERLAP')) {
@@ -1445,11 +1533,14 @@ function initBackend() {
         const ownerId = fieldInfo?.facilities?.owner_id;
         if (ownerId) {
           await sb.from('notifications').insert({
-            user_id: ownerId, title: 'حجز جديد 📅',
+            user_id: ownerId, title: 'حجز جديد (بانتظار الدفع) 📅',
             body: `حجز جديد في ${fieldInfo.name} بتاريخ ${dateStr} الساعة ${selSlot}`
           });
         }
       } catch(e){}
+
+      await startRealPayment(newBooking.id, myShareAmount, true, user.user_metadata?.name || 'اللاعب', shareToken);
+      return;
     }
 
     else if (activeType === 'academies') {
@@ -1458,13 +1549,16 @@ function initBackend() {
       const playerName = document.getElementById('reg-player-name')?.value.trim();
       const playerAge  = parseInt(document.getElementById('reg-player-age')?.value);
       if (!playerName) { showToast('أدخل اسم اللاعب','error'); return; }
-      const { error } = await sb.from('academy_enrollments').insert({
+      const { data: enroll, error } = await sb.from('academy_enrollments').insert({
         academy_id: active.id, user_id: user.id, player_name: playerName, player_age: isNaN(playerAge)?null:playerAge, status:'pending'
-      });
+      }).select().single();
       if (error) {
         if (error.code === '23503') { showToast('هذي أكاديمية تجريبية غير موجودة فعليًا بعد','error'); return; }
         showToast('تعذّر التسجيل: ' + error.message,'error'); return;
       }
+      showToast('تم التسجيل ✓ الدفع الإلكتروني للأكاديميات والبطولات قريبًا');
+      closeAll();
+      return;
     }
 
     else if (activeType === 'tournaments') {
@@ -1480,37 +1574,35 @@ function initBackend() {
         if (error.code === '23503') { showToast('هذي بطولة تجريبية غير موجودة فعليًا بعد','error'); return; }
         showToast('تعذّر التسجيل: ' + error.message,'error'); return;
       }
+      showToast('تم التسجيل ✓ الدفع الإلكتروني للأكاديميات والبطولات قريبًا');
+      closeAll();
+      return;
     }
-    _proceedUI();
   };
 
-  function _proceedUI() {
-    const it = active;
-    const isStadium = activeType === 'stadiums';
-    const basePriceUI = (isStadium && window.effectivePrice!=null) ? window.effectivePrice : it.price;
-    const displayPrice = (isStadium && appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePriceUI;
-    let extraRow = '';
-    if (isStadium) {
-      const split = calculateSmartSplit(displayPrice, playerCount);
-      extraRow = `<div class="r"><span>نصيب كل لاعب (${playerCount})</span><b>${split.sharePerPlayer} ر</b></div>`;
+  // ── يبدأ عملية دفع إلكتروني حقيقية عبر Moyasar، ويحوّل المستخدم لصفحة الدفع ──
+  async function startRealPayment(bookingId, amount, isOrganizer, payerName, shareToken) {
+    showToast('جارٍ تجهيز صفحة الدفع...');
+    try {
+      const { data, error } = await sb.functions.invoke('create-payment', {
+        body: { booking_id: bookingId, amount, payer_name: payerName, is_organizer: isOrganizer }
+      });
+      if (error || data?.error) {
+        showToast((data?.error || 'تعذّر تجهيز الدفع') + ' — راجع لوحة المالك لتفعيل بوابة الدفع', 'error');
+        closeAll();
+        return;
+      }
+      if (shareToken) {
+        try { await navigator.clipboard.writeText(window.location.origin + '?join=' + shareToken); } catch(e){}
+        showToast('تم نسخ رابط إكمال القطة ✓ شاركه بعد إتمام دفعتك');
+      }
+      window.location.href = data.payment_url;
+    } catch(e) {
+      showToast('تعذّر الاتصال ببوابة الدفع','error');
+      closeAll();
     }
-    document.getElementById('confirmTitle').textContent = 'تم حفظ حجزك ✓';
-    document.getElementById('confirmText').textContent = 'الدفع الإلكتروني غير مفعّل بعد على المنصة — احجزك محفوظ فعليًا، وتدفع نقدًا أو تحويلًا عند وصولك للملعب.';
-    document.querySelector('#mConfirm .micon').textContent = '📝';
-    document.getElementById('receipt').innerHTML = `
-      <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
-      ${isStadium ? `<div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
-      ${extraRow}
-      ${appliedCoupon ? `<div class="r"><span>كوبون</span><b class="mono">${appliedCoupon.code}</b></div>` : ''}
-      <div class="r"><span>الضريبة</span><b>0% VAT</b></div>
-      <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق عند الملعب</span><b style="color:var(--flood);font-size:16px">${displayPrice} ريال</b></div>`;
-    const btn = document.querySelector('#mConfirm .btn-brand');
-    btn.textContent = `تم`;
-    btn.onclick = closeAll;
-    closeDrawer();
-    document.getElementById('mConfirm').classList.add('open');
-    document.getElementById('ov').classList.add('open');
   }
+  window.startRealPayment = startRealPayment;
 
   loadRealFields();
   loadRealAcademies();
@@ -1669,7 +1761,7 @@ async function showMyBookings() {
   openInfoModal('📅 حجوزاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const { data, error } = await sb
     .from('bookings')
-    .select('id, field_id, booking_date, start_time, end_time, status, total_price, fields(name, facilities(name, city))')
+    .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, fields(name, facilities(name, city))')
     .order('booking_date', { ascending: false });
   if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
@@ -1683,24 +1775,41 @@ async function showMyBookings() {
     reviewedBookingIds = new Set((myReviews||[]).map(r => r.booking_id));
   } catch(e){}
 
-  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
-  document.getElementById('ownerBody').innerHTML = data.map(b=>`
+  document.getElementById('ownerBody').innerHTML = data.map(b=>{
+    const pct = b.total_price>0 ? Math.min(100, Math.round((b.amount_paid/b.total_price)*100)) : 0;
+    const needsMore = b.is_split && b.status==='pending' && b.payment_status!=='paid';
+    return `
     <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div><b>${b.fields?.name||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.fields?.facilities?.city||''}</div></div>
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
       <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)} - ${b.end_time?.slice(0,5)}</div>
+      ${b.is_split ? `
+        <div style="background:var(--bg-elev);border-radius:8px;height:8px;overflow:hidden;margin-top:9px">
+          <div style="height:100%;width:${pct}%;background:var(--brand)"></div>
+        </div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">تم دفع ${b.amount_paid} من ${b.total_price} ريال (${pct}%)</div>
+      ` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
         <span style="color:var(--flood);font-weight:800">${b.total_price} ريال</span>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${needsMore ? `<button class="btn btn-soft btn-sm" onclick="shareBookingLink('${b.share_link_token}')">📤 شارك الرابط</button>` : ''}
           ${(b.status==='pending'||b.status==='confirmed')? `<button class="btn btn-danger btn-sm" onclick="cancelMyBooking(${b.id})">إلغاء الحجز</button>`:''}
           ${(b.status==='completed' && !reviewedBookingIds.has(b.id)) ? `<button class="btn btn-soft btn-sm" onclick="openRateBooking(${b.id},${b.field_id})">⭐ قيّم تجربتك</button>` : ''}
           ${(b.status==='completed' && reviewedBookingIds.has(b.id)) ? `<span style="font-size:12px;color:var(--ink-dim)">✓ تم تقييمه</span>` : ''}
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function shareBookingLink(token){
+  const url = window.location.origin + '?join=' + token;
+  if (navigator.share) { navigator.share({ title:'أكمل القطة', text:'ساعدني أكمل مبلغ حجز الملعب', url }).catch(()=>{}); }
+  else { navigator.clipboard.writeText(url).then(()=>showToast('تم نسخ الرابط ✓')).catch(()=>showToast(url)); }
 }
 
 // ── تقييم الملعب بعد اكتمال الحجز ──
@@ -1740,9 +1849,29 @@ async function submitReview(bookingId, fieldId) {
 }
 
 async function cancelMyBooking(bookingId) {
-  if (!confirm('هل تريد إلغاء هذا الحجز؟')) return;
+  const { data: bk } = await sb.from('bookings').select('booking_date, start_time, payment_status').eq('id', bookingId).single();
+  let refundNote = '';
+  if (bk) {
+    try {
+      const { data: pct } = await sb.rpc('calc_refund_percent', { p_booking_date: bk.booking_date, p_start_time: bk.start_time });
+      refundNote = pct!=null ? `\n\nحسب سياسة الإلغاء، نسبة الاسترجاع المتوقعة: ${pct}%` : '';
+    } catch(e){}
+  }
+  if (!confirm('هل تريد إلغاء هذا الحجز؟' + refundNote)) return;
+
+  const wasPaid = bk?.payment_status === 'paid' || bk?.payment_status === 'partial';
   const { error } = await sb.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
   if (error) { showToast('تعذّر الإلغاء','error'); return; }
+
+  if (wasPaid) {
+    try {
+      const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
+      else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
+    } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
+  } else {
+    showToast('تم إلغاء الحجز ✓');
+  }
 
   try {
     const { data: booking } = await sb.from('bookings')
@@ -1756,7 +1885,6 @@ async function cancelMyBooking(bookingId) {
     }
   } catch(e){}
 
-  showToast('تم إلغاء الحجز ✓');
   showMyBookings();
 }
 
@@ -1918,7 +2046,8 @@ async function openOwnerPanel(kind) {
 
       <div class="dlabel">📊 الإدارة والنمو</div>
       <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('analytics')">📈 تحليلات المنصة</button>
-      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('coupons')">🎟️ كوبونات الخصم</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('commission')">⚙️ نسبة عمولة المنصة</button>
+      <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('payouts')">💸 تنفيذ التحويلات المستحقة</button>
       <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('approvals')">✅ موافقة المنشآت الجديدة${pendingFieldsCount>0?` (${pendingFieldsCount})`:''}</button>
       <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('reviews')">⭐ إشراف على التقييمات</button>
       <button class="btn btn-soft btn-block" style="margin-bottom:14px" onclick="showBroadcastForm()">📢 إرسال إشعار جماعي</button>
@@ -1951,7 +2080,10 @@ async function openOwnerPanel(kind) {
       .in('id', allFacIds) : { data: [] };
 
     const myFieldIds = (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id));
-    let pendingCount = 0, totalRevenue = 0;
+    let pendingCount = 0, totalRevenue = 0, netOwed = 0, nextPayoutDate = '—';
+    const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+    const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
     if (myFieldIds.length) {
       const { count } = await sb.from('bookings').select('*', { count:'exact', head:true })
         .in('field_id', myFieldIds).eq('status', 'pending');
@@ -1960,12 +2092,32 @@ async function openOwnerPanel(kind) {
       const { data: earnRows } = await sb.from('bookings').select('total_price')
         .in('field_id', myFieldIds).in('status', ['confirmed','completed']);
       totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
+
+      const { data: paidOutRows } = await sb.from('payouts').select('net_amount').eq('owner_id', window.currentUser.id);
+      const alreadyPaidOut = (paidOutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0), 0);
+      const grossNet = totalRevenue * (1 - commissionPct/100);
+      netOwed = Math.max(0, Math.round((grossNet - alreadyPaidOut) * 100) / 100);
+
+      // أقرب موعد تحويل (المنصة تحوّل مرتين أسبوعيًا)
+      const now = new Date(); const day = now.getDay(); // 0=Sunday
+      const daysToNext = [ (3-day+7)%7 || 7, (0-day+7)%7 || 7 ].sort((a,b)=>a-b)[0];
+      const nd = new Date(now); nd.setDate(now.getDate() + daysToNext);
+      nextPayoutDate = nd.toLocaleDateString('ar-SA', { weekday:'long', day:'numeric', month:'long' });
     }
 
     const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
     const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
 
     bodyEl.innerHTML = `
+      <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
+        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">مستحق لك (بعد عمولة المنصة ${commissionPct}%)</div>
+        <div style="font-size:32px;font-weight:900;color:var(--brand-deep)">${netOwed} <span style="font-size:16px">ريال</span></div>
+        <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">أقرب تحويل: ${nextPayoutDate}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerPayouts()">💰 تحويلاتي</button>
+        <button class="btn btn-soft btn-sm" style="flex:1" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
         <div class="stat-click" onclick="showOwnerBookings()" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
           <div style="font-size:24px;font-weight:900;color:var(--brand)">${pendingCount}</div>
@@ -2926,38 +3078,54 @@ async function adminView(kind) {
     `;
   }
 
-  else if (kind === 'coupons') {
-    titleEl.textContent = '🎟️ كوبونات الخصم';
-    const { data: coupons } = await sb.from('coupons').select('*').order('created_at',{ascending:false});
+  else if (kind === 'commission') {
+    titleEl.textContent = '⚙️ نسبة عمولة المنصة';
+    const { data: setting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+    const current = setting ? setting.value : '20';
     bodyEl.innerHTML = backBtn + `
-      <div class="dlabel">➕ كوبون جديد</div>
-      <div class="field"><label>الكود *</label><input id="cp-code" type="text" placeholder="RAMADAN20" style="text-transform:uppercase"></div>
-      <div style="display:flex;gap:8px">
-        <div class="field" style="flex:1">
-          <label>نوع الخصم</label>
-          <select id="cp-type" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
-            <option value="percent">نسبة %</option>
-            <option value="fixed">مبلغ ثابت (ريال)</option>
-          </select>
-        </div>
-        <div class="field" style="flex:1"><label>القيمة *</label><input id="cp-value" type="number" placeholder="20"></div>
+      <div style="text-align:center;background:var(--bg-soft);border-radius:12px;padding:20px;margin-bottom:16px">
+        <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">النسبة الحالية</div>
+        <div style="font-size:38px;font-weight:900;color:var(--brand)">${current}%</div>
       </div>
-      <div style="display:flex;gap:8px">
-        <div class="field" style="flex:1"><label>حد الاستخدام</label><input id="cp-maxuses" type="number" placeholder="بلا حد"></div>
-        <div class="field" style="flex:1"><label>ينتهي في</label><input id="cp-expires" type="date"></div>
-      </div>
-      <button class="btn btn-brand btn-block" onclick="saveCoupon()">💾 إنشاء الكوبون</button>
-
-      <div class="dlabel" style="margin-top:18px">📋 الكوبونات الحالية</div>
-      ${(coupons&&coupons.length)? coupons.map(c=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
-          <div>
-            <b class="mono" style="font-size:13px">${c.code}</b>
-            <div style="font-size:11px;color:var(--ink-dim)">${c.discount_type==='percent'?c.discount_value+'%':c.discount_value+' ر'} · استُخدم ${c.used_count}${c.max_uses?'/'+c.max_uses:''} مرة${c.expires_at?' · ينتهي '+c.expires_at:''}</div>
-          </div>
-          <button class="btn ${c.active?'btn-danger':'btn-soft'} btn-sm" onclick="toggleCoupon(${c.id}, ${!c.active})">${c.active?'إيقاف':'تفعيل'}</button>
-        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد كوبونات بعد</div>'}
+      <div class="field"><label>النسبة الجديدة (%)</label><input id="commission-input" type="number" min="0" max="100" value="${current}"></div>
+      <div class="legal-note">⚠️ هذي النسبة تُخصم من كل حجز جديد يُدفع من الآن فصاعدًا. الحجوزات السابقة لا تتأثر.</div>
+      <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="saveCommissionRate()">💾 حفظ النسبة</button>
     `;
+  }
+
+  else if (kind === 'payouts') {
+    titleEl.textContent = '💸 تنفيذ التحويلات المستحقة';
+    bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ حساب المستحقات...</div>';
+
+    const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+    const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+    const { data: owners } = await sb.from('profiles').select('id, name, phone').eq('role','owner');
+    const rows = [];
+    for (const o of (owners||[])) {
+      const { data: facs } = await sb.from('facilities').select('id').eq('owner_id', o.id);
+      const facIds = (facs||[]).map(f=>f.id);
+      if (!facIds.length) continue;
+      const { data: fields } = await sb.from('fields').select('id').in('facility_id', facIds);
+      const fieldIds = (fields||[]).map(f=>f.id);
+      if (!fieldIds.length) continue;
+      const { data: earnRows } = await sb.from('bookings').select('total_price').in('field_id', fieldIds).in('status',['confirmed','completed']);
+      const gross = (earnRows||[]).reduce((s,b)=>s+Number(b.total_price||0),0);
+      const { data: paidOutRows } = await sb.from('payouts').select('net_amount').eq('owner_id', o.id);
+      const alreadyPaidOut = (paidOutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0),0);
+      const grossNet = gross * (1 - commissionPct/100);
+      const netOwed = Math.round((grossNet - alreadyPaidOut) * 100) / 100;
+      if (netOwed > 0) rows.push({ owner: o, gross, commissionPct, netOwed });
+    }
+
+    bodyEl.innerHTML = backBtn + (rows.length ? rows.map(r=>`
+      <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div><b>${r.owner.name||'—'}</b><div style="font-size:11.5px;color:var(--ink-dim)">${r.owner.phone||''}</div></div>
+          <span style="color:var(--flood);font-weight:900;font-size:16px">${r.netOwed} ر</span>
+        </div>
+        <button class="btn btn-brand btn-block btn-sm" onclick="openPayoutReview('${r.owner.id}', ${r.gross}, ${r.commissionPct}, ${r.netOwed})">💸 نفّذ التحويل الآن</button>
+      </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد مستحقات لتحويلها حاليًا ✅</div>');
   }
 
   else if (kind === 'approvals') {
@@ -2986,27 +3154,179 @@ async function adminView(kind) {
   }
 }
 
+// ── كوبونات صاحب الملعب (يديرها ويتحمّل تكلفتها) ──
+async function showOwnerCoupons(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🎟️ كوبوناتي';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+
+  const { data: { user } } = await sb.auth.getUser();
+  const fieldOpts = await myFieldsOptionsHtml();
+  const { data: coupons } = await sb.from('coupons').select('*, fields(name)').eq('owner_id', user.id).order('created_at',{ascending:false});
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">💡 الخصم يُحسم من نصيبك أنت — عمولة المنصة تبقى محسوبة على السعر بعد الخصم بنفس النسبة الثابتة.</div>
+    <div class="dlabel">➕ كوبون جديد</div>
+    <div class="field"><label>الكود *</label><input id="cp-code" type="text" placeholder="RAMADAN20" style="text-transform:uppercase"></div>
+    <div class="field"><label>لأي ملعب؟ (اختياري — اتركه فارغًا ليشمل كل ملاعبك)</label>
+      <select id="cp-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
+        <option value="">كل ملاعبي</option>
+        ${fieldOpts}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1">
+        <label>نوع الخصم</label>
+        <select id="cp-type" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
+          <option value="percent">نسبة %</option>
+          <option value="fixed">مبلغ ثابت (ريال)</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1"><label>القيمة *</label><input id="cp-value" type="number" placeholder="20"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>حد الاستخدام</label><input id="cp-maxuses" type="number" placeholder="بلا حد"></div>
+      <div class="field" style="flex:1"><label>ينتهي في</label><input id="cp-expires" type="date"></div>
+    </div>
+    <button class="btn btn-brand btn-block" onclick="saveCoupon()">💾 إنشاء الكوبون</button>
+
+    <div class="dlabel" style="margin-top:18px">📋 كوبوناتي الحالية</div>
+    ${(coupons&&coupons.length)? coupons.map(c=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div>
+          <b class="mono" style="font-size:13px">${c.code}</b>
+          <div style="font-size:11px;color:var(--ink-dim)">${c.discount_type==='percent'?c.discount_value+'%':c.discount_value+' ر'} · ${c.fields?.name || 'كل الملاعب'} · استُخدم ${c.used_count}${c.max_uses?'/'+c.max_uses:''} مرة${c.expires_at?' · ينتهي '+c.expires_at:''}</div>
+        </div>
+        <button class="btn ${c.active?'btn-danger':'btn-soft'} btn-sm" onclick="toggleCoupon(${c.id}, ${!c.active})">${c.active?'إيقاف':'تفعيل'}</button>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد كوبونات بعد</div>'}
+  `;
+}
 async function saveCoupon(){
   const code = document.getElementById('cp-code').value.trim().toUpperCase();
+  const fieldId = document.getElementById('cp-field').value || null;
   const type = document.getElementById('cp-type').value;
   const value = parseFloat(document.getElementById('cp-value').value);
   const maxUses = parseInt(document.getElementById('cp-maxuses').value) || null;
   const expires = document.getElementById('cp-expires').value || null;
   if (!code || !value) { showToast('أدخل الكود والقيمة','error'); return; }
-  const { error } = await sb.from('coupons').insert({ code, discount_type:type, discount_value:value, max_uses:maxUses, expires_at:expires });
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('coupons').insert({
+    code, owner_id: user.id, field_id: fieldId, discount_type:type, discount_value:value, max_uses:maxUses, expires_at:expires
+  });
   if (error) {
     if (error.code==='23505') { showToast('هذا الكود مستخدم مسبقاً','error'); return; }
     showToast('تعذّر الحفظ: '+error.message,'error'); return;
   }
   showToast('تم إنشاء الكوبون ✓ 🎟️');
-  adminView('coupons');
+  showOwnerCoupons();
 }
 async function toggleCoupon(id, newActive){
   const { error } = await sb.from('coupons').update({ active: newActive }).eq('id', id);
   if (error) { showToast('تعذّر التحديث','error'); return; }
   showToast(newActive? 'تم التفعيل ✓' : 'تم الإيقاف ✓');
-  adminView('coupons');
+  showOwnerCoupons();
 }
+
+// ── التحويلات المالية المستلمة (صاحب الملعب) ──
+async function showOwnerPayouts(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '💰 تحويلاتي';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: payoutsRows } = await sb.from('payouts').select('*').eq('owner_id', user.id).order('created_at',{ascending:false});
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="openOwnerPanel('owner')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+
+  bodyEl.innerHTML = backBtn + (payoutsRows&&payoutsRows.length ? payoutsRows.map(p=>`
+    <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12.5px;color:var(--ink-dim)">${p.period_start} → ${p.period_end}</span>
+        <span style="color:var(--flood);font-weight:900">${p.net_amount} ر</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">إجمالي ${p.gross_amount} ر − عمولة ${p.commission_amount} ر${p.reference_number?' · مرجع: '+p.reference_number:''}</div>
+      <a href="${p.receipt_url}" target="_blank" class="btn btn-soft btn-sm btn-block" style="margin-top:8px">📄 عرض الإيصال</a>
+    </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تحويلات مستلمة بعد</div>');
+}
+
+async function saveCommissionRate(){
+  const val = parseFloat(document.getElementById('commission-input').value);
+  if (isNaN(val) || val < 0 || val > 100) { showToast('أدخل نسبة صحيحة بين 0 و100','error'); return; }
+  const { error } = await sb.from('platform_settings').update({ value: String(val) }).eq('key','commission_percent');
+  if (error) { showToast('تعذّر الحفظ: '+error.message,'error'); return; }
+  showToast('تم تحديث نسبة العمولة ✓');
+  adminView('commission');
+}
+
+// ── مراجعة وتنفيذ تحويل (مع رفع إيصال إلزامي كدليل) ──
+window._payoutReview = null;
+function openPayoutReview(ownerId, gross, commissionPct, netOwed){
+  const commissionAmount = Math.round((gross - netOwed) * 100) / 100;
+  window._payoutReview = { ownerId, gross, commissionAmount, netOwed };
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '💸 مراجعة التحويل قبل التنفيذ';
+  const today = new Date().toISOString().split('T')[0];
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="adminView('payouts')" style="margin-bottom:14px">→ رجوع</button>
+    <div class="summary" style="margin-bottom:16px">
+      <div class="srow"><span>إجمالي الحجوزات</span><span>${gross} ر</span></div>
+      <div class="srow"><span>عمولة المنصة (${commissionPct}%)</span><span>- ${commissionAmount} ر</span></div>
+      <div class="srow tot"><span>الصافي المُحوَّل</span><span class="amt">${netOwed} ر</span></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>من تاريخ</label><input id="po-start" type="date"></div>
+      <div class="field" style="flex:1"><label>إلى تاريخ</label><input id="po-end" type="date" value="${today}"></div>
+    </div>
+    <div class="field"><label>رقم العملية البنكية (اختياري)</label><input id="po-ref" type="text" placeholder="مثال: TRX123456"></div>
+    <div class="field">
+      <label>إيصال التحويل * <span style="color:var(--ink-dim);font-weight:400">(صورة أو PDF — إلزامي كدليل)</span></label>
+      <input id="po-receipt" type="file" accept="image/*,.pdf" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-size:13px">
+    </div>
+    <div class="legal-note">⚠️ بعد التأكيد، هذا السجل يصبح ثابتًا ولا يمكن تعديله أو حذفه — يظهر لك وللمالك بنفس التفاصيل كدليل عند أي نزاع.</div>
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="confirmPayout()">✅ تأكيد التنفيذ نهائيًا</button>
+  `;
+}
+async function confirmPayout(){
+  const r = window._payoutReview;
+  const file = document.getElementById('po-receipt').files?.[0];
+  const periodStart = document.getElementById('po-start').value;
+  const periodEnd = document.getElementById('po-end').value;
+  const ref = document.getElementById('po-ref').value.trim();
+  if (!file) { showToast('رفع الإيصال إلزامي','error'); return; }
+  if (!periodStart || !periodEnd) { showToast('حدد الفترة الزمنية','error'); return; }
+
+  showToast('جارٍ الرفع والتنفيذ...');
+  const { data: { user } } = await sb.auth.getUser();
+  let receiptUrl = null;
+  try {
+    const ext = file.name.split('.').pop();
+    const path = `${r.ownerId}/${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('payout-receipts').upload(path, file);
+    if (upErr) { showToast('تعذّر رفع الإيصال: '+upErr.message,'error'); return; }
+    const { data: pub } = sb.storage.from('payout-receipts').getPublicUrl(path);
+    receiptUrl = pub?.publicUrl;
+  } catch(e) { showToast('تعذّر رفع الإيصال','error'); return; }
+
+  const { error } = await sb.from('payouts').insert({
+    owner_id: r.ownerId, period_start: periodStart, period_end: periodEnd,
+    gross_amount: r.gross, commission_amount: r.commissionAmount, net_amount: r.netOwed,
+    receipt_url: receiptUrl, reference_number: ref || null, created_by: user.id
+  });
+  if (error) { showToast('تعذّر حفظ سجل التحويل: '+error.message,'error'); return; }
+
+  try {
+    await sb.from('notifications').insert({
+      user_id: r.ownerId, title: 'تم تحويل مستحقاتك 💸',
+      body: `تم تحويل ${r.netOwed} ريال إلى حسابك — راجع لوحتك لعرض الإيصال`
+    });
+  } catch(e){}
+
+  showToast('تم تنفيذ التحويل وتوثيقه ✓');
+  adminView('payouts');
+}
+
 async function approveFacility(facilityId){
   const { error } = await sb.from('facilities').update({ approved:true }).eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
