@@ -62,6 +62,8 @@ body{
   min-height:100vh;
   overflow-x:hidden;
   transition:background .4s ease, color .4s ease;
+  font-variant-numeric:normal; /* يضمن أرقامًا إنجليزية دائمًا (لا أرقام هندية) بغض النظر عن إعدادات الجهاز */
+  font-feature-settings:normal;
 }
 .mono{font-family:'JetBrains Mono',monospace}
 a{color:inherit;text-decoration:none}
@@ -413,6 +415,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     <a onclick="goMod('stadiums')">الملاعب</a>
     <a onclick="goMod('academies')">الأكاديميات</a>
     <a onclick="goMod('tournaments')">البطولات</a>
+    <a onclick="goMod('openmatches')">🤝 أكمل الفريق</a>
     <a onclick="scrollToId('map')">الخريطة</a>
   </div>
   <div class="nav-right">
@@ -428,6 +431,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   <a onclick="goMod('stadiums');toggleMenu()">🏟️ الملاعب</a>
   <a onclick="goMod('academies');toggleMenu()">🎓 الأكاديميات</a>
   <a onclick="goMod('tournaments');toggleMenu()">🏆 البطولات</a>
+  <a onclick="goMod('openmatches');toggleMenu()">🤝 أكمل الفريق</a>
   <a onclick="scrollToId('map');toggleMenu()">📍 الخريطة</a>
 </div>
 
@@ -480,9 +484,10 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
       <button class="mod-tab active" data-mod="stadiums" onclick="switchMod('stadiums',this)">🏟️ الملاعب</button>
       <button class="mod-tab" data-mod="academies" onclick="switchMod('academies',this)">🎓 الأكاديميات</button>
       <button class="mod-tab" data-mod="tournaments" onclick="switchMod('tournaments',this)">🏆 البطولات</button>
+      <button class="mod-tab" data-mod="openmatches" onclick="switchMod('openmatches',this)">🤝 أكمل الفريق</button>
     </div>
 
-    <div class="fbar">
+    <div class="fbar" id="fbar">
       <div class="fsearch">
         <span>🔍</span>
         <input type="text" id="search" placeholder="ابحث بالاسم أو الحي..." oninput="renderActive()">
@@ -504,6 +509,9 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     <div class="mod-panel active" id="panel-stadiums"><div class="grid3" id="grid-stadiums"></div></div>
     <div class="mod-panel" id="panel-academies"><div class="grid3" id="grid-academies"></div></div>
     <div class="mod-panel" id="panel-tournaments"><div class="grid3" id="grid-tournaments"></div></div>
+    <div class="mod-panel" id="panel-openmatches">
+      <div id="grid-openmatches" class="grid3"><div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--ink-dim)">جارٍ التحميل...</div></div>
+    </div>
   </div>
 </section>
 
@@ -697,6 +705,16 @@ const dayNames = ["الأحد","الإثنين","الثلاثاء","الأربع
 const timeSlots = ["14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"];
 
 let currentMod = 'stadiums';
+
+// ── الوقت دائمًا بتوقيت السعودية (UTC+3 بدون توقيت صيفي) بغض النظر عن جهاز الزائر ──
+// ملاحظة مهمة: بعد استخدام هذي الدالة، اقرأ القيم دائمًا عبر getUTC*() (مثل getUTCDay/getUTCHours)
+// وليس getDay()/getHours() العادية، لأن القيمة هنا مُزاحة يدويًا وليست توقيت الجهاز المحلي
+function riyadhNow(){
+  return new Date(Date.now() + 3 * 3600000);
+}
+function riyadhTodayStr(){
+  return riyadhNow().toISOString().split('T')[0];
+}
 let appliedCoupon = null, finalBookingPrice = null;
 let bookingMode = 'solo';
 function setBookingMode(m){ bookingMode = m; renderStadiumDrawer(); }
@@ -766,12 +784,56 @@ function switchMod(mod, el){
   el.classList.add('active');
   document.querySelectorAll('.mod-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+mod).classList.add('active');
+  const fbarEl = document.getElementById('fbar');
+  if (fbarEl) fbarEl.style.display = (mod === 'openmatches') ? 'none' : 'flex';
+  if (mod === 'openmatches') { loadOpenMatches(); return; }
   renderActive();
 }
 function goMod(mod){
   const el = document.querySelector(`[data-mod="${mod}"]`);
   switchMod(mod, el);
   scrollToId('modules');
+}
+
+// ── أكمل الفريق: تصفّح المباريات المفتوحة للانضمام من كل المنصة ──
+async function loadOpenMatches(){
+  const grid = document.getElementById('grid-openmatches');
+  if (!window.sb) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--ink-dim)">هذي الميزة تحتاج اتصال قاعدة بيانات فعّال</div>';
+    return;
+  }
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--ink-dim)">جارٍ البحث عن مباريات مفتوحة...</div>';
+
+  const todayStr = riyadhTodayStr();
+  const { data, error } = await sb.from('bookings')
+    .select('id, booking_date, start_time, end_time, total_price, amount_paid, players_count, share_link_token, fields(name, facilities(city, district))')
+    .eq('is_open_for_join', true).eq('status', 'pending').gte('booking_date', todayStr)
+    .order('booking_date');
+
+  if (error || !data || !data.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:50px;color:var(--ink-dim)">
+      <div style="font-size:34px;margin-bottom:8px">🤝</div>
+      لا توجد مباريات مفتوحة للانضمام حاليًا<br><span style="font-size:12px">افتح حجزك للانضمام العام وقت الحجز عشان يظهر هنا</span>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = data.map(b=>{
+    const share = b.players_count > 0 ? Math.round((b.total_price/b.players_count)*100)/100 : b.total_price;
+    const remaining = Math.max(0, Number(b.total_price) - Number(b.amount_paid));
+    return `<div class="card" onclick="openJoinPage('${b.share_link_token}')">
+      <div class="card-media">🤝<div class="tag-tl">💰 ${share} ر/فرد</div><div class="tag-tr">${b.fields?.facilities?.city||''}</div></div>
+      <div class="card-b">
+        <div class="card-name">${b.fields?.name||'ملعب'}</div>
+        <div class="card-loc">📍 ${b.fields?.facilities?.district||''}، ${b.fields?.facilities?.city||''}</div>
+        <div class="card-tags"><span class="ctag">📅 ${b.booking_date}</span><span class="ctag">⏱️ ${(b.start_time||'').slice(0,5)}</span><span class="ctag">👥 ${b.players_count} لاعب</span></div>
+        <div class="card-f">
+          <div class="cprice"><span class="a">${remaining}</span> <span class="p">ريال متبقي</span></div>
+          <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();openJoinPage('${b.share_link_token}')">انضم ←</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderActive(){
@@ -859,16 +921,16 @@ async function getFieldAvailability(fieldId, dateStr, weekday){
 async function renderStadiumDrawer(){
   const s = active;
   document.getElementById('drawerTitle').textContent = 'حجز ملعب';
-  const today = new Date();
+  const today = riyadhNow();
   let pills='';
-  for(let i=0;i<7;i++){ const d=new Date(today);d.setDate(d.getDate()+i);
-    pills+=`<div class="dpill ${i===selDate?'active':''}" onclick="setDate(${i})"><div class="dw">${dayNames[d.getDay()]}</div><div class="dd">${d.getDate()}</div></div>`; }
+  for(let i=0;i<7;i++){ const d=new Date(today);d.setUTCDate(d.getUTCDate()+i);
+    pills+=`<div class="dpill ${i===selDate?'active':''}" onclick="setDate(${i})"><div class="dw">${dayNames[d.getUTCDay()]}</div><div class="dd">${d.getUTCDate()}</div></div>`; }
 
   document.getElementById('drawerBody').innerHTML = `<div style="text-align:center;padding:40px;color:var(--ink-dim)">جارٍ تحميل الأوقات المتاحة...</div>`;
 
-  const dsel = new Date(today); dsel.setDate(dsel.getDate() + selDate);
+  const dsel = new Date(today); dsel.setUTCDate(dsel.getUTCDate() + selDate);
   const dateStr = dsel.toISOString().split('T')[0];
-  const weekday = dsel.getDay();
+  const weekday = dsel.getUTCDay();
   const avail = await getFieldAvailability(s.id, dateStr, weekday);
 
   if (avail.dayClosed) {
@@ -933,6 +995,10 @@ async function renderStadiumDrawer(){
         <span class="each">نصيبك أنت (تدفعه الآن)</span>
         <span class="amt">${split.sharePerPlayer} <span style="font-size:13px">ر</span></span>
       </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;color:var(--ink-soft);margin-top:12px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--brand) 20%,transparent)">
+        <input type="checkbox" id="open-for-join" style="margin-top:3px;flex-shrink:0">
+        <span>🤝 <b>أكمل الفريق</b> — افتح هذا الحجز ليقدر أي لاعب من المنصة ينضم ويدفع نصيبه (مو بس اللي تشاركه الرابط)</span>
+      </label>
     </div>
     <div class="legal-note">بعد الدفع، بتحصل رابط تشاركه مع الباقين ليكمّلوا المبلغ. الحجز يتأكد فقط بعد اكتمال المبلغ بالكامل.</div>
     ` : ''}
@@ -1167,8 +1233,8 @@ function renderMapMarkers(){
 async function loadRealTrustStats(){
   if (!window.sb) return;
   try {
-    const now = new Date();
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const now = riyadhNow();
+    const firstOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().split('T')[0];
     const [{ count: confirmedThisMonth }, { count: cancelledCount }, { count: fieldsCount }, { data: allReviews }] = await Promise.all([
       sb.from('bookings').select('*', { count:'exact', head:true }).in('status',['confirmed','completed']).gte('booking_date', firstOfMonth),
       sb.from('bookings').select('*', { count:'exact', head:true }).eq('status','cancelled'),
@@ -1190,7 +1256,7 @@ async function loadRealTrustStats(){
 async function loadRealStarOfWeek(){
   if (!window.sb) return;
   try {
-    const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
+    const weekAgo = new Date(riyadhNow().getTime() - 7*24*60*60*1000).toISOString().split('T')[0];
     const { data } = await sb.from('bookings')
       .select('user_id, profiles(name), fields(name)')
       .eq('status','completed').gte('booking_date', weekAgo);
@@ -1481,13 +1547,14 @@ function initBackend() {
       const { data: { user } } = await sb.auth.getUser();
       if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); openAuth('login'); return; }
 
-      const today = new Date(); today.setDate(today.getDate() + selDate);
+      const today = riyadhNow(); today.setUTCDate(today.getUTCDate() + selDate);
       const dateStr = today.toISOString().split('T')[0];
       const basePrice = window.effectivePrice != null ? window.effectivePrice : active.price;
       const totalPrice = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePrice;
       const isSplit = bookingMode === 'split';
       const myShareAmount = isSplit ? Math.round((totalPrice/playerCount)*100)/100 : totalPrice;
       const shareToken = isSplit ? (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2))) : null;
+      const openForJoin = isSplit && !!document.getElementById('open-for-join')?.checked;
 
       const insertPayload = {
         user_id: user.id,
@@ -1499,6 +1566,7 @@ function initBackend() {
         total_price: totalPrice,
         status: 'pending',
         is_split: isSplit,
+        is_open_for_join: openForJoin,
         payment_status: 'unpaid'
       };
       if (shareToken) insertPayload.share_link_token = shareToken;
@@ -1932,7 +2000,7 @@ async function showNotifications() {
       <div style="padding:13px;background:${n.is_read?'var(--bg-soft)':'var(--brand-soft)'};border:1px solid var(--line);border-radius:11px;margin-bottom:8px">
         <div style="font-weight:700;font-size:14px">${n.title}</div>
         ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${n.body}</div>`:''}
-        <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA')}</div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
       </div>`).join('');
   }
   await sb.from('notifications').update({ is_read: true }).eq('is_read', false);
@@ -2080,10 +2148,10 @@ async function renderOwnerOverviewTab(){
     const alreadyPaidOut = (paidOutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0), 0);
     const grossNet = totalRevenue * (1 - commissionPct/100);
     netOwed = Math.max(0, Math.round((grossNet - alreadyPaidOut) * 100) / 100);
-    const now = new Date(); const day = now.getDay();
+    const now = riyadhNow(); const day = now.getUTCDay();
     const daysToNext = [ (3-day+7)%7 || 7, (0-day+7)%7 || 7 ].sort((a,b)=>a-b)[0];
-    const nd = new Date(now); nd.setDate(now.getDate() + daysToNext);
-    nextPayoutDate = nd.toLocaleDateString('ar-SA', { weekday:'long', day:'numeric', month:'long' });
+    const nd = new Date(now); nd.setUTCDate(now.getUTCDate() + daysToNext);
+    nextPayoutDate = nd.toLocaleDateString('ar-SA-u-nu-latn', { weekday:'long', day:'numeric', month:'long', timeZone:'UTC' });
   }
 
   ownerInner().innerHTML = `
@@ -2737,14 +2805,14 @@ async function showOwnerAnalytics(){
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
   if (!fieldIds.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك التحليلات</div>'; return; }
 
-  const since = new Date(Date.now() - 13*24*60*60*1000).toISOString().split('T')[0];
+  const since = new Date(riyadhNow().getTime() - 13*24*60*60*1000).toISOString().split('T')[0];
   const [{ data: recentBookings }, { data: allBookings }] = await Promise.all([
     sb.from('bookings').select('booking_date').in('field_id', fieldIds).gte('booking_date', since),
     sb.from('bookings').select('start_time, status, total_price').in('field_id', fieldIds).in('status',['confirmed','completed'])
   ]);
 
   const dayCounts = {};
-  for (let i=0;i<14;i++){ const d=new Date(); d.setDate(d.getDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
+  for (let i=0;i<14;i++){ const d=riyadhNow(); d.setUTCDate(d.getUTCDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
   (recentBookings||[]).forEach(b=>{ if (dayCounts[b.booking_date]!==undefined) dayCounts[b.booking_date]++; });
   const days = Object.keys(dayCounts).sort();
   const maxCount = Math.max(1, ...days.map(d=>dayCounts[d]));
@@ -3078,14 +3146,14 @@ async function adminView(kind) {
 
   else if (kind === 'analytics') {
     titleEl.textContent = '📈 تحليلات المنصة';
-    const since = new Date(Date.now() - 13*24*60*60*1000).toISOString().split('T')[0];
+    const since = new Date(riyadhNow().getTime() - 13*24*60*60*1000).toISOString().split('T')[0];
     const [{ data: recentBookings }, { data: fieldStats }] = await Promise.all([
       sb.from('bookings').select('booking_date').gte('booking_date', since),
       sb.from('bookings').select('field_id, total_price, fields(name, facilities(city))').in('status',['confirmed','completed'])
     ]);
     // حجوزات آخر 14 يوم
     const dayCounts = {};
-    for (let i=0;i<14;i++){ const d=new Date(); d.setDate(d.getDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
+    for (let i=0;i<14;i++){ const d=riyadhNow(); d.setUTCDate(d.getUTCDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
     (recentBookings||[]).forEach(b=>{ if (dayCounts[b.booking_date]!==undefined) dayCounts[b.booking_date]++; });
     const days = Object.keys(dayCounts).sort();
     const maxCount = Math.max(1, ...days.map(d=>dayCounts[d]));
@@ -3324,7 +3392,7 @@ function openPayoutReview(ownerId, gross, commissionPct, netOwed){
   window._payoutReview = { ownerId, gross, commissionAmount, netOwed };
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '💸 مراجعة التحويل قبل التنفيذ';
-  const today = new Date().toISOString().split('T')[0];
+  const today = riyadhTodayStr();
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="adminView('payouts')" style="margin-bottom:14px">→ رجوع</button>
     <div class="summary" style="margin-bottom:16px">
