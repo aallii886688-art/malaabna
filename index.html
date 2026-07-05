@@ -723,6 +723,54 @@ function saudiRegionOptionsHtml(selected){
   return SAUDI_REGIONS.map(r=>`<option value="${r}" ${selected===r?'selected':''}>${r}</option>`).join('');
 }
 
+// مميزات الملعب — يختارها صاحب الملعب، وتظهر كشارات للاعب وقت الحجز
+const FIELD_AMENITIES = [
+  { key:'ac',        label:'مكيف',            icon:'❄️' },
+  { key:'lighting',  label:'إنارة ليلية',      icon:'💡' },
+  { key:'restrooms', label:'دورات مياه',       icon:'🚻' },
+  { key:'changing',  label:'غرف تبديل',        icon:'👕' },
+  { key:'parking',   label:'مواقف سيارات',     icon:'🅿️' },
+  { key:'prayer',    label:'مصلى',             icon:'🕌' },
+  { key:'women',     label:'مناسب للنساء',     icon:'👩' },
+  { key:'equipment', label:'كرات ومعدات',      icon:'🥅' },
+  { key:'screen',    label:'شاشة عرض',         icon:'📺' },
+  { key:'sound',     label:'نظام صوتي',        icon:'🔊' },
+  { key:'recording', label:'تصوير المباراة',   icon:'🎥' },
+  { key:'wifi',      label:'واي فاي مجاني',    icon:'📶' },
+  { key:'cameras',   label:'كاميرات مراقبة',   icon:'📹' },
+  { key:'cafeteria', label:'كافيتريا',         icon:'☕' },
+  { key:'showers',   label:'دشات ساخنة',       icon:'🚿' },
+  { key:'vip',       label:'تصنيف VIP',        icon:'🌟' },
+];
+function amenityLabel(key){ const a = FIELD_AMENITIES.find(x=>x.key===key); return a ? `${a.icon} ${a.label}` : key; }
+
+// شبكة checkboxes تُستخدم في فورمي إضافة/تعديل ملعب
+function amenitiesCheckboxesHtml(selected){
+  selected = selected || [];
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    ${FIELD_AMENITIES.map(a=>`
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+        <input type="checkbox" class="amenity-check" value="${a.key}" ${selected.includes(a.key)?'checked':''}>
+        <span>${a.icon} ${a.label}</span>
+      </label>`).join('')}
+  </div>`;
+}
+function collectCheckedAmenities(){
+  return Array.from(document.querySelectorAll('.amenity-check:checked')).map(el=>el.value);
+}
+// شارات مميزات مختصرة تُعرض على كروت التصفح (أول 4 + الباقي كعدد)
+function amenityBadgesHtml(amenities, max){
+  amenities = amenities || [];
+  if (!amenities.length) return '';
+  max = max || 4;
+  const shown = amenities.slice(0, max).map(k=>{
+    const a = FIELD_AMENITIES.find(x=>x.key===k);
+    return a ? `<span class="ctag">${a.icon} ${a.label}</span>` : '';
+  }).join('');
+  const extra = amenities.length > max ? `<span class="ctag">+${amenities.length - max}</span>` : '';
+  return shown + extra;
+}
+
 // تحويل الوقت من صيغة 24 ساعة (المخزّنة بالقاعدة) إلى صيغة 12 ساعة بصباحًا/مساءً (الأنسب للمستخدم السعودي)
 function formatTime12(t){
   if (!t) return '';
@@ -897,7 +945,7 @@ function renderActive(){
       <div class="card-b">
         <div class="card-name">${it.name}</div>
         <div class="card-loc">📍 ${it.loc}، ${it.region}</div>
-        <div class="card-tags">${it.tags.map(t=>`<span class="ctag">${t}</span>`).join('')}</div>
+        <div class="card-tags">${it.tags.map(t=>`<span class="ctag">${t}</span>`).join('')}${isStadium ? amenityBadgesHtml(it.amenities, 2) : ''}</div>
         <div class="card-f">
           <div class="cprice"><span class="a">${it.price}</span> <span class="p">${priceLbl}</span></div>
           <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();openItem('${currentMod}',${it.id})">${cta} ←</button>
@@ -1000,6 +1048,10 @@ async function renderStadiumDrawer(){
     <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
     <div class="irow">⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
     <div class="irow">💰 <b>${window.effectivePrice} ريال</b> / الساعة${priceNote}</div>
+    ${(s.amenities && s.amenities.length) ? `
+    <div class="dlabel" style="margin:16px 0 10px">✨ مميزات الملعب</div>
+    <div class="card-tags" style="margin-bottom:6px">${amenityBadgesHtml(s.amenities, 8)}</div>
+    ` : ''}
 
     <div class="dlabel">📅 اختر اليوم</div>
     <div class="dates">${pills}</div>
@@ -1728,7 +1780,7 @@ function initBackend() {
     initRealMap();
     const { data, error } = await sb
       .from('fields')
-      .select('id, name, type, price_per_hour, image_url, facilities!inner(name, city, district, region, lat, lng, approved)')
+      .select('id, name, type, price_per_hour, image_url, amenities, facilities!inner(name, city, district, region, lat, lng, approved)')
       .eq('status', 'available')
       .eq('is_deleted', false)
       .eq('facilities.approved', true);
@@ -1764,7 +1816,8 @@ function initBackend() {
         reviewCount: rv ? rv.count : 0,
         tags: [f.type === 'natural' ? 'عشب طبيعي' : f.type === 'indoor' ? 'مغلق' : 'عشب صناعي'],
         icon: '🏟️',
-        image: f.image_url || null
+        image: f.image_url || null,
+        amenities: f.amenities || []
       };
     });
     if (currentMod === 'stadiums') renderActive();
@@ -2722,7 +2775,7 @@ async function editStadiumForm(fieldId) {
   bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
 
   const { data: fd, error } = await sb.from('fields')
-    .select('id, name, type, price_per_hour, image_url, facilities(id, name, city, district, region, lat, lng)')
+    .select('id, name, type, price_per_hour, image_url, amenities, facilities(id, name, city, district, region, lat, lng)')
     .eq('id', fieldId).single();
   if (error || !fd) { showToast('تعذّر تحميل بيانات الملعب', 'error'); ownerGoTab('fields'); return; }
 
@@ -2746,6 +2799,10 @@ async function editStadiumForm(fieldId) {
       </div>
     </div>
     <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" value="${fd.price_per_hour}"></div>
+    <div class="field">
+      <label>مميزات الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — تظهر للاعب وقت الحجز)</span></label>
+      ${amenitiesCheckboxesHtml(fd.amenities)}
+    </div>
     <div class="field">
       <label>صورة الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — ارفع صورة جديدة لتغيير الحالية)</span></label>
       <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
@@ -2800,7 +2857,7 @@ async function updateStadium(facilityId) {
   const { error: facErr } = await sb.from('facilities').update(facUpdate).eq('id', facilityId);
   if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
 
-  const fldUpdate = { name, type: newFieldType, price_per_hour: price };
+  const fldUpdate = { name, type: newFieldType, price_per_hour: price, amenities: collectCheckedAmenities() };
   if (imageUrl) fldUpdate.image_url = imageUrl;
   const { error: fldErr } = await sb.from('fields')
     .update(fldUpdate)
@@ -3747,6 +3804,10 @@ async function showAddStadiumForm() {
     </div>
     <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" placeholder="150"></div>
     <div class="field">
+      <label>مميزات الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — تظهر للاعب وقت الحجز)</span></label>
+      ${amenitiesCheckboxesHtml([])}
+    </div>
+    <div class="field">
       <label>صورة الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
       <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
       <div id="st-image-preview" style="margin-top:8px"></div>
@@ -3867,7 +3928,7 @@ async function saveStadium() {
     if (!name) { showToast('أدخل اسم الملعب','error'); return; }
   }
 
-  const fldPayload = { facility_id: facilityId, name, type: newFieldType, price_per_hour: price, status: 'available' };
+  const fldPayload = { facility_id: facilityId, name, type: newFieldType, price_per_hour: price, status: 'available', amenities: collectCheckedAmenities() };
   if (imageUrl) fldPayload.image_url = imageUrl;
   const { error: fldErr } = await sb.from('fields').insert(fldPayload);
 
