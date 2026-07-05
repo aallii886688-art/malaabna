@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="ملاعبنا — منصة حجز الملاعب والأكاديميات والبطولات في منطقة عسير. احجز ملعبك، قسّم التكلفة بذكاء، وانضم للبطولات.">
+<meta name="description" content="ملاعبنا — منصة حجز الملاعب والأكاديميات والبطولات في جميع مناطق المملكة العربية السعودية. احجز ملعبك، قسّم التكلفة بذكاء، وانضم للبطولات.">
 <title>ملاعبنا | احجز · تدرّب · نافس</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap');
@@ -438,7 +438,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 <section class="hero">
   <div class="hero-inner">
     <div>
-      <div class="eyebrow"><span class="pulse"></span> متاح الآن في منطقة عسير · خميس البحر</div>
+      <div class="eyebrow"><span class="pulse"></span> متاح الآن في جميع مناطق المملكة</div>
       <h1>احجز ملعبك،<br><span class="g">قسّم التكلفة</span><br>بدون <span class="f">إحراج</span></h1>
       <p class="hero-sub">منصة ملاعبنا تجمع الملاعب والأكاديميات والبطولات في مكان واحد. شوف الأوقات المتاحة لحظيًا، قسّم الحساب آليًا على اللاعبين، واحجز بتأكيد فوري.</p>
       <div class="hero-ctas">
@@ -456,16 +456,16 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
       <div class="floaty floaty-2">🤝 قطة ذكية</div>
       <div class="hcard">
         <div class="hcard-top">
-          <div><div class="hcard-title">ملعب البحر الأخضر</div><div class="hcard-loc">📍 خميس البحر، عسير</div></div>
+          <div><div class="hcard-title">ملعب النخيل الرياضي</div><div class="hcard-loc">📍 الرياض، المملكة العربية السعودية</div></div>
           <div class="live"><span class="d"></span> مباشر</div>
         </div>
         <div class="slot-mini">
-          <div class="sm taken">16:00</div><div class="sm">17:00</div><div class="sm sel">18:00</div><div class="sm">19:00</div>
-          <div class="sm taken">20:00</div><div class="sm">21:00</div><div class="sm">22:00</div><div class="sm taken">23:00</div>
+          <div class="sm taken">4:00 م</div><div class="sm">5:00 م</div><div class="sm sel">6:00 م</div><div class="sm">7:00 م</div>
+          <div class="sm taken">8:00 م</div><div class="sm">9:00 م</div><div class="sm">10:00 م</div><div class="sm taken">11:00 م</div>
         </div>
         <div class="hcard-foot">
           <div class="hprice"><span class="a">160</span> <span class="p">ر / ساعة</span></div>
-          <button class="btn btn-flood btn-sm" onclick="goMod('stadiums')">احجز 18:00 ←</button>
+          <button class="btn btn-flood btn-sm" onclick="goMod('stadiums')">احجز 6:00 م ←</button>
         </div>
       </div>
     </div>
@@ -493,10 +493,20 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
         <input type="text" id="search" placeholder="ابحث بالاسم أو الحي..." oninput="renderActive()">
       </div>
       <select class="fsel" id="regionFilter" onchange="renderActive()">
-        <option value="all">كل المناطق</option>
-        <option value="خميس البحر">خميس البحر</option>
-        <option value="بحر أبو سكينة">بحر أبو سكينة</option>
-        <option value="أبها">أبها</option>
+        <option value="all">كل مناطق المملكة</option>
+        <option value="الرياض">الرياض</option>
+        <option value="مكة المكرمة">مكة المكرمة</option>
+        <option value="المدينة المنورة">المدينة المنورة</option>
+        <option value="المنطقة الشرقية">المنطقة الشرقية</option>
+        <option value="عسير">عسير</option>
+        <option value="القصيم">القصيم</option>
+        <option value="تبوك">تبوك</option>
+        <option value="حائل">حائل</option>
+        <option value="الحدود الشمالية">الحدود الشمالية</option>
+        <option value="جازان">جازان</option>
+        <option value="نجران">نجران</option>
+        <option value="الباحة">الباحة</option>
+        <option value="الجوف">الجوف</option>
       </select>
       <select class="fsel" id="priceFilter" onchange="renderActive()">
         <option value="all">كل الأسعار</option>
@@ -578,7 +588,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   <div class="fgrid">
     <div>
       <div class="fbrand"><div class="brand-logo" style="width:32px;height:32px;font-size:16px">⚽</div> ملاعبنا</div>
-      <p class="fdesc">منصة حجز الملاعب والأكاديميات والبطولات في منطقة عسير. احجز، قسّم، والعب بدون تعقيد.</p>
+      <p class="fdesc">منصة حجز الملاعب والأكاديميات والبطولات في جميع مناطق المملكة العربية السعودية. احجز، قسّم، والعب بدون تعقيد.</p>
       <div style="margin-top:14px"><span class="vat-badge">🔒 دفع إلكتروني آمن</span></div>
     </div>
     <div>
@@ -600,7 +610,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     </div>
   </div>
   <div class="fbottom">
-    <span>© 2026 ملاعبنا · منطقة عسير، المملكة العربية السعودية</span>
+    <span>© 2026 ملاعبنا · المملكة العربية السعودية</span>
     <span>وثيقة عمل حر · FL-246268597</span>
   </div>
 </footer>
@@ -682,27 +692,46 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 <script>
 const DATA = {
   stadiums: [
-    { id:1, name:"ملعب البحر الأخضر", region:"خميس البحر",    loc:"كورنيش البحر",   price:160, rating:4.9, tags:["إنارة ليلية","عشب صناعي"], icon:"🏟️" },
-    { id:2, name:"ملعب أبو سكينة",    region:"بحر أبو سكينة", loc:"وسط البلد",      price:140, rating:4.6, tags:["مواقف","غرف تبديل"], icon:"⚽" },
-    { id:3, name:"ملعب القمة",        region:"أبها",          loc:"حي المنهل",      price:210, rating:5.0, tags:["VIP","تكييف"], icon:"🏟️" },
-    { id:4, name:"ملعب الشلال",       region:"أبها",          loc:"حي الشلال",      price:130, rating:4.5, tags:["اقتصادي","مواقف"], icon:"⚽" },
-    { id:5, name:"ملعب النخيل",       region:"خميس البحر",    loc:"حي النخيل",      price:170, rating:4.7, tags:["إنارة ليلية","مدرجات"], icon:"🏟️" },
-    { id:6, name:"ملعب الواحة",       region:"بحر أبو سكينة", loc:"طريق الساحل",    price:120, rating:4.4, tags:["اقتصادي"], icon:"⚽" },
+    { id:1, name:"ملعب النخيل الرياضي", region:"الرياض",          loc:"حي النخيل",     price:160, rating:4.9, tags:["إنارة ليلية","عشب صناعي"], icon:"🏟️" },
+    { id:2, name:"ملعب الواحة",         region:"مكة المكرمة",     loc:"حي العزيزية",   price:140, rating:4.6, tags:["مواقف","غرف تبديل"], icon:"⚽" },
+    { id:3, name:"ملعب القمة",          region:"المنطقة الشرقية", loc:"حي الشاطئ",     price:210, rating:5.0, tags:["VIP","تكييف"], icon:"🏟️" },
+    { id:4, name:"ملعب الشلال",         region:"عسير",            loc:"حي الشلال",     price:130, rating:4.5, tags:["اقتصادي","مواقف"], icon:"⚽" },
+    { id:5, name:"ملعب الأمير",         region:"المدينة المنورة", loc:"حي العوالي",    price:170, rating:4.7, tags:["إنارة ليلية","مدرجات"], icon:"🏟️" },
+    { id:6, name:"ملعب الفيصلية",       region:"القصيم",          loc:"حي الصفراء",    price:120, rating:4.4, tags:["اقتصادي"], icon:"⚽" },
   ],
   academies: [
-    { id:1, name:"أكاديمية النجوم",   region:"خميس البحر", loc:"المجمع الرياضي", price:300, rating:4.8, tags:["تحت 12","تحت 16"], icon:"🎓", desc:"برنامج تدريبي احترافي" },
-    { id:2, name:"أكاديمية الصقور",   region:"أبها",       loc:"حي المنهل",      price:280, rating:4.9, tags:["حراس مرمى","مهارات"], icon:"🥅", desc:"تخصص حراسة المرمى" },
-    { id:3, name:"أكاديمية المستقبل", region:"بحر أبو سكينة", loc:"الساحل",      price:250, rating:4.6, tags:["ناشئين","لياقة"], icon:"⚽", desc:"بناء أساس رياضي قوي" },
+    { id:1, name:"أكاديمية النجوم",   region:"الرياض",          loc:"المجمع الرياضي", price:300, rating:4.8, tags:["تحت 12","تحت 16"], icon:"🎓", desc:"برنامج تدريبي احترافي" },
+    { id:2, name:"أكاديمية الصقور",   region:"المنطقة الشرقية", loc:"حي الفردوس",      price:280, rating:4.9, tags:["حراس مرمى","مهارات"], icon:"🥅", desc:"تخصص حراسة المرمى" },
+    { id:3, name:"أكاديمية المستقبل", region:"مكة المكرمة",     loc:"حي الروضة",       price:250, rating:4.6, tags:["ناشئين","لياقة"], icon:"⚽", desc:"بناء أساس رياضي قوي" },
   ],
   tournaments: [
-    { id:1, name:"بطولة الحي الرمضانية", region:"خميس البحر", loc:"ملعب البحر الأخضر", price:500, rating:0, tags:["16 فريق","جوائز"], icon:"🏆", desc:"بطولة سداسي · تبدأ قريبًا", teams:"12/16" },
-    { id:2, name:"دوري عسير المفتوح",     region:"أبها",       loc:"ملعب القمة",       price:800, rating:0, tags:["دوري","8 فرق"], icon:"🥇", desc:"دوري ذهاب وإياب", teams:"6/8" },
-    { id:3, name:"كأس الساحل",           region:"بحر أبو سكينة", loc:"ملعب أبو سكينة", price:400, rating:0, tags:["خروج المغلوب"], icon:"🏅", desc:"بطولة نهاية الأسبوع", teams:"8/16" },
+    { id:1, name:"بطولة الحي الرمضانية", region:"الرياض",          loc:"ملعب النخيل الرياضي", price:500, rating:0, tags:["16 فريق","جوائز"], icon:"🏆", desc:"بطولة سداسي · تبدأ قريبًا", teams:"12/16" },
+    { id:2, name:"الدوري المفتوح",       region:"المنطقة الشرقية", loc:"ملعب القمة",          price:800, rating:0, tags:["دوري","8 فرق"], icon:"🥇", desc:"دوري ذهاب وإياب", teams:"6/8" },
+    { id:3, name:"كأس الأحياء",          region:"مكة المكرمة",     loc:"ملعب الواحة",         price:400, rating:0, tags:["خروج المغلوب"], icon:"🏅", desc:"بطولة نهاية الأسبوع", teams:"8/16" },
   ]
 };
 
 const dayNames = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 const timeSlots = ["14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"];
+
+// المناطق الإدارية الرسمية الثلاث عشرة بالمملكة العربية السعودية
+const SAUDI_REGIONS = [
+  "الرياض","مكة المكرمة","المدينة المنورة","المنطقة الشرقية","عسير",
+  "القصيم","تبوك","حائل","الحدود الشمالية","جازان","نجران","الباحة","الجوف"
+];
+function saudiRegionOptionsHtml(selected){
+  return SAUDI_REGIONS.map(r=>`<option value="${r}" ${selected===r?'selected':''}>${r}</option>`).join('');
+}
+
+// تحويل الوقت من صيغة 24 ساعة (المخزّنة بالقاعدة) إلى صيغة 12 ساعة بصباحًا/مساءً (الأنسب للمستخدم السعودي)
+function formatTime12(t){
+  if (!t) return '';
+  const [hStr, mStr] = t.slice(0,5).split(':');
+  let h = parseInt(hStr, 10);
+  const period = h >= 12 ? 'م' : 'ص';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${mStr} ${period}`;
+}
 
 let currentMod = 'stadiums';
 
@@ -826,7 +855,7 @@ async function loadOpenMatches(){
       <div class="card-b">
         <div class="card-name">${b.fields?.name||'ملعب'}</div>
         <div class="card-loc">📍 ${b.fields?.facilities?.district||''}، ${b.fields?.facilities?.city||''}</div>
-        <div class="card-tags"><span class="ctag">📅 ${b.booking_date}</span><span class="ctag">⏱️ ${(b.start_time||'').slice(0,5)}</span><span class="ctag">👥 ${b.players_count} لاعب</span></div>
+        <div class="card-tags"><span class="ctag">📅 ${b.booking_date}</span><span class="ctag">⏱️ ${formatTime12(b.start_time)}</span><span class="ctag">👥 ${b.players_count} لاعب</span></div>
         <div class="card-f">
           <div class="cprice"><span class="a">${remaining}</span> <span class="p">ريال متبقي</span></div>
           <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();openJoinPage('${b.share_link_token}')">انضم ←</button>
@@ -952,7 +981,7 @@ async function renderStadiumDrawer(){
   const taken = avail.taken;
   const activeSlots = avail.slots.length ? avail.slots : timeSlots;
   const slots = activeSlots.map(t=>{ const tk=taken.includes(t); const sl=selSlot===t;
-    return `<div class="slot ${tk?'taken':sl?'sel':'free'}" ${tk?'':`onclick="setSlot('${t}')"`}>${t}</div>`; }).join('');
+    return `<div class="slot ${tk?'taken':sl?'sel':'free'}" ${tk?'':`onclick="setSlot('${t}')"`}>${formatTime12(t)}</div>`; }).join('');
 
   window.effectivePrice = avail.priceOverride!=null ? avail.priceOverride : s.price;
   const totalForSplit = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : window.effectivePrice;
@@ -1011,7 +1040,7 @@ async function renderStadiumDrawer(){
 
     <div class="summary">
       <div class="srow"><span>الملعب</span><span>${s.name}</span></div>
-      <div class="srow"><span>الوقت</span><span>${selSlot? selSlot+' - '+(parseInt(selSlot)+1)+':00' : '— اختر وقتًا —'}</span></div>
+      <div class="srow"><span>الوقت</span><span>${selSlot? formatTime12(selSlot)+' - '+formatTime12((parseInt(selSlot)+1)+':00') : '— اختر وقتًا —'}</span></div>
       <div class="srow" id="couponRow" style="display:none"><span>خصم الكوبون</span><span id="couponDiscount">0 ر</span></div>
       ${bookingMode==='split' ? `<div class="srow"><span>الإجمالي الكامل</span><span>${totalForSplit} ريال</span></div>` : ''}
       <div class="srow tot"><span>${bookingMode==='split' ? 'تدفعه أنت الآن' : 'الإجمالي'}</span><span class="amt" id="finalPrice">${myShare} ريال</span></div>
@@ -1081,7 +1110,7 @@ function proceed(){
   document.querySelector('#mConfirm .micon').textContent = '📝';
   document.getElementById('receipt').innerHTML = `
     <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
-    ${isStadium? `<div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
+    ${isStadium? `<div class="r"><span>الوقت</span><b>${formatTime12(selSlot)} - ${formatTime12((parseInt(selSlot)+1)+':00')}</b></div>`:''}
     ${extraRow}
     <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق عند الملعب</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
   `;
@@ -1103,7 +1132,7 @@ function finalizePayment(){
   document.getElementById('confirmText').textContent = `احتفظ برقم الحجز، وادفع نقدًا أو تحويلًا عند وصولك ⚽`;
   document.getElementById('receipt').innerHTML = `
     <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
-    ${isStadium? `<div class="r"><span>التاريخ</span><b>${dateStr}</b></div><div class="r"><span>الوقت</span><b>${selSlot} - ${parseInt(selSlot)+1}:00</b></div>`:''}
+    ${isStadium? `<div class="r"><span>التاريخ</span><b>${dateStr}</b></div><div class="r"><span>الوقت</span><b>${formatTime12(selSlot)} - ${formatTime12((parseInt(selSlot)+1)+':00')}</b></div>`:''}
     <div class="r"><span>رقم الحجز</span><b class="mono">#${Math.floor(10000+Math.random()*89999)}</b></div>
     <div class="r"><span>طريقة الدفع</span><b>عند الملعب (نقدًا / تحويل)</b></div>
     <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
@@ -1139,17 +1168,31 @@ function doAuth(){
 
 const LEGAL = {
   terms: { t:"الشروط والأحكام", html:`
-    <h4>١. قبول الشروط</h4><p>باستخدامك منصة ملاعبنا فإنك توافق على هذه الشروط. المنصة تربط بين اللاعبين وأصحاب الملاعب والأكاديميات ومنظّمي البطولات.</p>
-    <h4>٢. الحجز والإلغاء</h4><p>يلتزم اللاعب بمهلة الإلغاء المرنة الموضحة عند الحجز. الإلغاء ضمن المهلة المسموحة يتيح استرداد المبلغ وفق سياسة الاسترداد.</p>
-    <h4>٣. مسؤولية المستخدم</h4><p>يتحمل المستخدم مسؤولية دقة بياناته والتزامه بمواعيد الحجز واحترام قواعد الملعب.</p>
-    <h4>٤. حقوق الملاك</h4><p>تحفظ المنصة حقوق أصحاب الملاعب وتنظّم العلاقة بينهم وبين اللاعبين بشكل عادل.</p>
-    <div class="legal-note">⚠️ هذه صياغة مبدئية للعرض. يجب مراجعتها واعتمادها من مختص قانوني قبل النشر الرسمي.</div>` },
+    <h4>١. التعريفات وقبول الشروط</h4><p>"المنصة" تعني موقع وتطبيق ملاعبنا. "المستخدم" يشمل اللاعب وصاحب الملعب وموظفيه. باستخدامك المنصة أو إنشائك حسابًا، فإنك تقرّ بموافقتك الكاملة على هذه الشروط.</p>
+    <h4>٢. طبيعة الخدمة</h4><p>ملاعبنا منصة وسيطة تربط بين اللاعبين من جهة، وأصحاب الملاعب والأكاديميات ومنظّمي البطولات من جهة أخرى، لتسهيل الحجز والدفع الإلكتروني. المنصة ليست مالكة للملاعب ولا مسؤولة عن إدارتها التشغيلية اليومية.</p>
+    <h4>٣. إنشاء الحساب</h4><p>يلتزم المستخدم بتقديم رقم جوال صحيح وبيانات دقيقة. الحساب شخصي وغير قابل للتحويل، والمستخدم مسؤول عن سرية كلمة مروره وكل نشاط يصدر من حسابه.</p>
+    <h4>٤. الحجز والدفع الإلكتروني</h4><p>يتم تأكيد الحجز فقط بعد اكتمال الدفع الإلكتروني بالكامل عبر بوابة الدفع المعتمدة. السعر الظاهر وقت الحجز هو المبلغ النهائي المستحق، ولا تُقبل حجوزات بالدفع النقدي داخل المنصة.</p>
+    <h4>٥. القطة وميزة أكمل الفريق</h4><p>عند اختيار خاصية "القطة"، يتحمّل منظّم الحجز مسؤولية دفع نصيبه وإطلاع بقية المشاركين على رابط إكمال المبلغ. تفعيل "أكمل الفريق" يجعل الحجز مرئيًا لعموم مستخدمي المنصة للانضمام إليه ودفع حصتهم مباشرة. لا يتحمّل منظّم الحجز أي التزام تجاه من ينضم عبر هذي الخاصية بخلاف ما ورد في سياسة الإلغاء والاسترداد.</p>
+    <h4>٦. الإلغاء والاسترداد</h4><p>يخضع إلغاء الحجوزات لسياسة الإلغاء والاسترداد المنشورة على المنصة، والتي تُعد جزءًا لا يتجزأ من هذه الشروط.</p>
+    <h4>٧. التزامات صاحب الملعب</h4><p>يلتزم صاحب الملعب بدقة بيانات منشأته وملاعبه المعروضة، والالتزام بالحجوزات المؤكدة، والحفاظ على سلامة وصلاحية الملعب للاستخدام. يخضع انضمام أي منشأة جديدة لموافقة إدارة المنصة قبل نشرها للجمهور.</p>
+    <h4>٨. عمولة المنصة والتحويلات المالية</h4><p>تستحق المنصة عمولة على كل حجز مكتمل الدفع بالنسبة المعلنة في لوحة تحكم صاحب الملعب، والتي قد تُعدَّل من إدارة المنصة مستقبلًا مع إشعار مسبق. تُحوَّل المستحقات الصافية لأصحاب الملاعب دوريًا وفق الجدول المعتمد، مع سجل موثّق لكل عملية تحويل.</p>
+    <h4>٩. السلوك المحظور</h4><p>يُمنع استخدام المنصة لأي غرض احتيالي، أو انتحال صفة، أو نشر تقييمات كاذبة، أو الإساءة لمستخدمين آخرين أو أصحاب الملاعب. تحتفظ المنصة بحق تعليق أو إنهاء أي حساب يخالف ذلك دون إشعار مسبق في الحالات الجسيمة.</p>
+    <h4>١٠. التقييمات والمحتوى</h4><p>التقييمات والتعليقات يجب أن تعكس تجربة حقيقية للمستخدم. تحتفظ إدارة المنصة بحق حذف أي تقييم مسيء أو مخالف دون الحاجة لإشعار مسبق.</p>
+    <h4>١١. حدود المسؤولية</h4><p>المنصة وسيط تقني، ولا تتحمّل مسؤولية الإصابات أو الأضرار الناتجة عن استخدام الملاعب فعليًا، أو عن جودة الخدمة المقدَّمة من صاحب الملعب أو الأكاديمية، والتي تبقى مسؤوليتهم المباشرة.</p>
+    <h4>١٢. القانون الواجب التطبيق</h4><p>تخضع هذه الشروط لأنظمة المملكة العربية السعودية، وتختص المحاكم السعودية بالفصل في أي نزاع ينشأ عنها.</p>
+    <h4>١٣. تعديل الشروط</h4><p>يجوز للمنصة تعديل هذه الشروط من وقت لآخر، ويُعتد بالنسخة المنشورة وقت استخدامك للمنصة.</p>
+    <div class="legal-note">⚠️ هذي الصياغة أساس عملي شامل مبني على واقع تشغيل المنصة الفعلي، ويُنصح بمراجعتها من محامٍ مرخّص قبل الاعتماد النهائي لضمان التوافق الكامل مع الأنظمة السعودية.</div>` },
   privacy: { t:"سياسة الخصوصية", html:`
-    <h4>١. البيانات التي نجمعها</h4><p>نجمع الاسم، البريد، رقم الجوال، وبيانات الحجز لتقديم الخدمة فقط.</p>
-    <h4>٢. حماية البيانات</h4><p>تُشفّر بيانات المستخدمين وصور الملاعب وتُحفظ بأمان. لا نشارك بياناتك مع أطراف ثالثة دون موافقتك.</p>
-    <h4>٣. ملفات الموقع</h4><p>نستخدم تقنيات لتحسين تجربتك وحفظ تفضيلاتك مثل الوضع الليلي.</p>
-    <h4>٤. حقوقك</h4><p>يحق لك الاطلاع على بياناتك أو طلب حذفها في أي وقت.</p>
-    <div class="legal-note">⚠️ راجِع متطلبات نظام حماية البيانات الشخصية السعودي (PDPL) مع مختص قبل الاعتماد.</div>` },
+    <h4>١. البيانات التي نجمعها</h4><p>الاسم ورقم الجوال عند التسجيل، الموقع الجغرافي عند تفعيله لعرض أقرب الملاعب، بيانات الحجوزات والتقييمات، وسجلات التواصل مع الدعم. لا تُخزَّن بيانات بطاقتك البنكية على خوادمنا أبدًا — تُعالَج مباشرة عبر بوابة الدفع المرخّصة.</p>
+    <h4>٢. كيف نستخدم بياناتك</h4><p>لتقديم خدمة الحجز وتأكيده، إرسال الإشعارات المتعلقة بحجوزاتك، تحسين تجربتك، ولأغراض منع الاحتيال وحماية حسابك.</p>
+    <h4>٣. مشاركة البيانات مع أطراف ثالثة</h4><p>نشارك الحد الأدنى اللازم من بياناتك مع: بوابة الدفع الإلكتروني المرخّصة لإتمام عمليات الدفع والاسترداد، مزوّد الرسائل النصية/واتساب لإرسال إشعارات الحجز، ومزوّد الاستضافة التقنية للمنصة. لا نبيع بياناتك لأي جهة تسويقية.</p>
+    <h4>٤. أمان البيانات</h4><p>تُخزَّن بياناتك بقواعد بيانات محمية بصلاحيات وصول مقيّدة، وتُشفَّر الاتصالات بين جهازك وخوادمنا.</p>
+    <h4>٥. حقوقك بموجب نظام حماية البيانات الشخصية السعودي</h4><p>يحق لك الاطلاع على بياناتك المحفوظة، طلب تصحيحها، طلب حذف حسابك وبياناته (باستثناء ما يلزم قانونًا الاحتفاظ به كسجلات مالية)، والاعتراض على أي استخدام غير ضروري لها.</p>
+    <h4>٦. مدة الاحتفاظ بالبيانات</h4><p>نحتفظ بسجلات الحجوزات والمدفوعات للمدة اللازمة نظاميًا لأغراض محاسبية ومالية، حتى بعد حذف الحساب، حماية لحقوق جميع الأطراف.</p>
+    <h4>٧. الأطفال والقاصرين</h4><p>تسجيل الأكاديميات لأطفال يتم عبر حساب ولي الأمر البالغ، ولا يُسمح للقاصرين بإنشاء حساب مستقل على المنصة.</p>
+    <h4>٨. تعديل هذي السياسة</h4><p>قد تُحدَّث هذي السياسة دوريًا، وسيصلك إشعار بأي تغيير جوهري يؤثر على بياناتك.</p>
+    <h4>٩. التواصل بخصوص خصوصيتك</h4><p>لأي استفسار أو طلب متعلق ببياناتك الشخصية، تواصل معنا عبر قسم "تواصل معنا" في القائمة الجانبية.</p>
+    <div class="legal-note">⚠️ يُنصح بمراجعة هذي السياسة من مختص قانوني لضمان التوافق الكامل مع نظام حماية البيانات الشخصية (PDPL) قبل الاعتماد النهائي.</div>` },
   refund: { t:"سياسة الإلغاء والاسترداد", html:`
     <h4>١. الإلغاء قبل 24 ساعة أو أكثر من الموعد</h4><p>استرجاع كامل المبلغ (100%) مباشرة إلى بطاقتك عبر بوابة الدفع.</p>
     <h4>٢. الإلغاء بين 6 و24 ساعة من الموعد</h4><p>استرجاع نصف المبلغ (50%).</p>
@@ -1160,8 +1203,9 @@ const LEGAL = {
     <div class="legal-note">⚠️ مدة ظهور المبلغ المسترجع في حسابك البنكي تعتمد على بنكك وبوابة الدفع (عادة 3-14 يوم عمل).</div>` },
   pricing: { t:"سياسة الأسعار", html:`
     <h4>١. العملة</h4><p>جميع الأسعار بالريال السعودي (SAR).</p>
-    <h4>٢. الشفافية</h4><p>لا توجد رسوم خفية. السعر الظاهر عند الحجز هو السعر النهائي الذي تدفعه.</p>
-    <div class="legal-note">⚠️ الأسعار قد تشمل أو لا تشمل الضريبة حسب الوضع الضريبي لصاحب الملعب — راجع صاحب الملعب أو محاسبك للتفاصيل.</div>` },
+    <h4>٢. الشفافية</h4><p>لا توجد رسوم خفية. السعر الظاهر عند الحجز هو السعر النهائي الذي تدفعه، شاملًا أي عمولة أو رسوم خدمة.</p>
+    <h4>٣. تسعير الذروة</h4><p>يحق لصاحب الملعب تحديد أسعار مختلفة حسب يوم الأسبوع (تسعير ذروة/خارج الذروة)، ويظهر السعر المطبَّق بوضوح قبل تأكيد الحجز.</p>
+    <h4>٤. الكوبونات والخصومات</h4><p>كوبونات الخصم يديرها ويتحمّل تكلفتها صاحب الملعب مباشرة، وتُطبَّق تلقائيًا على السعر النهائي عند إدخال كود صالح.</p>` },
 };
 function openLegal(key){
   const L = LEGAL[key];
@@ -1208,7 +1252,7 @@ function sortStadiumsByDistance(){
 // ── الخريطة الحقيقية (Leaflet + OpenStreetMap، مجاني بدون مفتاح API) ──
 function initRealMap(){
   if (window._leafletMap || typeof L === 'undefined') return;
-  window._leafletMap = L.map('realMap', { zoomControl:true, attributionControl:false }).setView([18.3, 42.7], 9);
+  window._leafletMap = L.map('realMap', { zoomControl:true, attributionControl:false }).setView([24.0, 45.0], 6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(window._leafletMap);
 }
 function renderMapMarkers(){
@@ -1315,7 +1359,7 @@ async function openJoinPage(token){
       <div style="text-align:center;margin-bottom:16px">
         <div style="font-size:15px;font-weight:800">${data.field_name||'ملعب'}</div>
         <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">${data.facility_name||''} · ${data.city||''}</div>
-        <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">📅 ${data.date} · ⏱️ ${(data.start_time||'').slice(0,5)} - ${(data.end_time||'').slice(0,5)}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">📅 ${data.date} · ⏱️ ${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</div>
       </div>
       <div style="background:var(--bg-soft);border-radius:10px;height:10px;overflow:hidden;margin-bottom:8px">
         <div style="height:100%;width:${pct}%;background:var(--brand)"></div>
@@ -1856,7 +1900,7 @@ async function showMyBookings() {
         <div><b>${b.fields?.name||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.fields?.facilities?.city||''}</div></div>
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
-      <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)} - ${b.end_time?.slice(0,5)}</div>
+      <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</div>
       ${(!b.is_split && b.status==='pending' && b.payment_status==='unpaid') ? `
         <div style="font-size:11px;color:var(--danger);margin-top:5px">⚠️ لم يكتمل الدفع بعد — سيُلغى الحجز تلقائيًا عند بداية وقت التمرين إذا لم يتم الدفع</div>
       ` : ''}
@@ -1982,7 +2026,7 @@ async function doLookup() {
     <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px">
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${data.fields?.name||'—'}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ</span><b>${data.booking_date}</b></div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الوقت</span><b>${data.start_time?.slice(0,5)} - ${data.end_time?.slice(0,5)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الوقت</span><b>${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${statusMap[data.status]||data.status}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">المبلغ</span><b style="color:var(--flood)">${data.total_price} ريال</b></div>
     </div>`;
@@ -2059,7 +2103,7 @@ function showAbout() {
         منصة سعودية لحجز الملاعب الرياضية والأكاديميات والبطولات.
         احجز ملعبك، قسّم التكلفة بذكاء، وادفع بأمان.
         <br><br>
-        نخدم منطقة عسير ونتوسّع قريباً 🌱
+        نخدم جميع مناطق المملكة العربية السعودية 🌱
       </div>
       <div style="margin-top:16px;font-size:12px;color:var(--ink-dim)">الإصدار 2.0 · 2026</div>
     </div>`);
@@ -2297,7 +2341,7 @@ async function renderOwnerBookingsTab(){
         <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
-      <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)||''} - ${b.end_time?.slice(0,5)||''} · 👥 ${b.players_count||''} لاعب</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''} - ${b.end_time?formatTime12(b.end_time):''} · 👥 ${b.players_count||''} لاعب</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
         <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
         <div style="display:flex;gap:6px">
@@ -2403,7 +2447,7 @@ async function showScheduleAcademySession(academyId){
     <div class="dlabel" style="margin-top:18px">📋 المواعيد الحالية</div>
     ${(sessions&&sessions.length)? sessions.map(s=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
-        <span style="font-size:12.5px"><b>${WD_NAMES[s.weekday]}</b> · ${s.start_time?.slice(0,5)}–${s.end_time?.slice(0,5)} · ${s.fields?.name||''}${s.label?' · '+s.label:''}</span>
+        <span style="font-size:12.5px"><b>${WD_NAMES[s.weekday]}</b> · ${formatTime12(s.start_time)}–${formatTime12(s.end_time)} · ${s.fields?.name||''}${s.label?' · '+s.label:''}</span>
         <button class="btn btn-ghost btn-sm" onclick="deleteAcademySession(${s.id},${academyId})">حذف</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مواعيد بعد</div>'}
   `;
@@ -2454,7 +2498,7 @@ async function showScheduleMatch(tournamentId){
     <div class="dlabel" style="margin-top:18px">📋 المباريات المجدولة</div>
     ${(matches&&matches.length)? matches.map(m=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
-        <span style="font-size:12.5px"><b>${m.match_date}</b> · ${m.start_time?.slice(0,5)}–${m.end_time?.slice(0,5)} · ${m.fields?.name||''}${(m.team_a||m.team_b)? ' · '+(m.team_a||'؟')+' ضد '+(m.team_b||'؟'):''}</span>
+        <span style="font-size:12.5px"><b>${m.match_date}</b> · ${formatTime12(m.start_time)}–${formatTime12(m.end_time)} · ${m.fields?.name||''}${(m.team_a||m.team_b)? ' · '+(m.team_a||'؟')+' ضد '+(m.team_b||'؟'):''}</span>
         <button class="btn btn-ghost btn-sm" onclick="deleteMatch(${m.id},${tournamentId})">حذف</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مباريات مجدولة بعد</div>'}
   `;
@@ -2508,7 +2552,7 @@ function showAddAcademyForm(){
   document.getElementById('ownerTitle').textContent = '➕ إضافة أكاديمية';
   bodyEl.innerHTML = `
     <div class="field"><label>اسم الأكاديمية *</label><input id="ac-name" type="text" placeholder="أكاديمية النجوم"></div>
-    <div class="field"><label>المدينة *</label><input id="ac-city" type="text" placeholder="خميس مشيط"></div>
+    <div class="field"><label>المدينة *</label><input id="ac-city" type="text" placeholder="مثال: الرياض"></div>
     <div class="field"><label>الحي</label><input id="ac-district" type="text" placeholder="حي الراقي"></div>
     <div class="field"><label>الاشتراك الشهري (ريال) *</label><input id="ac-price" type="number" placeholder="300"></div>
     <div class="field"><label>الفئات العمرية</label><input id="ac-ages" type="text" placeholder="تحت 12، تحت 16"></div>
@@ -2542,7 +2586,7 @@ function showAddTournamentForm(){
   document.getElementById('ownerTitle').textContent = '➕ إضافة بطولة';
   bodyEl.innerHTML = `
     <div class="field"><label>اسم البطولة *</label><input id="tn-name" type="text" placeholder="بطولة الحي الرمضانية"></div>
-    <div class="field"><label>المدينة *</label><input id="tn-city" type="text" placeholder="خميس مشيط"></div>
+    <div class="field"><label>المدينة *</label><input id="tn-city" type="text" placeholder="مثال: الرياض"></div>
     <div class="field"><label>الملعب / المكان</label><input id="tn-venue" type="text" placeholder="ملعب البحر الأخضر"></div>
     <div class="field"><label>رسوم الفريق (ريال) *</label><input id="tn-fee" type="number" placeholder="500"></div>
     <div class="field"><label>الحد الأقصى للفرق</label><input id="tn-maxteams" type="number" placeholder="16" value="16"></div>
@@ -2653,7 +2697,7 @@ async function editStadiumForm(fieldId) {
     <div class="field">
       <label>المنطقة</label>
       <select id="st-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
-        ${['خميس البحر','بحر أبو سكينة','أبها','خميس مشيط'].map(r=>`<option value="${r}" ${fd.facilities?.region===r?'selected':''}>${r}</option>`).join('')}
+        ${saudiRegionOptionsHtml(fd.facilities?.region)}
       </select>
     </div>
     <div class="field">
@@ -3073,7 +3117,7 @@ async function adminView(kind) {
           <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
           <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
         </div>
-        <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?.slice(0,5)||''}</div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
           <div style="display:flex;gap:6px">
@@ -3616,15 +3660,12 @@ async function showAddStadiumForm() {
     </div>
     <div id="facilityLocationFields">
       <div class="field"><label>اسم المنشأة/الملعب *</label><input id="st-name" type="text" placeholder="مثال: مجمع النخيل الرياضي"></div>
-      <div class="field"><label>المدينة *</label><input id="st-city" type="text" placeholder="خميس مشيط"></div>
-      <div class="field"><label>الحي *</label><input id="st-district" type="text" placeholder="حي الراقي"></div>
+      <div class="field"><label>المدينة *</label><input id="st-city" type="text" placeholder="مثال: الرياض"></div>
+      <div class="field"><label>الحي *</label><input id="st-district" type="text" placeholder="مثال: حي النخيل"></div>
       <div class="field">
         <label>المنطقة</label>
         <select id="st-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
-          <option value="خميس البحر">خميس البحر</option>
-          <option value="بحر أبو سكينة">بحر أبو سكينة</option>
-          <option value="أبها">أبها</option>
-          <option value="خميس مشيط">خميس مشيط</option>
+          ${saudiRegionOptionsHtml(null)}
         </select>
       </div>
       <div class="field">
@@ -3685,9 +3726,9 @@ function useMyLocationForField(){
 // ── خريطة اختيار الموقع بالضغط المباشر (بدل إدخال خطوط الطول/العرض يدويًا) ──
 function initLocationPicker(containerId, initialLat, initialLng){
   if (typeof L === 'undefined') { setTimeout(()=>initLocationPicker(containerId, initialLat, initialLng), 200); return; }
-  const startLat = initialLat != null ? initialLat : 18.3;
-  const startLng = initialLng != null ? initialLng : 42.7;
-  const map = L.map(containerId, { zoomControl:true, attributionControl:false }).setView([startLat, startLng], initialLat!=null ? 14 : 8);
+  const startLat = initialLat != null ? initialLat : 24.0;
+  const startLng = initialLng != null ? initialLng : 45.0;
+  const map = L.map(containerId, { zoomControl:true, attributionControl:false }).setView([startLat, startLng], initialLat!=null ? 14 : 6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(map);
   window._pickerMapInstance = map;
   window._pickerMarker = null;
