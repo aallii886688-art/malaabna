@@ -142,7 +142,7 @@ html[data-theme="dark"] .theme-toggle .knob{transform:translateX(-24px);backgrou
     radial-gradient(ellipse 700px 500px at 85% 10%, var(--brand-soft), transparent 65%),
     radial-gradient(ellipse 900px 600px at 10% 100%, var(--flood-soft), transparent 60%);
 }
-.hero-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.hero-inner{position:relative;z-index:1;max-width:760px;margin:0 auto;text-align:center}
 .eyebrow{
   display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;
   color:var(--brand-deep);background:var(--brand-soft);padding:7px 15px;border-radius:30px;margin-bottom:22px;
@@ -155,8 +155,8 @@ html[data-theme="dark"] .eyebrow{color:var(--brand)}
 html[data-theme="dark"] .hero h1 .g{text-shadow:0 0 18px rgba(57,255,20,.45)}
 .hero h1 .f{color:var(--flood)}
 .hero-sub{font-size:17px;color:var(--ink-soft);line-height:1.75;max-width:470px;margin-bottom:34px}
-.hero-ctas{display:flex;gap:13px;margin-bottom:44px;flex-wrap:wrap}
-.hero-stats{display:flex;gap:34px}
+.hero-ctas{display:flex;gap:13px;margin-bottom:44px;flex-wrap:wrap;justify-content:center}
+.hero-stats{display:flex;gap:34px;justify-content:center}
 .hstat .n{font-size:25px;font-weight:900;color:var(--ink)}
 .hstat .n span{color:var(--brand)}
 .hstat .l{font-size:12px;color:var(--ink-dim);margin-top:3px}
@@ -434,27 +434,9 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
         <button class="btn btn-ghost btn-lg" onclick="scrollToId('how')">كيف يعمل؟</button>
       </div>
       <div class="hero-stats">
-        <div class="hstat"><div class="n"><span>1,240</span>+</div><div class="l">حجز هذا الشهر</div></div>
-        <div class="hstat"><div class="n"><span>8</span></div><div class="l">ملاعب وأكاديميات</div></div>
+        <div class="hstat"><div class="n"><span id="heroStatBookings">—</span></div><div class="l">حجز هذا الشهر</div></div>
+        <div class="hstat"><div class="n"><span id="heroStatListings">—</span></div><div class="l">ملاعب وأكاديميات</div></div>
         <div class="hstat"><div class="n"><span>100%</span></div><div class="l">دفع إلكتروني آمن</div></div>
-      </div>
-    </div>
-    <div class="hero-visual" style="position:relative">
-      <div class="floaty floaty-1">⚡ حجز فوري</div>
-      <div class="floaty floaty-2">🤝 قطة ذكية</div>
-      <div class="hcard">
-        <div class="hcard-top">
-          <div><div class="hcard-title">ملعب النخيل الرياضي</div><div class="hcard-loc">📍 الرياض، المملكة العربية السعودية</div></div>
-          <div class="live"><span class="d"></span> مباشر</div>
-        </div>
-        <div class="slot-mini">
-          <div class="sm taken">4:00 م</div><div class="sm">5:00 م</div><div class="sm sel">6:00 م</div><div class="sm">7:00 م</div>
-          <div class="sm taken">8:00 م</div><div class="sm">9:00 م</div><div class="sm">10:00 م</div><div class="sm taken">11:00 م</div>
-        </div>
-        <div class="hcard-foot">
-          <div class="hprice"><span class="a">160</span> <span class="p">ر / ساعة</span></div>
-          <button class="btn btn-flood btn-sm" onclick="goMod('stadiums')">احجز 6:00 م ←</button>
-        </div>
       </div>
     </div>
   </div>
@@ -778,6 +760,7 @@ function formatTime12(t){
   return `${h}:${mStr} ${period}`;
 }
 
+const BACK_BTN = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" style="margin-bottom:14px">→ رجوع</button>`;
 let currentMod = 'stadiums';
 
 // ── الوقت دائمًا بتوقيت السعودية (UTC+3 بدون توقيت صيفي) بغض النظر عن جهاز الزائر ──
@@ -1349,10 +1332,11 @@ async function loadRealTrustStats(){
   try {
     const now = riyadhNow();
     const firstOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().split('T')[0];
-    const [{ count: confirmedThisMonth }, { count: cancelledCount }, { count: fieldsCount }, { data: allReviews }] = await Promise.all([
+    const [{ count: confirmedThisMonth }, { count: cancelledCount }, { count: fieldsCount }, { count: academiesCount }, { data: allReviews }] = await Promise.all([
       sb.from('bookings').select('*', { count:'exact', head:true }).in('status',['confirmed','completed']).gte('booking_date', firstOfMonth),
       sb.from('bookings').select('*', { count:'exact', head:true }).eq('status','cancelled'),
-      sb.from('fields').select('*', { count:'exact', head:true }).eq('status','available'),
+      sb.from('fields').select('*', { count:'exact', head:true }).eq('status','available').eq('is_deleted', false),
+      sb.from('academies').select('*', { count:'exact', head:true }).eq('approved', true).eq('is_deleted', false),
       sb.from('reviews').select('rating')
     ]);
     const avgRating = (allReviews && allReviews.length) ? (allReviews.reduce((s,r)=>s+r.rating,0)/allReviews.length).toFixed(1) : '—';
@@ -1363,6 +1347,10 @@ async function loadRealTrustStats(){
       cards[2].textContent = (fieldsCount||0);
       cards[3].textContent = avgRating==='—' ? '—' : avgRating+'★';
     }
+    const heroBookingsEl = document.getElementById('heroStatBookings');
+    const heroListingsEl = document.getElementById('heroStatListings');
+    if (heroBookingsEl) heroBookingsEl.textContent = (confirmedThisMonth||0) + '+';
+    if (heroListingsEl) heroListingsEl.textContent = (fieldsCount||0) + (academiesCount||0);
   } catch(e){ console.log('تعذّر تحميل الإحصائيات الحقيقية', e); }
 }
 
@@ -1976,7 +1964,7 @@ async function sideGo(where) {
 
 function openInfoModal(title, html) {
   document.getElementById('ownerTitle').textContent = title;
-  document.getElementById('ownerBody').innerHTML = html;
+  document.getElementById('ownerBody').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" style="margin-bottom:14px">→ رجوع</button>` + html;
   document.getElementById('mOwner').classList.add('open');
   document.getElementById('ov').classList.add('open');
 }
@@ -2036,9 +2024,9 @@ async function showMyBookings() {
     .from('bookings')
     .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, fields(name, facilities(name, city))')
     .order('booking_date', { ascending: false });
-  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
+  if (error) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
-    document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">📅</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد حجوزات بعد</div></div>`; return;
+    document.getElementById('ownerBody').innerHTML = BACK_BTN + `<div style="text-align:center;padding:30px"><div style="font-size:34px">📅</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد حجوزات بعد</div></div>`; return;
   }
 
   let reviewedBookingIds = new Set();
@@ -2050,7 +2038,7 @@ async function showMyBookings() {
 
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
-  document.getElementById('ownerBody').innerHTML = data.map(b=>{
+  document.getElementById('ownerBody').innerHTML = BACK_BTN + data.map(b=>{
     const pct = b.total_price>0 ? Math.min(100, Math.round((b.amount_paid/b.total_price)*100)) : 0;
     const needsMore = b.is_split && b.status==='pending' && b.payment_status!=='paid';
     return `
@@ -2116,14 +2104,14 @@ function setupStarPicker(){
 // ── عرض التقييمات الحقيقية لملعب/أكاديمية/بطولة عند الضغط على شارة التقييم ──
 async function showItemReviews(kind, itemId){
   openInfoModal('⭐ التقييمات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
-  if (!window.sb) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--ink-dim);padding:14px">يتطلب اتصال قاعدة بيانات</div>'; return; }
+  if (!window.sb) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--ink-dim);padding:14px">يتطلب اتصال قاعدة بيانات</div>'; return; }
   const col = kind === 'stadiums' ? 'field_id' : kind === 'academies' ? 'academy_id' : 'tournament_id';
   const { data, error } = await sb.from('reviews').select('rating, comment, created_at, profiles(name)').eq(col, itemId).order('created_at', { ascending:false });
-  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
-  if (!data || !data.length) { document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
+  if (error) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
 
   const avg = Math.round((data.reduce((s,r)=>s+r.rating,0)/data.length)*10)/10;
-  document.getElementById('ownerBody').innerHTML = `
+  document.getElementById('ownerBody').innerHTML = BACK_BTN + `
     <div style="text-align:center;margin-bottom:16px">
       <div style="font-size:28px;font-weight:900;color:var(--flood)">${avg} ⭐</div>
       <div style="font-size:12px;color:var(--ink-dim)">${data.length} تقييم</div>
@@ -2211,7 +2199,7 @@ async function showMyRegistrations(){
       ${reviewedTeam.has(t.id) ? `<div style="font-size:12px;color:var(--ink-dim);margin-top:6px">✓ تم تقييمه</div>` : ''}
     </div>`).join('');
 
-  document.getElementById('ownerBody').innerHTML =
+  document.getElementById('ownerBody').innerHTML = BACK_BTN +
     `<div class="dlabel">🎓 أكاديمياتي</div>${enrollHtml || '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد تسجيلات بعد</div>'}
      <div class="dlabel" style="margin-top:16px">🏆 فرقي بالبطولات</div>${teamHtml || '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد تسجيلات بعد</div>'}`;
 }
@@ -2285,11 +2273,11 @@ async function showNotifications() {
   openInfoModal('🔔 التنبيهات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const { data, error } = await sb
     .from('notifications').select('*').order('created_at', { ascending: false }).limit(30);
-  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
+  if (error) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
-    document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">🔔</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد تنبيهات</div></div>`;
+    document.getElementById('ownerBody').innerHTML = BACK_BTN + `<div style="text-align:center;padding:30px"><div style="font-size:34px">🔔</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد تنبيهات</div></div>`;
   } else {
-    document.getElementById('ownerBody').innerHTML = data.map(n=>`
+    document.getElementById('ownerBody').innerHTML = BACK_BTN + data.map(n=>`
       <div style="padding:13px;background:${n.is_read?'var(--bg-soft)':'var(--brand-soft)'};border:1px solid var(--line);border-radius:11px;margin-bottom:8px">
         <div style="display:flex;align-items:flex-start;gap:8px">
           <span style="font-size:18px;flex-shrink:0">${notifIcon(n.title)}</span>
