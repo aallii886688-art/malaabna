@@ -760,7 +760,6 @@ function formatTime12(t){
   return `${h}:${mStr} ${period}`;
 }
 
-const BACK_BTN = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" style="margin-bottom:14px">→ رجوع</button>`;
 let currentMod = 'stadiums';
 
 // ── الوقت دائمًا بتوقيت السعودية (UTC+3 بدون توقيت صيفي) بغض النظر عن جهاز الزائر ──
@@ -774,7 +773,7 @@ function riyadhTodayStr(){
 }
 let appliedCoupon = null, finalBookingPrice = null;
 let bookingMode = 'solo';
-function setBookingMode(m){ bookingMode = m; renderStadiumDrawer(); }
+function setBookingMode(m){ bookingMode = m; renderStadiumDrawer(true); }
 let active = null, activeType = null;
 let selDate = 0, selSlot = null, playerCount = 6, payMethod = 'mada';
 let loggedIn = false, authMode = 'login';
@@ -978,7 +977,8 @@ async function getFieldAvailability(fieldId, dateStr, weekday){
   }
 }
 
-async function renderStadiumDrawer(){
+let _availCache = {};
+async function renderStadiumDrawer(skipFetch){
   const s = active;
   document.getElementById('drawerTitle').textContent = 'حجز ملعب';
   const today = riyadhNow();
@@ -986,12 +986,19 @@ async function renderStadiumDrawer(){
   for(let i=0;i<7;i++){ const d=new Date(today);d.setUTCDate(d.getUTCDate()+i);
     pills+=`<div class="dpill ${i===selDate?'active':''}" onclick="setDate(${i})"><div class="dw">${dayNames[d.getUTCDay()]}</div><div class="dd">${d.getUTCDate()}</div></div>`; }
 
-  document.getElementById('drawerBody').innerHTML = `<div style="text-align:center;padding:40px;color:var(--ink-dim)">جارٍ تحميل الأوقات المتاحة...</div>`;
-
   const dsel = new Date(today); dsel.setUTCDate(dsel.getUTCDate() + selDate);
   const dateStr = dsel.toISOString().split('T')[0];
   const weekday = dsel.getUTCDay();
-  const avail = await getFieldAvailability(s.id, dateStr, weekday);
+  const cacheKey = s.id + '_' + dateStr;
+
+  let avail;
+  if (skipFetch && _availCache[cacheKey]) {
+    avail = _availCache[cacheKey];
+  } else {
+    document.getElementById('drawerBody').innerHTML = `<div style="text-align:center;padding:40px;color:var(--ink-dim)">جارٍ تحميل الأوقات المتاحة...</div>`;
+    avail = await getFieldAvailability(s.id, dateStr, weekday);
+    _availCache[cacheKey] = avail;
+  }
 
   if (avail.dayClosed) {
     document.getElementById('drawerBody').innerHTML = `
@@ -1128,8 +1135,8 @@ function renderSimpleDrawer(){
 }
 
 async function setDate(i){ selDate=i; selSlot=null; appliedCoupon=null; finalBookingPrice=null; await renderStadiumDrawer(); }
-function setSlot(t){ selSlot=t; renderStadiumDrawer(); }
-async function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); await renderStadiumDrawer(); }
+function setSlot(t){ selSlot=t; renderStadiumDrawer(true); }
+async function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); await renderStadiumDrawer(true); }
 
 function proceed(){
   if(!loggedIn){ showToast('سجّل الدخول أولًا لإتمام العملية','error'); closeDrawer(); openAuth('login'); return; }
@@ -1964,7 +1971,7 @@ async function sideGo(where) {
 
 function openInfoModal(title, html) {
   document.getElementById('ownerTitle').textContent = title;
-  document.getElementById('ownerBody').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" style="margin-bottom:14px">→ رجوع</button>` + html;
+  document.getElementById('ownerBody').innerHTML = html;
   document.getElementById('mOwner').classList.add('open');
   document.getElementById('ov').classList.add('open');
 }
@@ -2024,9 +2031,9 @@ async function showMyBookings() {
     .from('bookings')
     .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, fields(name, facilities(name, city))')
     .order('booking_date', { ascending: false });
-  if (error) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
-    document.getElementById('ownerBody').innerHTML = BACK_BTN + `<div style="text-align:center;padding:30px"><div style="font-size:34px">📅</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد حجوزات بعد</div></div>`; return;
+    document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">📅</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد حجوزات بعد</div></div>`; return;
   }
 
   let reviewedBookingIds = new Set();
@@ -2038,7 +2045,7 @@ async function showMyBookings() {
 
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
-  document.getElementById('ownerBody').innerHTML = BACK_BTN + data.map(b=>{
+  document.getElementById('ownerBody').innerHTML = data.map(b=>{
     const pct = b.total_price>0 ? Math.min(100, Math.round((b.amount_paid/b.total_price)*100)) : 0;
     const needsMore = b.is_split && b.status==='pending' && b.payment_status!=='paid';
     return `
@@ -2104,14 +2111,14 @@ function setupStarPicker(){
 // ── عرض التقييمات الحقيقية لملعب/أكاديمية/بطولة عند الضغط على شارة التقييم ──
 async function showItemReviews(kind, itemId){
   openInfoModal('⭐ التقييمات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
-  if (!window.sb) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--ink-dim);padding:14px">يتطلب اتصال قاعدة بيانات</div>'; return; }
+  if (!window.sb) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--ink-dim);padding:14px">يتطلب اتصال قاعدة بيانات</div>'; return; }
   const col = kind === 'stadiums' ? 'field_id' : kind === 'academies' ? 'academy_id' : 'tournament_id';
   const { data, error } = await sb.from('reviews').select('rating, comment, created_at, profiles(name)').eq(col, itemId).order('created_at', { ascending:false });
-  if (error) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
-  if (!data || !data.length) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
 
   const avg = Math.round((data.reduce((s,r)=>s+r.rating,0)/data.length)*10)/10;
-  document.getElementById('ownerBody').innerHTML = BACK_BTN + `
+  document.getElementById('ownerBody').innerHTML = `
     <div style="text-align:center;margin-bottom:16px">
       <div style="font-size:28px;font-weight:900;color:var(--flood)">${avg} ⭐</div>
       <div style="font-size:12px;color:var(--ink-dim)">${data.length} تقييم</div>
@@ -2199,7 +2206,7 @@ async function showMyRegistrations(){
       ${reviewedTeam.has(t.id) ? `<div style="font-size:12px;color:var(--ink-dim);margin-top:6px">✓ تم تقييمه</div>` : ''}
     </div>`).join('');
 
-  document.getElementById('ownerBody').innerHTML = BACK_BTN +
+  document.getElementById('ownerBody').innerHTML = 
     `<div class="dlabel">🎓 أكاديمياتي</div>${enrollHtml || '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد تسجيلات بعد</div>'}
      <div class="dlabel" style="margin-top:16px">🏆 فرقي بالبطولات</div>${teamHtml || '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد تسجيلات بعد</div>'}`;
 }
@@ -2273,11 +2280,11 @@ async function showNotifications() {
   openInfoModal('🔔 التنبيهات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const { data, error } = await sb
     .from('notifications').select('*').order('created_at', { ascending: false }).limit(30);
-  if (error) { document.getElementById('ownerBody').innerHTML = BACK_BTN + '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
-    document.getElementById('ownerBody').innerHTML = BACK_BTN + `<div style="text-align:center;padding:30px"><div style="font-size:34px">🔔</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد تنبيهات</div></div>`;
+    document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">🔔</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد تنبيهات</div></div>`;
   } else {
-    document.getElementById('ownerBody').innerHTML = BACK_BTN + data.map(n=>`
+    document.getElementById('ownerBody').innerHTML = data.map(n=>`
       <div style="padding:13px;background:${n.is_read?'var(--bg-soft)':'var(--brand-soft)'};border:1px solid var(--line);border-radius:11px;margin-bottom:8px">
         <div style="display:flex;align-items:flex-start;gap:8px">
           <span style="font-size:18px;flex-shrink:0">${notifIcon(n.title)}</span>
