@@ -2475,16 +2475,19 @@ async function getMyFacilitiesData(){
 async function renderOwnerOverviewTab(){
   const { myFieldIds } = await getMyFacilitiesData();
   let pendingCount = 0, totalRevenue = 0, netOwed = 0, nextPayoutDate = '—';
-  const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+
+  const [{ data: commSetting }, pendingRes, earnRes, paidOutRes] = await Promise.all([
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
+    myFieldIds.length ? sb.from('bookings').select('*', { count:'exact', head:true }).in('field_id', myFieldIds).eq('status', 'pending') : Promise.resolve({ count:0 }),
+    myFieldIds.length ? sb.from('bookings').select('total_price').in('field_id', myFieldIds).in('status', ['confirmed','completed']) : Promise.resolve({ data:[] }),
+    myFieldIds.length ? sb.from('payouts').select('net_amount').eq('owner_id', window.currentUser.id) : Promise.resolve({ data:[] })
+  ]);
   const commissionPct = commSetting ? Number(commSetting.value) : 20;
 
   if (myFieldIds.length) {
-    const { count } = await sb.from('bookings').select('*', { count:'exact', head:true }).in('field_id', myFieldIds).eq('status', 'pending');
-    pendingCount = count || 0;
-    const { data: earnRows } = await sb.from('bookings').select('total_price').in('field_id', myFieldIds).in('status', ['confirmed','completed']);
-    totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
-    const { data: paidOutRows } = await sb.from('payouts').select('net_amount').eq('owner_id', window.currentUser.id);
-    const alreadyPaidOut = (paidOutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0), 0);
+    pendingCount = pendingRes.count || 0;
+    totalRevenue = (earnRes.data||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
+    const alreadyPaidOut = (paidOutRes.data||[]).reduce((s,p)=>s+Number(p.net_amount||0), 0);
     const grossNet = totalRevenue * (1 - commissionPct/100);
     netOwed = Math.max(0, Math.round((grossNet - alreadyPaidOut) * 100) / 100);
     const now = riyadhNow(); const day = now.getUTCDay();
@@ -2744,8 +2747,10 @@ const WD_NAMES = ["الأحد","الإثنين","الثلاثاء","الأربع
 async function showScheduleAcademySession(academyId){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '⏱️ جدولة موعد تدريب';
-  const fieldOpts = await myFieldsOptionsHtml();
-  const { data: sessions } = await sb.from('academy_sessions').select('id, weekday, start_time, end_time, label, fields(name)').eq('academy_id', academyId);
+  const [fieldOpts, { data: sessions }] = await Promise.all([
+    myFieldsOptionsHtml(),
+    sb.from('academy_sessions').select('id, weekday, start_time, end_time, label, fields(name)').eq('academy_id', academyId)
+  ]);
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
     <div class="field"><label>الملعب *</label><select id="acs-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
@@ -2792,8 +2797,10 @@ async function deleteAcademySession(id, academyId){
 async function showScheduleMatch(tournamentId){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '📅 جدولة مباراة';
-  const fieldOpts = await myFieldsOptionsHtml();
-  const { data: matches } = await sb.from('tournament_matches').select('id, field_id, match_date, start_time, end_time, team_a, team_b, status, fields(name)').eq('tournament_id', tournamentId).order('match_date');
+  const [fieldOpts, { data: matches }] = await Promise.all([
+    myFieldsOptionsHtml(),
+    sb.from('tournament_matches').select('id, field_id, match_date, start_time, end_time, team_a, team_b, status, fields(name)').eq('tournament_id', tournamentId).order('match_date')
+  ]);
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('tournaments')" style="margin-bottom:14px">→ رجوع</button>
     <div class="field"><label>الملعب *</label><select id="tm-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
@@ -3837,8 +3844,10 @@ const _lt = delayedLoading(bodyEl.id);
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
 
   const { data: { user } } = await sb.auth.getUser();
-  const fieldOpts = await myFieldsOptionsHtml();
-  const { data: coupons } = await sb.from('coupons').select('*, fields(name)').eq('owner_id', user.id).order('created_at',{ascending:false});
+  const [fieldOpts, { data: coupons }] = await Promise.all([
+    myFieldsOptionsHtml(),
+    sb.from('coupons').select('*, fields(name)').eq('owner_id', user.id).order('created_at',{ascending:false})
+  ]);
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
 
   clearTimeout(_lt);
