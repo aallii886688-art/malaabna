@@ -760,6 +760,14 @@ function formatTime12(t){
   return `${h}:${mStr} ${period}`;
 }
 
+// يعرض "جارٍ التحميل" فقط لو الطلب أخذ وقتًا فعليًا (>250ms) — يمنع الوميض المزعج عند كل ضغطة
+function delayedLoading(elId, delay){
+  const el = document.getElementById(elId);
+  if (!el) return null;
+  return setTimeout(()=>{
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  }, delay || 250);
+}
 let currentMod = 'stadiums';
 
 // ── الوقت دائمًا بتوقيت السعودية (UTC+3 بدون توقيت صيفي) بغض النظر عن جهاز الزائر ──
@@ -1408,12 +1416,13 @@ setTimeout(()=>{ if (typeof initRealMap==='function') initRealMap(); }, 0);
 async function openJoinPage(token){
   if (!window.sb) { showToast('الرابط يحتاج اتصال قاعدة بيانات فعّال','error'); return; }
   document.getElementById('ownerTitle').textContent = '🤝 أكمل القطة';
-  document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  const _lt = delayedLoading('ownerBody');
   document.getElementById('mOwner').classList.add('open');
   document.getElementById('ov').classList.add('open');
 
   try {
     const { data, error } = await sb.functions.invoke('share-link-info', { body: { token } });
+    clearTimeout(_lt);
     if (error || data?.error) {
       document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">${data?.error || 'تعذّر تحميل الرابط'}</div>`;
       return;
@@ -1439,6 +1448,7 @@ async function openJoinPage(token){
       <button class="btn btn-brand btn-block btn-lg" onclick="submitJoinPayment('${token}', ${data.remaining})">💳 ادفع الآن</button>
     `;
   } catch(e) {
+    clearTimeout(_lt);
     document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">تعذّر الاتصال بالخادم</div>';
   }
 }
@@ -2026,11 +2036,13 @@ async function uploadPersonalAvatar(input){
 }
 
 async function showMyBookings() {
-  openInfoModal((window.currentUser && (window.currentUser.role==='owner'||window.currentUser.role==='staff'||window.currentUser.role==='super_admin')) ? '🎽 حجوزاتي كلاعب' : '📅 حجوزاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  openInfoModal((window.currentUser && (window.currentUser.role==='owner'||window.currentUser.role==='staff'||window.currentUser.role==='super_admin')) ? '🎽 حجوزاتي كلاعب' : '📅 حجوزاتي', '');
+  const _lt = delayedLoading('ownerBody');
   const { data, error } = await sb
     .from('bookings')
     .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, fields(name, facilities(name, city))')
     .order('booking_date', { ascending: false });
+  clearTimeout(_lt);
   if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
     document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">📅</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد حجوزات بعد</div></div>`; return;
@@ -2110,10 +2122,12 @@ function setupStarPicker(){
 }
 // ── عرض التقييمات الحقيقية لملعب/أكاديمية/بطولة عند الضغط على شارة التقييم ──
 async function showItemReviews(kind, itemId){
-  openInfoModal('⭐ التقييمات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  openInfoModal('⭐ التقييمات', '');
   if (!window.sb) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--ink-dim);padding:14px">يتطلب اتصال قاعدة بيانات</div>'; return; }
+  const _lt = delayedLoading('ownerBody');
   const col = kind === 'stadiums' ? 'field_id' : kind === 'academies' ? 'academy_id' : 'tournament_id';
   const { data, error } = await sb.from('reviews').select('rating, comment, created_at, profiles(name)').eq(col, itemId).order('created_at', { ascending:false });
+  clearTimeout(_lt);
   if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) { document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
 
@@ -2174,13 +2188,15 @@ async function submitRegistrationReview(kind, refId, targetId){
 
 // ── تسجيلاتي: أكاديمياتي وفرقي بالبطولات ──
 async function showMyRegistrations(){
-  openInfoModal('📋 تسجيلاتي', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  openInfoModal('📋 تسجيلاتي', '');
+  const _lt = delayedLoading('ownerBody');
   const { data: { user } } = await sb.auth.getUser();
   const [{ data: enrollments }, { data: teams }, { data: myReviews }] = await Promise.all([
     sb.from('academy_enrollments').select('id, player_name, status, payment_status, academies(id, name)').eq('user_id', user.id),
     sb.from('tournament_teams').select('id, team_name, status, tournaments(id, name)').eq('user_id', user.id),
     sb.from('reviews').select('enrollment_id, team_id').eq('user_id', user.id)
   ]);
+  clearTimeout(_lt);
   const reviewedEnroll = new Set((myReviews||[]).map(r=>r.enrollment_id).filter(Boolean));
   const reviewedTeam = new Set((myReviews||[]).map(r=>r.team_id).filter(Boolean));
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي' };
@@ -2277,9 +2293,11 @@ async function doLookup() {
 }
 
 async function showNotifications() {
-  openInfoModal('🔔 التنبيهات', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  openInfoModal('🔔 التنبيهات', '');
+  const _lt = delayedLoading('ownerBody');
   const { data, error } = await sb
     .from('notifications').select('*').order('created_at', { ascending: false }).limit(30);
+  clearTimeout(_lt);
   if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) {
     document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">🔔</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد تنبيهات</div></div>`;
@@ -2420,7 +2438,8 @@ async function ownerGoTab(tab){
   window._ownerActiveTab = tab;
   document.getElementById('ownerTitle').textContent = '🏟️ لوحة ملاعبي';
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
-  document.getElementById('ownerBody').innerHTML = ownerTabsHtml(tab) + '<div id="ownerTabInner" style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  document.getElementById('ownerBody').innerHTML = ownerTabsHtml(tab) + '<div id="ownerTabInner"></div>';
+  window._tabLoadTimer = delayedLoading('ownerTabInner');
   switch(tab){
     case 'overview':    await renderOwnerOverviewTab(); break;
     case 'fields':      await renderOwnerFieldsTab(); break;
@@ -2474,6 +2493,8 @@ async function renderOwnerOverviewTab(){
     nextPayoutDate = nd.toLocaleDateString('ar-SA-u-nu-latn', { weekday:'long', day:'numeric', month:'long', timeZone:'UTC' });
   }
 
+  clearTimeout(window._tabLoadTimer);
+
   ownerInner().innerHTML = `
     <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
       <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">مستحق لك (بعد عمولة المنصة ${commissionPct}%)</div>
@@ -2500,6 +2521,7 @@ async function renderOwnerFieldsTab(){
   const visibleFacilities = myFacilities.map(f => ({ ...f, fields: (f.fields||[]).filter(fd => !fd.is_deleted) }));
   const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
   const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
+  clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
     ${(visibleFacilities&&visibleFacilities.length)? visibleFacilities.map(f=>`
       <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
@@ -2546,6 +2568,7 @@ async function renderOwnerAcademiesTab(){
   }
   const { data: myAcadRaw } = ownerIds.length ? await sb.from('academies').select('*').in('owner_id', ownerIds) : { data: [] };
   const myAcad = (myAcadRaw||[]).filter(a=>!a.is_deleted);
+  clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
     ${(myAcad&&myAcad.length)? myAcad.map(a=>`
       <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
@@ -2575,6 +2598,7 @@ async function renderOwnerTournamentsTab(){
   }
   const { data: myTournRaw } = ownerIds.length ? await sb.from('tournaments').select('*, tournament_teams(status)').in('owner_id', ownerIds) : { data: [] };
   const myTourn = (myTournRaw||[]).filter(t=>!t.is_deleted);
+  clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
     ${(myTourn&&myTourn.length)? myTourn.map(t=>{
       const confirmed = (t.tournament_teams||[]).filter(x=>x.status==='confirmed').length;
@@ -2595,6 +2619,7 @@ async function renderOwnerTournamentsTab(){
 }
 
 async function renderOwnerFinanceTab(){
+  clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerAnalytics()">📈 تحليلات الإيرادات</button>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">💰 التحويلات المستلمة</button>
@@ -2603,6 +2628,7 @@ async function renderOwnerFinanceTab(){
 }
 
 async function renderOwnerTeamTab(){
+  clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerCustomers()">👥 عملائي</button>
     ${window._isTrueOwner ? `<button class="btn btn-soft btn-block" onclick="showStaffManagement()">🧑‍💼 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف — إدارة الموظفين تخص المالك الحقيقي فقط.</div>`}
@@ -2611,14 +2637,15 @@ async function renderOwnerTeamTab(){
 
 async function renderOwnerBookingsTab(){
   const myFieldIds = await getMyFieldIds();
-  if (!myFieldIds.length) { ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
+  if (!myFieldIds.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
   const { data, error } = await sb.from('bookings')
     .select('id, booking_date, start_time, end_time, status, total_price, players_count, profiles(name, phone), fields(name)')
     .in('field_id', myFieldIds).order('booking_date', { ascending: false });
-  if (error) { ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
-  if (!data || !data.length) { ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>'; return; }
+  if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>'; return; }
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+  clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = data.map(b => `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -2641,7 +2668,7 @@ async function renderOwnerBookingsTab(){
 async function showStaffManagement(){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '👥 إدارة الموظفين';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
   const { data: { user } } = await sb.auth.getUser();
   const { data: ownFac } = await sb.from('facilities').select('id, name').eq('owner_id', user.id);
   const facIds = (ownFac||[]).map(f=>f.id);
@@ -2650,6 +2677,8 @@ async function showStaffManagement(){
 
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('team')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
   const facOptions = (ownFac||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+
+  clearTimeout(_lt);
 
   bodyEl.innerHTML = backBtn + `
     <div class="dlabel">➕ إضافة موظف</div>
@@ -3085,14 +3114,15 @@ async function editStadiumForm(fieldId) {
   editingFieldId = fieldId;
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '✏️ تعديل الملعب';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
 
   const { data: fd, error } = await sb.from('fields')
     .select('id, name, type, price_per_hour, image_url, amenities, facilities(id, name, city, district, region, lat, lng)')
     .eq('id', fieldId).single();
-  if (error || !fd) { showToast('تعذّر تحميل بيانات الملعب', 'error'); ownerGoTab('fields'); return; }
+  if (error || !fd) { clearTimeout(_lt); showToast('تعذّر تحميل بيانات الملعب', 'error'); ownerGoTab('fields'); return; }
 
   newFieldType = fd.type;
+  clearTimeout(_lt);
   bodyEl.innerHTML = `
     <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" value="${fd.name}"></div>
     <div class="field"><label>المدينة *</label><input id="st-city" type="text" value="${fd.facilities?.city||''}"></div>
@@ -3191,7 +3221,7 @@ async function openWorkingHours(fieldId) {
   whFieldId = fieldId;
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '⏰ أوقات العمل وأيام الإغلاق';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
 
   const [{ data: hours }, { data: blackouts }, { data: pricing }] = await Promise.all([
     sb.from('field_working_hours').select('weekday, open_time, close_time, is_closed').eq('field_id', fieldId),
@@ -3202,6 +3232,8 @@ async function openWorkingHours(fieldId) {
   (hours||[]).forEach(h => hoursByDay[h.weekday] = h);
   const pricingByDay = {};
   (pricing||[]).forEach(p => pricingByDay[p.weekday] = p.price);
+
+  clearTimeout(_lt);
 
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('fields')" style="margin-bottom:14px">→ رجوع للوحة</button>
@@ -3267,12 +3299,12 @@ async function getMyFieldIds(){
 async function showOwnerAnalytics(){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '📈 تحليلاتي';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
 
   const fieldIds = await getMyFieldIds();
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
-  if (!fieldIds.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك التحليلات</div>'; return; }
+  if (!fieldIds.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك التحليلات</div>'; return; }
 
   const since = new Date(riyadhNow().getTime() - 13*24*60*60*1000).toISOString().split('T')[0];
   const [{ data: recentBookings }, { data: allBookings }] = await Promise.all([
@@ -3298,6 +3330,8 @@ async function showOwnerAnalytics(){
   const busiestHour = Object.entries(hourCounts).sort((a,b)=>b[1]-a[1])[0];
   const totalRevenue = (allBookings||[]).reduce((s,b)=>s+Number(b.total_price||0),0);
 
+  clearTimeout(_lt);
+
   bodyEl.innerHTML = backBtn + `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
       <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
@@ -3318,12 +3352,12 @@ async function showOwnerAnalytics(){
 async function showOwnerCustomers(){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '👥 عملائي';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
 
   const fieldIds = await getMyFieldIds();
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('team')" style="margin-bottom:14px">→ رجوع</button>`;
-  if (!fieldIds.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً ليظهر لك عملاؤك</div>'; return; }
+  if (!fieldIds.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً ليظهر لك عملاؤك</div>'; return; }
 
   const { data: bookings } = await sb.from('bookings')
     .select('user_id, total_price, status, profiles(name, phone)')
@@ -3336,6 +3370,8 @@ async function showOwnerCustomers(){
     byUser[b.user_id].count++; byUser[b.user_id].spent += Number(b.total_price||0);
   });
   const customers = Object.values(byUser).sort((a,b)=>b.spent-a.spent);
+
+  clearTimeout(_lt);
 
   bodyEl.innerHTML = backBtn + (customers.length ? `
     <div class="legal-note" style="margin-bottom:12px">👥 ${customers.length} عميل حجز في ملاعبك حتى الآن</div>
@@ -3421,7 +3457,8 @@ function adminTabsHtml(active){
 async function adminGoTab(tab){
   document.getElementById('ownerTitle').textContent = '🛡️ لوحة تحكم المالك';
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
-  document.getElementById('ownerBody').innerHTML = adminTabsHtml(tab) + '<div id="adminTabInner" style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  document.getElementById('ownerBody').innerHTML = adminTabsHtml(tab) + '<div id="adminTabInner"></div>';
+  window._tabLoadTimer = delayedLoading('adminTabInner');
   switch(tab){
     case 'overview':     await renderAdminOverviewTab(); break;
     case 'users':        await adminView('users'); break;
@@ -3445,6 +3482,8 @@ async function renderAdminOverviewTab(){
   ]);
   const totalPending = (pendingFacCount||0) + (pendingAcadCount||0) + (pendingTournCount||0);
   const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + Number(b.total_price||0), 0);
+
+  clearTimeout(window._tabLoadTimer);
 
   document.getElementById('adminTabInner').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
@@ -3472,6 +3511,7 @@ async function renderAdminOverviewTab(){
 }
 
 async function renderAdminFinanceTab(){
+  clearTimeout(window._tabLoadTimer);
   document.getElementById('adminTabInner').innerHTML = `
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('analytics')">📈 تحليلات الإيرادات</button>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('commission')">⚙️ نسبة عمولة المنصة</button>
@@ -3480,6 +3520,7 @@ async function renderAdminFinanceTab(){
 }
 
 async function renderAdminIntegrationsTab(){
+  clearTimeout(window._tabLoadTimer);
   document.getElementById('adminTabInner').innerHTML = `
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="adminView('sms')">📱 بوابة الرسائل النصية</button>
     <button class="btn btn-soft btn-block" onclick="adminView('payment')">💳 بوابة الدفع الإلكتروني</button>
@@ -3489,7 +3530,7 @@ async function renderAdminIntegrationsTab(){
 async function adminView(kind) {
   const titleEl = document.getElementById('ownerTitle');
   const bodyEl = document.getElementById('adminTabInner') || document.getElementById('ownerBody');
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  const _lt = delayedLoading(bodyEl.id);
 
   const parentTabOf = { users:'users', facilities:'facilities', bookings:'bookings', reviews:'reviews',
     sms:'integrations', payment:'integrations', analytics:'finance', commission:'finance', payouts:'finance', approvals:'facilities' };
@@ -3498,8 +3539,9 @@ async function adminView(kind) {
   if (kind === 'users') {
     titleEl.textContent = '👥 المستخدمون';
     const { data, error } = await sb.from('profiles').select('id, name, phone, role').order('name');
-    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
     const roleLabel = { customer:'⚽ لاعب', owner:'🏟️ صاحب ملعب', staff:'🏟️ موظف', super_admin:'🛡️ مالك' };
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + data.map(u => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;gap:8px">
         <div style="flex:1;min-width:0">
@@ -3517,8 +3559,9 @@ async function adminView(kind) {
     titleEl.textContent = '🏟️ المنشآت';
     const { data: rawData, error } = await sb.from('facilities').select('id, name, city, district, is_deleted, profiles(name, phone), fields(price_per_hour, status)');
     const data = (rawData||[]).filter(f => !f.is_deleted);
-    if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
-    if (!data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد منشآت بعد</div>'; return; }
+    if (error) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد منشآت بعد</div>'; return; }
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + data.map(f => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between"><b>${f.name}</b><span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span></div>
@@ -3535,10 +3578,11 @@ async function adminView(kind) {
     const { data, error } = await sb.from('bookings')
       .select('id, booking_date, start_time, status, total_price, profiles(name, phone), fields(name)')
       .order('booking_date', { ascending:false }).limit(50);
-    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
-    if (!data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
+    if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
     const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
     const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + data.map(b => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -3562,8 +3606,9 @@ async function adminView(kind) {
     const { data, error } = await sb.from('reviews')
       .select('id, rating, comment, created_at, profiles(name), fields(name)')
       .order('created_at', { ascending:false }).limit(50);
-    if (error || !data) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
-    if (!data.length) { bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد تقييمات بعد</div>'; return; }
+    if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد تقييمات بعد</div>'; return; }
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + data.map(r => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -3581,6 +3626,7 @@ async function adminView(kind) {
     titleEl.textContent = '📱 بوابة الرسائل النصية';
     const { data: logs } = await sb.from('sms_logs').select('*').order('created_at',{ascending:false}).limit(30);
     const activated = (logs||[]).some(l=>l.status==='sent');
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + `
       <div class="legal-note">
         ${activated ? '✅ البوابة تعمل فعليًا (تقنيات Taqnyat).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب في <b>taqnyat.sa</b>، ثم انشر Edge Function باسم <code>send-sms</code> (الكود جاهز في ملف edge-functions/send-sms.ts)، وأضف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions.'}
@@ -3603,6 +3649,7 @@ async function adminView(kind) {
     titleEl.textContent = '💳 بوابة الدفع الإلكتروني';
     const { data: payRows } = await sb.from('booking_payments').select('*').order('created_at',{ascending:false}).limit(30);
     const activated = (payRows||[]).some(p=>p.status==='paid');
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + `
       <div class="legal-note">
         ${activated ? '✅ البوابة متصلة وتعمل فعليًا (Moyasar).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب تاجر في <b>moyasar.com</b>، وأضف مفتاحك كـ Secret باسم <code>MOYASAR_SECRET_KEY</code> في Project Settings → Edge Functions.'}
@@ -3655,6 +3702,8 @@ async function adminView(kind) {
     const cityRows = Object.entries(byCity).sort((a,b)=>b[1]-a[1]);
     const maxCity = Math.max(1, ...cityRows.map(r=>r[1]));
 
+    clearTimeout(_lt);
+
     bodyEl.innerHTML = backBtn + `
       <div class="dlabel">📅 الحجوزات آخر 14 يوم</div>
       <div style="display:flex;align-items:flex-end;gap:4px;height:80px;background:var(--bg-soft);border-radius:10px;padding:10px 8px;margin-bottom:20px">${barsHtml}</div>
@@ -3679,6 +3728,7 @@ async function adminView(kind) {
     titleEl.textContent = '⚙️ نسبة عمولة المنصة';
     const { data: setting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
     const current = setting ? setting.value : '20';
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + `
       <div style="text-align:center;background:var(--bg-soft);border-radius:12px;padding:20px;margin-bottom:16px">
         <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">النسبة الحالية</div>
@@ -3692,6 +3742,7 @@ async function adminView(kind) {
 
   else if (kind === 'payouts') {
     titleEl.textContent = '💸 تنفيذ التحويلات المستحقة';
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ حساب المستحقات...</div>';
 
     const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
@@ -3715,6 +3766,8 @@ async function adminView(kind) {
       if (netOwed > 0) rows.push({ owner: o, gross, commissionPct, netOwed });
     }
 
+    clearTimeout(_lt);
+
     bodyEl.innerHTML = backBtn + (rows.length ? rows.map(r=>`
       <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -3734,9 +3787,11 @@ async function adminView(kind) {
     ]);
     const totalPending = (pendingFac?.length||0) + (pendingAcad?.length||0) + (pendingTourn?.length||0);
     if (!totalPending) {
+      clearTimeout(_lt);
       bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)"><div style="font-size:30px;margin-bottom:8px">✅</div>لا توجد عناصر بانتظار الموافقة</div>';
       return;
     }
+    clearTimeout(_lt);
     bodyEl.innerHTML = backBtn +
       ((pendingFac&&pendingFac.length) ? `<div class="dlabel">🏟️ منشآت (${pendingFac.length})</div>` + pendingFac.map(f=>`
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
@@ -3778,13 +3833,15 @@ async function adminView(kind) {
 async function showOwnerCoupons(){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '🎟️ كوبوناتي';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
 
   const { data: { user } } = await sb.auth.getUser();
   const fieldOpts = await myFieldsOptionsHtml();
   const { data: coupons } = await sb.from('coupons').select('*, fields(name)').eq('owner_id', user.id).order('created_at',{ascending:false});
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  clearTimeout(_lt);
 
   bodyEl.innerHTML = backBtn + `
     <div class="legal-note" style="margin-bottom:14px">💡 الخصم يُحسم من نصيبك أنت — عمولة المنصة تبقى محسوبة على السعر بعد الخصم بنفس النسبة الثابتة.</div>
@@ -3853,12 +3910,14 @@ async function toggleCoupon(id, newActive){
 async function showOwnerPayouts(){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '💰 تحويلاتي';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
 
   const { data: { user } } = await sb.auth.getUser();
   const { data: payoutsRows } = await sb.from('payouts').select('*').eq('owner_id', user.id).order('created_at',{ascending:false});
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  clearTimeout(_lt);
 
   bodyEl.innerHTML = backBtn + (payoutsRows&&payoutsRows.length ? payoutsRows.map(p=>`
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
@@ -4121,12 +4180,14 @@ async function adminCancelBooking(bookingId) {
 async function showAddStadiumForm() {
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '➕ إضافة ملعب جديد';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+const _lt = delayedLoading(bodyEl.id);
 
   const { data: { user } } = await sb.auth.getUser();
   const { data: myFacilities } = await sb.from('facilities').select('id, name, city, district, approved').eq('owner_id', user.id);
   const facOptions = (myFacilities||[]).map(f=>
     `<option value="${f.id}">${f.name} — ${f.city}${!f.approved?' (بانتظار الموافقة)':''}</option>`).join('');
+
+  clearTimeout(_lt);
 
   bodyEl.innerHTML = `
     <div class="field">
