@@ -704,7 +704,7 @@ const FIELD_AMENITIES = [
   { key:'showers',   label:'دشات ساخنة',       icon:'🚿' },
   { key:'vip',       label:'تصنيف VIP',        icon:'🌟' },
 ];
-function amenityLabel(key){ const a = FIELD_AMENITIES.find(x=>x.key===key); return a ? `${a.icon} ${a.label}` : key; }
+function amenityLabel(key){ const a = FIELD_AMENITIES.find(x=>x.key===key); return a ? `${a.icon} ${escapeHtml(a.label)}` : key; }
 
 // شبكة checkboxes تُستخدم في فورمي إضافة/تعديل ملعب
 function amenitiesCheckboxesHtml(selected){
@@ -713,7 +713,7 @@ function amenitiesCheckboxesHtml(selected){
     ${FIELD_AMENITIES.map(a=>`
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
         <input type="checkbox" class="amenity-check" value="${a.key}" ${selected.includes(a.key)?'checked':''}>
-        <span>${a.icon} ${a.label}</span>
+        <span>${a.icon} ${escapeHtml(a.label)}</span>
       </label>`).join('')}
   </div>`;
 }
@@ -727,7 +727,7 @@ function amenityBadgesHtml(amenities, max){
   max = max || 4;
   const shown = amenities.slice(0, max).map(k=>{
     const a = FIELD_AMENITIES.find(x=>x.key===k);
-    return a ? `<span class="ctag">${a.icon} ${a.label}</span>` : '';
+    return a ? `<span class="ctag">${a.icon} ${escapeHtml(a.label)}</span>` : '';
   }).join('');
   const extra = amenities.length > max ? `<span class="ctag">+${amenities.length - max}</span>` : '';
   return shown + extra;
@@ -759,6 +759,16 @@ function delayedLoading(elId, delay){
   return setTimeout(()=>{
     el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
   }, delay || 250);
+}
+// يمنع حقن HTML/سكربت من أي محتوى يكتبه المستخدمون (تعليقات، أسماء، إلخ) قبل عرضه بالصفحة
+function escapeHtml(str){
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 let currentMod = 'stadiums';
 
@@ -876,10 +886,10 @@ async function loadOpenMatches(){
     const share = b.players_count > 0 ? Math.round((b.total_price/b.players_count)*100)/100 : b.total_price;
     const remaining = Math.max(0, Number(b.total_price) - Number(b.amount_paid));
     return `<div class="card" onclick="openJoinPage('${b.share_link_token}')">
-      <div class="card-media">🤝<div class="tag-tl">💰 ${share} ر/فرد</div><div class="tag-tr">${b.fields?.facilities?.city||''}</div></div>
+      <div class="card-media">🤝<div class="tag-tl">💰 ${share} ر/فرد</div><div class="tag-tr">${escapeHtml(b.fields?.facilities?.city)||''}</div></div>
       <div class="card-b">
-        <div class="card-name">${b.fields?.name||'ملعب'}</div>
-        <div class="card-loc">📍 ${b.fields?.facilities?.district||''}، ${b.fields?.facilities?.city||''}</div>
+        <div class="card-name">${escapeHtml(b.fields?.name)||'ملعب'}</div>
+        <div class="card-loc">📍 ${escapeHtml(b.fields?.facilities?.district)||''}، ${escapeHtml(b.fields?.facilities?.city)||''}</div>
         <div class="card-tags"><span class="ctag">📅 ${b.booking_date}</span><span class="ctag">⏱️ ${formatTime12(b.start_time)}</span><span class="ctag">👥 ${b.players_count} لاعب</span></div>
         <div class="card-f">
           <div class="cprice"><span class="a">${remaining}</span> <span class="p">ريال متبقي</span></div>
@@ -915,13 +925,13 @@ function renderActive(){
     const ratingBadge = it.rating>0 ? `<div class="tag-tl" onclick="event.stopPropagation();showItemReviews('${currentMod}',${it.id})" style="cursor:pointer">⭐ ${it.rating}</div>` : isTourney ? `<div class="tag-tl">🏆 ${it.teams}</div>` : `<div class="tag-tl">🆕 جديد</div>`;
     const priceLbl = isStadium ? 'ر/ساعة' : isTourney ? 'ر/فريق' : 'ر/شهر';
     const mediaContent = it.image
-      ? `<img src="${it.image}" alt="${it.name}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
+      ? `<img src="${it.image}" alt="${escapeHtml(it.name)}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
       : it.icon;
     return `<div class="card" onclick="openItem('${currentMod}',${it.id})">
-      <div class="card-media">${mediaContent}${ratingBadge}<div class="tag-tr">${it.region}</div></div>
+      <div class="card-media">${mediaContent}${ratingBadge}<div class="tag-tr">${escapeHtml(it.region)}</div></div>
       <div class="card-b">
-        <div class="card-name">${it.name}</div>
-        <div class="card-loc">📍 ${it.loc}، ${it.region}</div>
+        <div class="card-name">${escapeHtml(it.name)}</div>
+        <div class="card-loc">📍 ${escapeHtml(it.loc)}، ${escapeHtml(it.region)}</div>
         <div class="card-tags">${it.tags.map(t=>`<span class="ctag">${t}</span>`).join('')}${isStadium ? amenityBadgesHtml(it.amenities, 2) : ''}</div>
         <div class="card-f">
           <div class="cprice"><span class="a">${it.price}</span> <span class="p">${priceLbl}</span></div>
@@ -1001,8 +1011,8 @@ async function renderStadiumDrawer(skipFetch){
   if (avail.dayClosed) {
     document.getElementById('drawerBody').innerHTML = `
       <div class="dmedia">${s.image?`<img src="${s.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:s.icon}</div>
-      <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
-      <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
+      <div style="font-size:20px;font-weight:900;margin-bottom:8px">${escapeHtml(s.name)}</div>
+      <div class="irow">📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.region)}</b></div>
       <div class="dlabel">📅 اختر اليوم</div>
       <div class="dates">${pills}</div>
       <div style="text-align:center;padding:30px;background:var(--danger-soft);border-radius:12px;margin-top:14px">
@@ -1029,8 +1039,8 @@ async function renderStadiumDrawer(skipFetch){
 
   document.getElementById('drawerBody').innerHTML = `
     <div class="dmedia">${s.image?`<img src="${s.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:s.icon}</div>
-    <div style="font-size:20px;font-weight:900;margin-bottom:8px">${s.name}</div>
-    <div class="irow">📍 <b>${s.loc}، ${s.region}</b></div>
+    <div style="font-size:20px;font-weight:900;margin-bottom:8px">${escapeHtml(s.name)}</div>
+    <div class="irow">📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.region)}</b></div>
     <div class="irow" ${s.reviewCount ? `onclick="showItemReviews('stadiums',${s.id})" style="cursor:pointer"` : ''}>⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
     <div class="irow">💰 <b>${window.effectivePrice} ريال</b> / الساعة${priceNote}</div>
     ${(s.amenities && s.amenities.length) ? `
@@ -1079,7 +1089,7 @@ async function renderStadiumDrawer(skipFetch){
     <div id="couponMsg" style="font-size:12px;margin-top:6px"></div>
 
     <div class="summary">
-      <div class="srow"><span>الملعب</span><span>${s.name}</span></div>
+      <div class="srow"><span>الملعب</span><span>${escapeHtml(s.name)}</span></div>
       <div class="srow"><span>الوقت</span><span>${selSlot? formatTime12(selSlot)+' - '+formatTime12((parseInt(selSlot)+1)+':00') : '— اختر وقتًا —'}</span></div>
       <div class="srow" id="couponRow" style="display:none"><span>خصم الكوبون</span><span id="couponDiscount">0 ر</span></div>
       ${bookingMode==='split' ? `<div class="srow"><span>الإجمالي الكامل</span><span>${totalForSplit} ريال</span></div>` : ''}
@@ -1109,9 +1119,9 @@ function renderSimpleDrawer(){
   const priceLbl = isTourney ? 'رسوم الفريق' : 'الاشتراك الشهري';
   document.getElementById('drawerBody').innerHTML = `
     <div class="dmedia">${it.image?`<img src="${it.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:it.icon}</div>
-    <div style="font-size:20px;font-weight:900;margin-bottom:8px">${it.name}</div>
-    <div class="irow">📍 <b>${it.loc}، ${it.region}</b></div>
-    <div class="irow">📋 <b>${it.desc}</b></div>
+    <div style="font-size:20px;font-weight:900;margin-bottom:8px">${escapeHtml(it.name)}</div>
+    <div class="irow">📍 <b>${escapeHtml(it.loc)}، ${escapeHtml(it.region)}</b></div>
+    <div class="irow">📋 <b>${escapeHtml(it.desc)}</b></div>
     ${isTourney? `<div class="irow">👥 الفرق المسجلة: <b>${it.teams}</b></div>` : `<div class="irow">⭐ <b>${it.rating}</b></div>`}
     <div class="irow">🏷️ ${it.tags.join(' · ')}</div>
 
@@ -1149,7 +1159,7 @@ function proceed(){
   document.getElementById('confirmText').textContent = 'الدفع الإلكتروني غير مفعّل بعد — احجز الآن وادفع نقدًا أو تحويلًا عند وصولك للملعب.';
   document.querySelector('#mConfirm .micon').textContent = '📝';
   document.getElementById('receipt').innerHTML = `
-    <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
+    <div class="r"><span>الخدمة</span><b>${escapeHtml(it.name)}</b></div>
     ${isStadium? `<div class="r"><span>الوقت</span><b>${formatTime12(selSlot)} - ${formatTime12((parseInt(selSlot)+1)+':00')}</b></div>`:''}
     ${extraRow}
     <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق عند الملعب</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
@@ -1171,7 +1181,7 @@ function finalizePayment(){
   document.getElementById('confirmTitle').textContent = isStadium ? 'تم تأكيد حجزك!' : 'تم تسجيلك بنجاح!';
   document.getElementById('confirmText').textContent = `احتفظ برقم الحجز، وادفع نقدًا أو تحويلًا عند وصولك ⚽`;
   document.getElementById('receipt').innerHTML = `
-    <div class="r"><span>الخدمة</span><b>${it.name}</b></div>
+    <div class="r"><span>الخدمة</span><b>${escapeHtml(it.name)}</b></div>
     ${isStadium? `<div class="r"><span>التاريخ</span><b>${dateStr}</b></div><div class="r"><span>الوقت</span><b>${formatTime12(selSlot)} - ${formatTime12((parseInt(selSlot)+1)+':00')}</b></div>`:''}
     <div class="r"><span>رقم الحجز</span><b class="mono">#${Math.floor(10000+Math.random()*89999)}</b></div>
     <div class="r"><span>طريقة الدفع</span><b>عند الملعب (نقدًا / تحويل)</b></div>
@@ -1307,19 +1317,19 @@ function renderMapMarkers(){
 
   stadiumCoords.forEach(s=>{
     const marker = L.marker([s.lat, s.lng]).addTo(window._leafletMap)
-      .bindPopup(`<b>🏟️ ${s.name}</b><br>${s.price} ريال/ساعة`);
+      .bindPopup(`<b>🏟️ ${escapeHtml(s.name)}</b><br>${s.price} ريال/ساعة`);
     marker.on('click', ()=>openItem('stadiums', s.id));
     window._mapMarkers.push(marker);
   });
   academyCoords.forEach(a=>{
     const marker = L.circleMarker([a.lat, a.lng], { radius:8, color:'#c99a3e', fillColor:'#c99a3e', fillOpacity:1 }).addTo(window._leafletMap)
-      .bindPopup(`<b>🎓 ${a.name}</b><br>${a.price} ريال/شهر`);
+      .bindPopup(`<b>🎓 ${escapeHtml(a.name)}</b><br>${a.price} ريال/شهر`);
     marker.on('click', ()=>openItem('academies', a.id));
     window._mapMarkers.push(marker);
   });
   tournCoords.forEach(t=>{
     const marker = L.circleMarker([t.lat, t.lng], { radius:8, color:'#b83280', fillColor:'#b83280', fillOpacity:1 }).addTo(window._leafletMap)
-      .bindPopup(`<b>🏆 ${t.name}</b><br>${t.price} ريال/فريق`);
+      .bindPopup(`<b>🏆 ${escapeHtml(t.name)}</b><br>${t.price} ريال/فريق`);
     marker.on('click', ()=>openItem('tournaments', t.id));
     window._mapMarkers.push(marker);
   });
@@ -1420,7 +1430,7 @@ async function openJoinPage(token){
     document.getElementById('ownerBody').innerHTML = `
       <div style="text-align:center;margin-bottom:16px">
         <div style="font-size:15px;font-weight:800">${data.field_name||'ملعب'}</div>
-        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">${data.facility_name||''} · ${data.city||''}</div>
+        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">${data.facility_name||''} · ${escapeHtml(data.city)||''}</div>
         <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">📅 ${data.date} · ⏱️ ${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</div>
       </div>
       <div style="background:var(--bg-soft);border-radius:10px;height:10px;overflow:hidden;margin-bottom:8px">
@@ -1713,7 +1723,7 @@ function initBackend() {
         if (ownerId) {
           await sb.from('notifications').insert({
             user_id: ownerId, title: 'حجز جديد (بانتظار الدفع) 📅',
-            body: `حجز جديد في ${fieldInfo.name} بتاريخ ${dateStr} الساعة ${selSlot}`
+            body: `حجز جديد في ${escapeHtml(fieldInfo.name)} بتاريخ ${dateStr} الساعة ${selSlot}`
           });
         }
       } catch(e){}
@@ -1914,8 +1924,8 @@ function openSidebar() {
     <div class="side-head">
       ${avatarHtml(u.avatarUrl, u.initial, 'width:52px;height:52px;font-size:22px')}
       <div>
-        <div style="font-size:16px;font-weight:800">${u.name}</div>
-        <div style="font-size:12px;color:var(--ink-dim)">${u.phone || ''}</div>
+        <div style="font-size:16px;font-weight:800">${escapeHtml(u.name)}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(u.phone) || ''}</div>
       </div>
     </div>
     <div class="side-links">
@@ -1969,7 +1979,7 @@ function showProfile() {
   openInfoModal('👤 الملف الشخصي', `
     <div style="text-align:center;margin-bottom:16px">
       <div id="profileAvatarBox">${avatarHtml(u.avatarUrl, u.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto')}</div>
-      <div style="font-size:18px;font-weight:800;margin-top:10px">${u.name}</div>
+      <div style="font-size:18px;font-weight:800;margin-top:10px">${escapeHtml(u.name)}</div>
     </div>
     <div class="dlabel" style="justify-content:center">🖼️ الصورة الرمزية</div>
     <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">
@@ -1981,8 +1991,8 @@ function showProfile() {
       <input id="avatar-upload-input" type="file" accept="image/*" style="display:none" onchange="uploadPersonalAvatar(this)">
     </label>
     <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px">
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">الاسم</span><b>${u.name}</b></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">رقم الجوال</span><b>${u.phone||'—'}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">الاسم</span><b>${escapeHtml(u.name)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">رقم الجوال</span><b>${escapeHtml(u.phone)||'—'}</b></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--ink-dim)">نوع الحساب</span><b>${u.role==='super_admin'?'🛡️ مالك':u.role==='owner'?'🏟️ صاحب ملعب':'⚽ لاعب'}</b></div>
     </div>`);
 }
@@ -2041,7 +2051,7 @@ async function showMyBookings() {
     return `
     <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-        <div><b>${b.fields?.name||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.fields?.facilities?.city||''}</div></div>
+        <div><b>${escapeHtml(b.fields?.name)||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.fields?.facilities?.city)||''}</div></div>
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
       <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</div>
@@ -2118,10 +2128,10 @@ async function showItemReviews(kind, itemId){
     ${data.map(r=>`
       <div style="padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <b style="font-size:13px">${r.profiles?.name || 'لاعب'}</b>
+          <b style="font-size:13px">${escapeHtml(r.profiles?.name) || 'لاعب'}</b>
           <span style="color:var(--flood);font-size:13px">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
         </div>
-        ${r.comment ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">${r.comment}</div>` : ''}
+        ${r.comment ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">${escapeHtml(r.comment)}</div>` : ''}
         <div style="font-size:10.5px;color:var(--ink-dim);margin-top:6px">${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</div>
       </div>`).join('')}
   `;
@@ -2183,7 +2193,7 @@ async function showMyRegistrations(){
   const enrollHtml = (enrollments||[]).map(e=>`
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><b>🎓 ${e.academies?.name||'أكاديمية'}</b><div style="font-size:12px;color:var(--ink-dim)">${e.player_name}</div></div>
+        <div><b>🎓 ${escapeHtml(e.academies?.name)||'أكاديمية'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(e.player_name)}</div></div>
         <span class="badge ${statusCls[e.status]||'pending'}" style="font-size:11px">${statusMap[e.status]||e.status}</span>
       </div>
       ${(e.status==='confirmed' && !reviewedEnroll.has(e.id)) ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="openRateRegistration('enrollment',${e.id},${e.academies?.id})">⭐ قيّم تجربتك</button>` : ''}
@@ -2193,7 +2203,7 @@ async function showMyRegistrations(){
   const teamHtml = (teams||[]).map(t=>`
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><b>🏆 ${t.tournaments?.name||'بطولة'}</b><div style="font-size:12px;color:var(--ink-dim)">${t.team_name}</div></div>
+        <div><b>🏆 ${escapeHtml(t.tournaments?.name)||'بطولة'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(t.team_name)}</div></div>
         <span class="badge ${statusCls[t.status]||'pending'}" style="font-size:11px">${statusMap[t.status]||t.status}</span>
       </div>
       ${(t.status==='confirmed' && !reviewedTeam.has(t.id)) ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="openRateRegistration('team',${t.id},${t.tournaments?.id})">⭐ قيّم تجربتك</button>` : ''}
@@ -2236,7 +2246,7 @@ async function cancelMyBooking(bookingId) {
     if (ownerId) {
       await sb.from('notifications').insert({
         user_id: ownerId, title: 'إلغاء حجز ❌',
-        body: `تم إلغاء حجز في ${booking.fields.name}`
+        body: `تم إلغاء حجز في ${escapeHtml(booking.fields.name)}`
       });
     }
   } catch(e){}
@@ -2262,7 +2272,7 @@ async function doLookup() {
   const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   box.innerHTML = `
     <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px">
-      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${data.fields?.name||'—'}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${escapeHtml(data.fields?.name)||'—'}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ</span><b>${data.booking_date}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الوقت</span><b>${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${statusMap[data.status]||data.status}</b></div>
@@ -2285,8 +2295,8 @@ async function showNotifications() {
         <div style="display:flex;align-items:flex-start;gap:8px">
           <span style="font-size:18px;flex-shrink:0">${notifIcon(n.title)}</span>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px">${n.title}</div>
-            ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${n.body}</div>`:''}
+            <div style="font-weight:700;font-size:14px">${escapeHtml(n.title)}</div>
+            ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${escapeHtml(n.body)}</div>`:''}
             <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
           </div>
         </div>
@@ -2330,7 +2340,7 @@ function startNotificationsWatch(userId){
   notifRealtimeChannel = sb.channel('notifications-' + userId)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
       const n = payload.new;
-      showToast(`${notifIcon(n.title)} ${n.title}`);
+      showToast(`${notifIcon(n.title)} ${escapeHtml(n.title)}`);
       refreshSideNotifBadge();
     })
     .subscribe();
@@ -2416,7 +2426,7 @@ function visibleOwnerTabs(){
 }
 function ownerTabsHtml(active){
   return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
-    ${visibleOwnerTabs().map(t=>`<button onclick="ownerGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${t.label}</button>`).join('')}
+    ${visibleOwnerTabs().map(t=>`<button onclick="ownerGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
   </div>`;
 }
 async function ownerGoTab(tab){
@@ -2516,13 +2526,13 @@ async function renderOwnerFieldsTab(){
     ${(visibleFacilities&&visibleFacilities.length)? visibleFacilities.map(f=>`
       <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div><b style="font-size:15px">${f.name}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district}، ${f.city}</div></div>
+          <div><b style="font-size:15px">${escapeHtml(f.name)}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${escapeHtml(f.district)}، ${escapeHtml(f.city)}</div></div>
           <span class="badge ${f.approved?'available':'pending'}" style="font-size:11px">${f.approved? (f.fields||[]).length+' ملعب' : 'بانتظار الموافقة'}</span>
         </div>
         ${(f.fields||[]).map(fd=>`
           <div style="margin-top:8px;padding:10px;background:var(--bg-elev);border-radius:8px">
             <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
-              <span>${fd.name}</span>
+              <span>${escapeHtml(fd.name)}</span>
               <span style="display:flex;align-items:center;gap:6px">
                 <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
                 <span class="badge ${statusClass[fd.status]||'available'}" style="font-size:10px">${statusLabel[fd.status]||fd.status}</span>
@@ -2563,7 +2573,7 @@ async function renderOwnerAcademiesTab(){
     ${(myAcad&&myAcad.length)? myAcad.map(a=>`
       <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><b style="font-size:13px">${a.name}</b><div style="font-size:11px;color:var(--ink-dim)">${a.city} · ${a.monthly_price} ر/شهر ${!a.approved?' · <span style=\"color:var(--danger)\">بانتظار الموافقة</span>':''}</div></div>
+          <div><b style="font-size:13px">${escapeHtml(a.name)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(a.city)} · ${a.monthly_price} ر/شهر ${!a.approved?' · <span style=\"color:var(--danger)\">بانتظار الموافقة</span>':''}</div></div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-soft btn-sm" onclick="showAddAcademyForm(${a.id})">✏️</button>
             ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteAcademy(${a.id})">حذف</button>` : ''}
@@ -2595,7 +2605,7 @@ async function renderOwnerTournamentsTab(){
       return `
       <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><b style="font-size:13px">${t.name}</b><div style="font-size:11px;color:var(--ink-dim)">${t.city} · ${confirmed}/${t.max_teams} فريق · ${t.team_fee} ر/فريق ${!t.approved?' · <span style=\"color:var(--danger)\">بانتظار الموافقة</span>':''}</div></div>
+          <div><b style="font-size:13px">${escapeHtml(t.name)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(t.city)} · ${confirmed}/${t.max_teams} فريق · ${t.team_fee} ر/فريق ${!t.approved?' · <span style=\"color:var(--danger)\">بانتظار الموافقة</span>':''}</div></div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-soft btn-sm" onclick="showAddTournamentForm(${t.id})">✏️</button>
             ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteTournament(${t.id})">حذف</button>` : ''}
@@ -2673,7 +2683,7 @@ async function renderOwnerBookingsTab(){
   ownerInner().innerHTML = data.map(b => `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
+        <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name)||''} · ${escapeHtml(b.profiles?.phone)||''}</div></div>
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
       <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''} - ${b.end_time?formatTime12(b.end_time):''} · 👥 ${b.players_count||''} لاعب</div>
@@ -2700,7 +2710,7 @@ const _lt = delayedLoading(bodyEl.id);
     .from('facility_staff').select('id, facility_id, user_id, permissions, profiles(name, phone)').in('facility_id', facIds) : { data: [] };
 
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('team')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
-  const facOptions = (ownFac||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+  const facOptions = (ownFac||[]).map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
 
   clearTimeout(_lt);
 
@@ -2724,7 +2734,7 @@ const _lt = delayedLoading(bodyEl.id);
     ${(staffRows&&staffRows.length)? staffRows.map(s=>`
       <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div><b style="font-size:13px">${s.profiles?.name||'—'}</b><div style="font-size:11px;color:var(--ink-dim)">${s.profiles?.phone||''}</div></div>
+          <div><b style="font-size:13px">${escapeHtml(s.profiles?.name)||'—'}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(s.profiles?.phone)||''}</div></div>
           <button class="btn btn-danger btn-sm" onclick="removeStaffMember(${s.id})">إزالة</button>
         </div>
         <div class="dlabel" style="font-size:11px;margin:6px 0">صلاحياته</div>
@@ -2747,7 +2757,7 @@ function staffPermissionCheckboxesHtml(rowKey, selected){
     ${STAFF_PERMISSIONS.map(p=>`
       <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);cursor:pointer;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:7px 9px">
         <input type="checkbox" class="staff-perm-${rowKey}" value="${p.key}" ${selected.includes(p.key)?'checked':''}>
-        <span>${p.label}</span>
+        <span>${escapeHtml(p.label)}</span>
       </label>`).join('')}
   </div>`;
 }
@@ -2778,7 +2788,7 @@ async function addStaffMember(){
   try {
     await sb.from('notifications').insert({ user_id: prof.id, title:'تمت إضافتك كموظف 👥', body:'أصبح بإمكانك إدارة منشأة عبر لوحة ملاعبي' });
   } catch(e){}
-  showToast(`تمت إضافة ${prof.name||'الموظف'} ✓`);
+  showToast(`تمت إضافة ${escapeHtml(prof.name)||'الموظف'} ✓`);
   showStaffManagement();
 }
 
@@ -2796,7 +2806,7 @@ async function myFieldsOptionsHtml(){
   const { data: { user } } = await sb.auth.getUser();
   const { data } = await sb.from('facilities').select('name, fields(id,name)').eq('owner_id', user.id);
   const opts = [];
-  (data||[]).forEach(f => (f.fields||[]).forEach(fd => opts.push(`<option value="${fd.id}">${f.name} — ${fd.name}</option>`)));
+  (data||[]).forEach(f => (f.fields||[]).forEach(fd => opts.push(`<option value="${fd.id}">${escapeHtml(f.name)} — ${escapeHtml(fd.name)}</option>`)));
   return opts.join('') || '<option value="">لا توجد ملاعب مسجّلة</option>';
 }
 
@@ -2823,7 +2833,7 @@ async function showScheduleAcademySession(academyId){
     <div class="dlabel" style="margin-top:18px">📋 المواعيد الحالية</div>
     ${(sessions&&sessions.length)? sessions.map(s=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
-        <span style="font-size:12.5px"><b>${WD_NAMES[s.weekday]}</b> · ${formatTime12(s.start_time)}–${formatTime12(s.end_time)} · ${s.fields?.name||''}${s.label?' · '+s.label:''}</span>
+        <span style="font-size:12.5px"><b>${WD_NAMES[s.weekday]}</b> · ${formatTime12(s.start_time)}–${formatTime12(s.end_time)} · ${escapeHtml(s.fields?.name)||''}${s.label?' · '+escapeHtml(s.label):''}</span>
         <button class="btn btn-ghost btn-sm" onclick="deleteAcademySession(${s.id},${academyId})">حذف</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مواعيد بعد</div>'}
   `;
@@ -2876,7 +2886,7 @@ async function showScheduleMatch(tournamentId){
     <div class="dlabel" style="margin-top:18px">📋 المباريات المجدولة</div>
     ${(matches&&matches.length)? matches.map(m=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
-        <span style="font-size:12.5px"><b>${m.match_date}</b> · ${formatTime12(m.start_time)}–${formatTime12(m.end_time)} · ${m.fields?.name||''}${(m.team_a||m.team_b)? ' · '+(m.team_a||'؟')+' ضد '+(m.team_b||'؟'):''}</span>
+        <span style="font-size:12.5px"><b>${m.match_date}</b> · ${formatTime12(m.start_time)}–${formatTime12(m.end_time)} · ${escapeHtml(m.fields?.name)||''}${(m.team_a||m.team_b)? ' · '+(m.team_a||'؟')+' ضد '+(m.team_b||'؟'):''}</span>
         <button class="btn btn-ghost btn-sm" onclick="deleteMatch(${m.id},${tournamentId})">حذف</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مباريات مجدولة بعد</div>'}
   `;
@@ -2912,7 +2922,7 @@ async function deleteAcademy(id){
   if (!error) { showToast('تم حذف الأكاديمية نهائيًا ✓'); renderOwnerAcademiesTab(); return; }
   if (error.code === '23503') {
     const { data: current } = await sb.from('academies').select('name').eq('id', id).single();
-    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${current?.name||'أكاديمية'} (محذوف)`;
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${escapeHtml(current?.name)||'أكاديمية'} (محذوف)`;
     const { error: softErr } = await sb.from('academies').update({ name: markedName, is_deleted: true, status: 'closed' }).eq('id', id);
     if (softErr) { showToast('تعذّر الحذف: ' + softErr.message, 'error'); return; }
     showToast('تم الحذف ✓ — سجل التسجيلات السابقة محفوظ للحماية المالية والقانونية');
@@ -2927,7 +2937,7 @@ async function deleteTournament(id){
   if (!error) { showToast('تم حذف البطولة نهائيًا ✓'); renderOwnerTournamentsTab(); return; }
   if (error.code === '23503') {
     const { data: current } = await sb.from('tournaments').select('name').eq('id', id).single();
-    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${current?.name||'بطولة'} (محذوف)`;
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${escapeHtml(current?.name)||'بطولة'} (محذوف)`;
     const { error: softErr } = await sb.from('tournaments').update({ name: markedName, is_deleted: true, status: 'cancelled' }).eq('id', id);
     if (softErr) { showToast('تعذّر الحذف: ' + softErr.message, 'error'); return; }
     showToast('تم الحذف ✓ — سجل الفرق المسجّلة محفوظ للحماية المالية والقانونية');
@@ -2947,9 +2957,9 @@ async function showAddAcademyForm(editId){
   }
   document.getElementById('ownerTitle').textContent = editId ? '✏️ تعديل أكاديمية' : '➕ إضافة أكاديمية';
   bodyEl.innerHTML = `
-    <div class="field"><label>اسم الأكاديمية *</label><input id="ac-name" type="text" value="${a.name||''}" placeholder="أكاديمية النجوم"></div>
-    <div class="field"><label>المدينة *</label><input id="ac-city" type="text" value="${a.city||''}" placeholder="مثال: الرياض"></div>
-    <div class="field"><label>الحي</label><input id="ac-district" type="text" value="${a.district||''}" placeholder="حي الراقي"></div>
+    <div class="field"><label>اسم الأكاديمية *</label><input id="ac-name" type="text" value="${escapeHtml(a.name)||''}" placeholder="أكاديمية النجوم"></div>
+    <div class="field"><label>المدينة *</label><input id="ac-city" type="text" value="${escapeHtml(a.city)||''}" placeholder="مثال: الرياض"></div>
+    <div class="field"><label>الحي</label><input id="ac-district" type="text" value="${escapeHtml(a.district)||''}" placeholder="حي الراقي"></div>
     <div class="field">
       <label>المنطقة</label>
       <select id="ac-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
@@ -2957,8 +2967,8 @@ async function showAddAcademyForm(editId){
       </select>
     </div>
     <div class="field"><label>الاشتراك الشهري (ريال) *</label><input id="ac-price" type="number" value="${a.monthly_price||''}" placeholder="300"></div>
-    <div class="field"><label>الفئات العمرية</label><input id="ac-ages" type="text" value="${a.age_groups||''}" placeholder="تحت 12، تحت 16"></div>
-    <div class="field"><label>وصف مختصر</label><input id="ac-desc" type="text" value="${a.description||''}" placeholder="برنامج تدريبي احترافي"></div>
+    <div class="field"><label>الفئات العمرية</label><input id="ac-ages" type="text" value="${escapeHtml(a.age_groups)||''}" placeholder="تحت 12، تحت 16"></div>
+    <div class="field"><label>وصف مختصر</label><input id="ac-desc" type="text" value="${escapeHtml(a.description)||''}" placeholder="برنامج تدريبي احترافي"></div>
     <div class="field">
       <label>صورة الأكاديمية <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
       <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
@@ -3034,9 +3044,9 @@ async function showAddTournamentForm(editId){
   }
   document.getElementById('ownerTitle').textContent = editId ? '✏️ تعديل بطولة' : '➕ إضافة بطولة';
   bodyEl.innerHTML = `
-    <div class="field"><label>اسم البطولة *</label><input id="tn-name" type="text" value="${t.name||''}" placeholder="بطولة الحي الرمضانية"></div>
-    <div class="field"><label>المدينة *</label><input id="tn-city" type="text" value="${t.city||''}" placeholder="مثال: الرياض"></div>
-    <div class="field"><label>الملعب / المكان</label><input id="tn-venue" type="text" value="${t.venue_name||''}" placeholder="ملعب النخيل الرياضي"></div>
+    <div class="field"><label>اسم البطولة *</label><input id="tn-name" type="text" value="${escapeHtml(t.name)||''}" placeholder="بطولة الحي الرمضانية"></div>
+    <div class="field"><label>المدينة *</label><input id="tn-city" type="text" value="${escapeHtml(t.city)||''}" placeholder="مثال: الرياض"></div>
+    <div class="field"><label>الملعب / المكان</label><input id="tn-venue" type="text" value="${escapeHtml(t.venue_name)||''}" placeholder="ملعب النخيل الرياضي"></div>
     <div class="field">
       <label>المنطقة</label>
       <select id="tn-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
@@ -3046,7 +3056,7 @@ async function showAddTournamentForm(editId){
     <div class="field"><label>رسوم الفريق (ريال) *</label><input id="tn-fee" type="number" value="${t.team_fee||''}" placeholder="500"></div>
     <div class="field"><label>الحد الأقصى للفرق</label><input id="tn-maxteams" type="number" placeholder="16" value="${t.max_teams||16}"></div>
     <div class="field"><label>تاريخ البداية</label><input id="tn-startdate" type="date" value="${t.start_date||''}"></div>
-    <div class="field"><label>وصف مختصر</label><input id="tn-desc" type="text" value="${t.description||''}" placeholder="بطولة سداسي"></div>
+    <div class="field"><label>وصف مختصر</label><input id="tn-desc" type="text" value="${escapeHtml(t.description)||''}" placeholder="بطولة سداسي"></div>
     <div class="field">
       <label>صورة البطولة <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
       <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
@@ -3126,7 +3136,7 @@ async function ownerSetBookingStatus(bookingId, newStatus) {
       const titles = { confirmed:'تم تأكيد حجزك ✅', cancelled:'تم إلغاء حجزك ❌', completed:'انتهت مباراتك 🏁' };
       await sb.from('notifications').insert({
         user_id: booking.user_id, title: titles[newStatus] || 'تحديث على حجزك',
-        body: `تحديث بخصوص حجزك في ${booking.fields?.name || 'الملعب'}`
+        body: `تحديث بخصوص حجزك في ${escapeHtml(booking.fields?.name) || 'الملعب'}`
       });
     }
   } catch(e){}
@@ -3160,7 +3170,7 @@ async function deleteField(fieldId) {
   if (error.code === '23503' || error.message.includes('bookings_field_id_fkey')) {
     // حذف آمن: يبقى السجل موثّقًا للحجوزات/الإيرادات القديمة، لكنه يختفي من كل مكان فعّال
     const { data: current } = await sb.from('fields').select('name').eq('id', fieldId).single();
-    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${current?.name||'ملعب'} (محذوف)`;
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${escapeHtml(current?.name)||'ملعب'} (محذوف)`;
     const { error: softErr } = await sb.from('fields')
       .update({ name: markedName, status: 'closed', is_deleted: true })
       .eq('id', fieldId);
@@ -3189,9 +3199,9 @@ const _lt = delayedLoading(bodyEl.id);
   newFieldType = fd.type;
   clearTimeout(_lt);
   bodyEl.innerHTML = `
-    <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" value="${fd.name}"></div>
-    <div class="field"><label>المدينة *</label><input id="st-city" type="text" value="${fd.facilities?.city||''}"></div>
-    <div class="field"><label>الحي *</label><input id="st-district" type="text" value="${fd.facilities?.district||''}"></div>
+    <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" value="${escapeHtml(fd.name)}"></div>
+    <div class="field"><label>المدينة *</label><input id="st-city" type="text" value="${escapeHtml(fd.facilities?.city)||''}"></div>
+    <div class="field"><label>الحي *</label><input id="st-district" type="text" value="${escapeHtml(fd.facilities?.district)||''}"></div>
     <div class="field">
       <label>المنطقة</label>
       <select id="st-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
@@ -3342,7 +3352,7 @@ const _lt = delayedLoading(bodyEl.id);
     </div>
     ${(blackouts&&blackouts.length)? blackouts.map(b=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--danger-soft);border-radius:9px;margin-bottom:6px">
-        <span style="font-size:13px"><b>${b.blackout_date}</b>${b.reason? ' — '+b.reason : ''}</span>
+        <span style="font-size:13px"><b>${b.blackout_date}</b>${b.reason? ' — '+escapeHtml(b.reason) : ''}</span>
         <button class="btn btn-ghost btn-sm" onclick="removeBlackout(${b.id})">إلغاء</button>
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--ink-dim);padding:6px">لا توجد أيام إغلاق مجدولة</div>'}
   `;
@@ -3442,7 +3452,7 @@ const _lt = delayedLoading(bodyEl.id);
     <div class="legal-note" style="margin-bottom:12px">👥 ${customers.length} عميل حجز في ملاعبك حتى الآن</div>
     ${customers.map(c=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
-        <div><b style="font-size:13px">${c.name}</b><div style="font-size:11px;color:var(--ink-dim)">${c.phone}</div></div>
+        <div><b style="font-size:13px">${escapeHtml(c.name)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(c.phone)}</div></div>
         <div style="text-align:left"><b style="color:var(--flood);font-size:13px">${c.spent} ر</b><div style="font-size:11px;color:var(--ink-dim)">${c.count} حجز</div></div>
       </div>`).join('')}
   ` : '<div style="color:var(--ink-dim);padding:14px">لا يوجد عملاء بعد</div>');
@@ -3516,7 +3526,7 @@ const ADMIN_TABS = [
 ];
 function adminTabsHtml(active){
   return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
-    ${ADMIN_TABS.map(t=>`<button onclick="adminGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${t.label}</button>`).join('')}
+    ${ADMIN_TABS.map(t=>`<button onclick="adminGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
   </div>`;
 }
 async function adminGoTab(tab){
@@ -3610,8 +3620,8 @@ async function adminView(kind) {
     bodyEl.innerHTML = backBtn + data.map(u => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;gap:8px">
         <div style="flex:1;min-width:0">
-          <b>${u.name||'—'}</b>
-          <div style="font-size:12px;color:var(--ink-dim)">${u.phone||''} · ${roleLabel[u.role]||u.role}</div>
+          <b>${escapeHtml(u.name)||'—'}</b>
+          <div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(u.phone)||''} · ${roleLabel[u.role]||u.role}</div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           ${u.role==='customer' ? `<button class="btn btn-soft btn-sm" onclick="ownerControl('${u.id}','owner')">ترقية لصاحب ملعب</button>` : ''}
@@ -3629,9 +3639,9 @@ async function adminView(kind) {
     clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + data.map(f => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between"><b>${f.name}</b><span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span></div>
-        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">📍 ${f.district||''}، ${f.city||''}</div>
-        <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">👤 المالك: ${f.profiles?.name||'—'} · ${f.profiles?.phone||''}</div>
+        <div style="display:flex;justify-content:space-between"><b>${escapeHtml(f.name)}</b><span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span></div>
+        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">📍 ${escapeHtml(f.district)||''}، ${escapeHtml(f.city)||''}</div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">👤 المالك: ${escapeHtml(f.profiles?.name)||'—'} · ${escapeHtml(f.profiles?.phone)||''}</div>
         <div style="display:flex;justify-content:flex-end;margin-top:8px">
           <button class="btn btn-danger btn-sm" onclick="adminDeleteFacility(${f.id})">🗑️ حذف المنشأة وكل ملاعبها</button>
         </div>
@@ -3651,7 +3661,7 @@ async function adminView(kind) {
     bodyEl.innerHTML = backBtn + data.map(b => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div><b>${b.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${b.profiles?.name||''} · ${b.profiles?.phone||''}</div></div>
+          <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name)||''} · ${escapeHtml(b.profiles?.phone)||''}</div></div>
           <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
         </div>
         <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''}</div>
@@ -3677,10 +3687,10 @@ async function adminView(kind) {
     bodyEl.innerHTML = backBtn + data.map(r => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div><b>${r.fields?.name||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${r.profiles?.name||'مستخدم'}</div></div>
+          <div><b>${escapeHtml(r.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(r.profiles?.name)||'مستخدم'}</div></div>
           <span style="color:var(--flood);font-weight:800">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
         </div>
-        ${r.comment? `<div style="font-size:13px;color:var(--ink-soft);margin-top:6px">"${r.comment}"</div>` : ''}
+        ${r.comment? `<div style="font-size:13px;color:var(--ink-soft);margin-top:6px">"${escapeHtml(r.comment)}"</div>` : ''}
         <div style="display:flex;justify-content:flex-end;margin-top:8px">
           <button class="btn btn-danger btn-sm" onclick="adminDeleteReview(${r.id})">🗑️ حذف التقييم</button>
         </div>
@@ -3704,8 +3714,8 @@ async function adminView(kind) {
       <div class="dlabel" style="margin-top:18px">📋 آخر الرسائل المرسلة</div>
       ${(logs&&logs.length)? logs.map(l=>`
         <div style="padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
-          <div style="display:flex;justify-content:space-between"><b>${l.phone}</b><span class="badge ${l.status==='sent'?'available':'closed'}" style="font-size:10px">${l.status}</span></div>
-          <div style="color:var(--ink-dim);margin-top:3px">${l.message}</div>
+          <div style="display:flex;justify-content:space-between"><b>${escapeHtml(l.phone)}</b><span class="badge ${l.status==='sent'?'available':'closed'}" style="font-size:10px">${l.status}</span></div>
+          <div style="color:var(--ink-dim);margin-top:3px">${escapeHtml(l.message)}</div>
         </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد رسائل بعد</div>'}
     `;
   }
@@ -3776,7 +3786,7 @@ async function adminView(kind) {
       <div class="dlabel">🏆 الأعلى إيرادًا</div>
       ${topFields.length ? topFields.map((f,i)=>`
         <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
-          <span style="font-size:12.5px"><b>${i+1}.</b> ${f.name} <span style="color:var(--ink-dim);font-size:11px">${f.city}</span></span>
+          <span style="font-size:12.5px"><b>${i+1}.</b> ${escapeHtml(f.name)} <span style="color:var(--ink-dim);font-size:11px">${escapeHtml(f.city)}</span></span>
           <span style="font-size:12px"><b style="color:var(--flood)">${f.revenue} ر</b> · ${f.count} حجز</span>
         </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:8px">لا توجد بيانات كافية بعد</div>'}
 
@@ -3836,12 +3846,12 @@ async function adminView(kind) {
     bodyEl.innerHTML = backBtn + (rows.length ? rows.map(r=>`
       <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div><b>${r.owner.name||'—'}</b><div style="font-size:11.5px;color:var(--ink-dim)">${r.owner.phone||''}</div></div>
+          <div><b>${escapeHtml(r.owner.name)||'—'}</b><div style="font-size:11.5px;color:var(--ink-dim)">${escapeHtml(r.owner.phone)||''}</div></div>
           <span style="color:var(--flood);font-weight:900;font-size:16px">${r.netOwed} ر</span>
         </div>
         ${r.owner.iban ? `
           <div style="background:var(--bg-elev);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px">
-            <div style="color:var(--ink-dim)">اسم الحساب: <b style="color:var(--ink)">${r.owner.bank_account_name||'—'}</b></div>
+            <div style="color:var(--ink-dim)">اسم الحساب: <b style="color:var(--ink)">${escapeHtml(r.owner.bank_account_name)||'—'}</b></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
               <span style="direction:ltr;font-family:'JetBrains Mono',monospace;font-weight:700">${r.owner.iban}</span>
               <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:10.5px" onclick="navigator.clipboard.writeText('${r.owner.iban}');showToast('تم نسخ الآيبان ✓')">📋 نسخ</button>
@@ -3868,9 +3878,9 @@ async function adminView(kind) {
     bodyEl.innerHTML = backBtn +
       ((pendingFac&&pendingFac.length) ? `<div class="dlabel">🏟️ منشآت (${pendingFac.length})</div>` + pendingFac.map(f=>`
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-        <div><b style="font-size:14px">${f.name}</b>
-          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${f.district||''}، ${f.city||''} · ${(f.fields||[]).length} ملعب</div>
-          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${f.profiles?.name||'—'} · ${f.profiles?.phone||''}</div>
+        <div><b style="font-size:14px">${escapeHtml(f.name)}</b>
+          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${escapeHtml(f.district)||''}، ${escapeHtml(f.city)||''} · ${(f.fields||[]).length} ملعب</div>
+          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${escapeHtml(f.profiles?.name)||'—'} · ${escapeHtml(f.profiles?.phone)||''}</div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn btn-brand btn-sm" style="flex:1" onclick="approveFacility(${f.id})">✅ موافقة ونشر</button>
@@ -3879,9 +3889,9 @@ async function adminView(kind) {
       </div>`).join('') : '') +
       ((pendingAcad&&pendingAcad.length) ? `<div class="dlabel" style="margin-top:14px">🎓 أكاديميات (${pendingAcad.length})</div>` + pendingAcad.map(a=>`
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-        <div><b style="font-size:14px">${a.name}</b>
-          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${a.city||''} · ${a.monthly_price} ر/شهر</div>
-          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${a.profiles?.name||'—'} · ${a.profiles?.phone||''}</div>
+        <div><b style="font-size:14px">${escapeHtml(a.name)}</b>
+          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${escapeHtml(a.city)||''} · ${a.monthly_price} ر/شهر</div>
+          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${escapeHtml(a.profiles?.name)||'—'} · ${escapeHtml(a.profiles?.phone)||''}</div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn btn-brand btn-sm" style="flex:1" onclick="approveAcademy(${a.id})">✅ موافقة ونشر</button>
@@ -3890,9 +3900,9 @@ async function adminView(kind) {
       </div>`).join('') : '') +
       ((pendingTourn&&pendingTourn.length) ? `<div class="dlabel" style="margin-top:14px">🏆 بطولات (${pendingTourn.length})</div>` + pendingTourn.map(t=>`
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-        <div><b style="font-size:14px">${t.name}</b>
-          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${t.city||''} · ${t.team_fee} ر/فريق</div>
-          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${t.profiles?.name||'—'} · ${t.profiles?.phone||''}</div>
+        <div><b style="font-size:14px">${escapeHtml(t.name)}</b>
+          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${escapeHtml(t.city)||''} · ${t.team_fee} ر/فريق</div>
+          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${escapeHtml(t.profiles?.name)||'—'} · ${escapeHtml(t.profiles?.phone)||''}</div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn btn-brand btn-sm" style="flex:1" onclick="approveTournament(${t.id})">✅ موافقة ونشر</button>
@@ -3913,7 +3923,7 @@ async function showBankDetailsForm(){
   clearTimeout(_lt);
   bodyEl.innerHTML = `
     <div class="legal-note" style="margin-bottom:14px">🔒 هذي البيانات يشوفها فقط مالك المنصة عشان يحوّل مستحقاتك — ما تظهر لأي لاعب أو صاحب ملعب ثاني.</div>
-    <div class="field"><label>الاسم الكامل كما يظهر بالحساب البنكي *</label><input id="bank-name" type="text" value="${profile?.bank_account_name||''}" placeholder="مثال: محمد عبدالله السعيد"></div>
+    <div class="field"><label>الاسم الكامل كما يظهر بالحساب البنكي *</label><input id="bank-name" type="text" value="${escapeHtml(profile?.bank_account_name)||''}" placeholder="مثال: محمد عبدالله السعيد"></div>
     <div class="field"><label>رقم الآيبان (IBAN) *</label><input id="bank-iban" type="text" value="${profile?.iban||''}" placeholder="SA0000000000000000000000" style="direction:ltr;text-align:left;font-family:'JetBrains Mono',monospace"></div>
     <div class="legal-note" style="margin-bottom:14px">الآيبان السعودي يبدأ بـ SA ويتكوّن من 24 خانة (حروف وأرقام) — تقدر تلقاه بتطبيق بنكك تحت "بيانات الحساب".</div>
     <button class="btn btn-brand btn-block" onclick="saveBankDetails()">💾 حفظ البيانات</button>
@@ -3945,7 +3955,7 @@ async function showFacilityExpenses(){
   clearTimeout(_lt);
 
   const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
-  const facOptions = (myFacilities||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+  const facOptions = (myFacilities||[]).map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
 
   bodyEl.innerHTML = backBtn + `
@@ -3973,7 +3983,7 @@ async function showFacilityExpenses(){
     <div class="dlabel">📋 آخر المصاريف</div>
     ${(expenses&&expenses.length)? expenses.map(e=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
-        <div><b style="font-size:13px">${e.category}</b><div style="font-size:11px;color:var(--ink-dim)">${e.facilities?.name||'عام'} · ${e.expense_date}${e.note?' · '+e.note:''}</div></div>
+        <div><b style="font-size:13px">${escapeHtml(e.category)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(e.facilities?.name)||'عام'} · ${e.expense_date}${e.note?' · '+escapeHtml(e.note):''}</div></div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="color:var(--danger);font-weight:700">${e.amount} ر</span>
           <button class="btn btn-danger btn-sm" style="padding:2px 8px" onclick="deleteFacilityExpense(${e.id})">🗑️</button>
@@ -4048,8 +4058,8 @@ async function exportAccountingReport(){
 
   let csv = '\uFEFF'; // BOM لدعم العربي بإكسل
   csv += 'النوع,التاريخ,البيان,المبلغ (ريال)\n';
-  (bookings||[]).forEach(b => { csv += `إيراد,${b.booking_date},حجز - ${b.fields?.name||''},${b.total_price}\n`; });
-  (expenses||[]).forEach(e => { csv += `مصروف,${e.expense_date},${e.category} - ${e.facilities?.name||'عام'}${e.note?' ('+e.note+')':''},-${e.amount}\n`; });
+  (bookings||[]).forEach(b => { csv += `إيراد,${b.booking_date},حجز - ${escapeHtml(b.fields?.name)||''},${b.total_price}\n`; });
+  (expenses||[]).forEach(e => { csv += `مصروف,${e.expense_date},${escapeHtml(e.category)} - ${escapeHtml(e.facilities?.name)||'عام'}${e.note?' ('+escapeHtml(e.note)+')':''},-${e.amount}\n`; });
 
   const totalRevenue = (bookings||[]).reduce((s,b)=>s+Number(b.total_price||0),0);
   const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
@@ -4111,8 +4121,8 @@ const _lt = delayedLoading(bodyEl.id);
     ${(coupons&&coupons.length)? coupons.map(c=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
         <div>
-          <b class="mono" style="font-size:13px">${c.code}</b>
-          <div style="font-size:11px;color:var(--ink-dim)">${c.discount_type==='percent'?c.discount_value+'%':c.discount_value+' ر'} · ${c.fields?.name || 'كل الملاعب'} · استُخدم ${c.used_count}${c.max_uses?'/'+c.max_uses:''} مرة${c.expires_at?' · ينتهي '+c.expires_at:''}</div>
+          <b class="mono" style="font-size:13px">${escapeHtml(c.code)}</b>
+          <div style="font-size:11px;color:var(--ink-dim)">${c.discount_type==='percent'?c.discount_value+'%':c.discount_value+' ر'} · ${escapeHtml(c.fields?.name) || 'كل الملاعب'} · استُخدم ${c.used_count}${c.max_uses?'/'+c.max_uses:''} مرة${c.expires_at?' · ينتهي '+c.expires_at:''}</div>
         </div>
         <button class="btn ${c.active?'btn-danger':'btn-soft'} btn-sm" onclick="toggleCoupon(${c.id}, ${!c.active})">${c.active?'إيقاف':'تفعيل'}</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد كوبونات بعد</div>'}
@@ -4163,7 +4173,7 @@ const _lt = delayedLoading(bodyEl.id);
         <span style="font-size:12.5px;color:var(--ink-dim)">${p.period_start} → ${p.period_end}</span>
         <span style="color:var(--flood);font-weight:900">${p.net_amount} ر</span>
       </div>
-      <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">إجمالي ${p.gross_amount} ر − عمولة ${p.commission_amount} ر${p.reference_number?' · مرجع: '+p.reference_number:''}</div>
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">إجمالي ${p.gross_amount} ر − عمولة ${p.commission_amount} ر${p.reference_number?' · مرجع: '+escapeHtml(p.reference_number):''}</div>
       <a href="${p.receipt_url}" target="_blank" class="btn btn-soft btn-sm btn-block" style="margin-top:8px">📄 عرض الإيصال</a>
     </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تحويلات مستلمة بعد</div>');
 }
@@ -4191,13 +4201,13 @@ async function openPayoutReview(ownerId, gross, commissionPct, netOwed){
     ${owner?.iban ? `
     <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:12px;padding:14px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">🏦 حوّل إلى</div>
-      <div style="font-weight:800;font-size:14px;margin-bottom:4px">${owner.bank_account_name||owner.name||'—'}</div>
+      <div style="font-weight:800;font-size:14px;margin-bottom:4px">${escapeHtml(owner.bank_account_name||owner.name)||'—'}</div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="direction:ltr;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px">${owner.iban}</span>
         <button class="btn btn-soft btn-sm" onclick="navigator.clipboard.writeText('${owner.iban}');showToast('تم نسخ الآيبان ✓')">📋 نسخ</button>
       </div>
     </div>
-    <div class="legal-note" style="margin-bottom:16px">🛡️ عند إدخال الآيبان ببنكك عبر سارie، البنك بيعرض لك اسم صاحب الحساب الحقيقي المسجّل — تأكد إنه يطابق "${owner.bank_account_name||owner.name||'الاسم أعلاه'}" قبل ما تأكد التحويل.</div>
+    <div class="legal-note" style="margin-bottom:16px">🛡️ عند إدخال الآيبان ببنكك عبر سارie، البنك بيعرض لك اسم صاحب الحساب الحقيقي المسجّل — تأكد إنه يطابق "${escapeHtml(owner.bank_account_name||owner.name)||'الاسم أعلاه'}" قبل ما تأكد التحويل.</div>
     ` : `<div class="legal-note" style="margin-bottom:16px">⚠️ صاحب الملعب لسه ما أضاف بياناته البنكية — تواصل معه قبل التحويل.</div>`}
     <div class="summary" style="margin-bottom:16px">
       <div class="srow"><span>إجمالي الحجوزات</span><span>${gross} ر</span></div>
@@ -4388,7 +4398,7 @@ async function adminDeleteFacility(facilityId) {
 
   if (error.code === '23503') {
     const { data: current } = await sb.from('facilities').select('name').eq('id', facilityId).single();
-    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${current?.name||'منشأة'} (محذوف)`;
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${escapeHtml(current?.name)||'منشأة'} (محذوف)`;
     const { error: softErr } = await sb.from('facilities')
       .update({ name: markedName, is_deleted: true, approved: false })
       .eq('id', facilityId);
@@ -4435,7 +4445,7 @@ const _lt = delayedLoading(bodyEl.id);
   const { data: { user } } = await sb.auth.getUser();
   const { data: myFacilities } = await sb.from('facilities').select('id, name, city, district, approved').eq('owner_id', user.id);
   const facOptions = (myFacilities||[]).map(f=>
-    `<option value="${f.id}">${f.name} — ${f.city}${!f.approved?' (بانتظار الموافقة)':''}</option>`).join('');
+    `<option value="${f.id}">${escapeHtml(f.name)} — ${escapeHtml(f.city)}${!f.approved?' (بانتظار الموافقة)':''}</option>`).join('');
 
   clearTimeout(_lt);
 
