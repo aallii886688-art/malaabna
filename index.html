@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="ملاعبنا — منصة حجز الملاعب والأكاديميات والبطولات في جميع مناطق المملكة العربية السعودية. احجز ملعبك، قسّم التكلفة بذكاء، وانضم للبطولات.">
 <title>ملاعبنا | احجز · تدرّب · نافس</title>
+<script>
+  // الوضع الليلي افتراضي دائمًا (إلا لو المستخدم بدّل يدويًا من قبل) — يُطبَّق هنا فورًا قبل أي تصميم عشان ما يصير أي وميض
+  (function(){
+    let saved = null;
+    try { saved = localStorage.getItem('malaabna-theme'); } catch(e){}
+    document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+  })();
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap');
 
@@ -815,9 +823,7 @@ function toggleTheme(){
   const next = cur==='dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   document.getElementById('knob').textContent = next==='dark' ? '🌙' : '☀️';
-}
-if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
-  document.documentElement.setAttribute('data-theme','dark');
+  try { localStorage.setItem('malaabna-theme', next); } catch(e){}
 }
 document.getElementById('knob').textContent =
   document.documentElement.getAttribute('data-theme')==='dark' ? '🌙' : '☀️';
