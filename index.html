@@ -422,7 +422,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   </div>
 </nav>
 
-<section class="section" id="modules" style="padding-top:90px">
+<section class="section" id="modules" style="padding-top:38px">
   <div class="container">
     <div class="shead">
       <div class="seyebrow">كل شيء في مكان واحد</div>
@@ -815,13 +815,10 @@ function toggleTheme(){
   const next = cur==='dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   document.getElementById('knob').textContent = next==='dark' ? '🌙' : '☀️';
-  try { localStorage.setItem('malaabna-theme', next); } catch(e){}
 }
-(function(){
-  let saved = null;
-  try { saved = localStorage.getItem('malaabna-theme'); } catch(e){}
-  document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
-})();
+if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+  document.documentElement.setAttribute('data-theme','dark');
+}
 document.getElementById('knob').textContent =
   document.documentElement.getAttribute('data-theme')==='dark' ? '🌙' : '☀️';
 
@@ -2607,6 +2604,9 @@ async function renderOwnerFinanceTab(){
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerAnalytics()">📈 تحليلات الإيرادات</button>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">💰 التحويلات المستلمة</button>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showFacilityExpenses()">💸 مصاريفي</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showRevenueForecast()">🔮 توقّع الإيرادات</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="exportAccountingReport()">📄 تصدير تقرير محاسبي</button>
     <button class="btn btn-brand btn-block" onclick="showBankDetailsForm()">🏦 بيانات الحساب البنكي</button>
   `;
 }
@@ -3889,6 +3889,141 @@ async function saveBankDetails(){
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
   showToast('تم حفظ بياناتك البنكية ✓');
   ownerGoTab('finance');
+}
+
+// ── مصاريفي: تتبّع مصاريف تشغيل الملاعب لمعرفة صافي الربح الحقيقي ──
+const EXPENSE_CATEGORIES = ['كهرباء','ماء','صيانة','رواتب','تنظيف','إيجار','أخرى'];
+async function showFacilityExpenses(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '💸 مصاريفي';
+  const _lt = delayedLoading(bodyEl.id);
+  const { data: { user } } = await sb.auth.getUser();
+  const [{ data: expenses }, { data: myFacilities }] = await Promise.all([
+    sb.from('facility_expenses').select('*, facilities(name)').eq('owner_id', user.id).order('expense_date', { ascending:false }).limit(50),
+    sb.from('facilities').select('id, name').eq('owner_id', user.id)
+  ]);
+  clearTimeout(_lt);
+
+  const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+  const facOptions = (myFacilities||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  bodyEl.innerHTML = backBtn + `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
+      <div style="font-size:24px;font-weight:900;color:var(--danger)">${totalExpenses} ريال</div>
+      <div style="font-size:12px;color:var(--ink-dim)">إجمالي المصاريف المسجّلة</div>
+    </div>
+    <div class="dlabel">➕ إضافة مصروف</div>
+    <div class="field"><label>النوع *</label>
+      <select id="exp-category" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        ${EXPENSE_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>المبلغ (ريال) *</label><input id="exp-amount" type="number" placeholder="150"></div>
+    <div class="field"><label>الملعب (اختياري)</label>
+      <select id="exp-facility" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        <option value="">عام (كل الملاعب)</option>
+        ${facOptions}
+      </select>
+    </div>
+    <div class="field"><label>التاريخ</label><input id="exp-date" type="date" value="${riyadhTodayStr()}"></div>
+    <div class="field"><label>ملاحظة (اختياري)</label><input id="exp-note" type="text" placeholder="مثال: فاتورة كهرباء شهر يوليو"></div>
+    <button class="btn btn-brand btn-block" style="margin-bottom:20px" onclick="addFacilityExpense()">💾 حفظ المصروف</button>
+
+    <div class="dlabel">📋 آخر المصاريف</div>
+    ${(expenses&&expenses.length)? expenses.map(e=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
+        <div><b style="font-size:13px">${e.category}</b><div style="font-size:11px;color:var(--ink-dim)">${e.facilities?.name||'عام'} · ${e.expense_date}${e.note?' · '+e.note:''}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--danger);font-weight:700">${e.amount} ر</span>
+          <button class="btn btn-danger btn-sm" style="padding:2px 8px" onclick="deleteFacilityExpense(${e.id})">🗑️</button>
+        </div>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد مصاريف مسجّلة بعد</div>'}
+  `;
+}
+async function addFacilityExpense(){
+  const category = document.getElementById('exp-category').value;
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const facilityId = document.getElementById('exp-facility').value || null;
+  const expenseDate = document.getElementById('exp-date').value;
+  const note = document.getElementById('exp-note').value.trim();
+  if (!amount || amount <= 0) { showToast('أدخل مبلغاً صحيحاً','error'); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('facility_expenses').insert({ owner_id: user.id, facility_id: facilityId, category, amount, expense_date: expenseDate, note: note||null });
+  if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
+  showToast('تم تسجيل المصروف ✓');
+  showFacilityExpenses();
+}
+async function deleteFacilityExpense(id){
+  if (!confirm('حذف هذا المصروف؟')) return;
+  const { error } = await sb.from('facility_expenses').delete().eq('id', id);
+  if (error) { showToast('تعذّر الحذف: ' + error.message,'error'); return; }
+  showToast('تم الحذف ✓');
+  showFacilityExpenses();
+}
+
+// ── توقّع الإيرادات: تقدير بسيط بناءً على متوسط آخر 4 أسابيع ──
+async function showRevenueForecast(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🔮 توقّع الإيرادات';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+  const myFieldIds = await getMyFieldIds();
+  if (!myFieldIds.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك التوقعات</div>'; return; }
+
+  const since = new Date(riyadhNow().getTime() - 28*24*60*60*1000).toISOString().split('T')[0];
+  const { data: recentBookings } = await sb.from('bookings').select('booking_date, total_price').in('field_id', myFieldIds).in('status',['confirmed','completed']).gte('booking_date', since);
+  clearTimeout(_lt);
+
+  const totalLast4Weeks = (recentBookings||[]).reduce((s,b)=>s+Number(b.total_price||0),0);
+  const weeklyAvg = totalLast4Weeks / 4;
+  const forecastMonth = Math.round(weeklyAvg * 4.345 * 100) / 100;
+  const hasEnoughData = (recentBookings||[]).length >= 4;
+
+  bodyEl.innerHTML = backBtn + `
+    ${hasEnoughData ? `
+    <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">توقّع إيرادات الشهر القادم</div>
+      <div style="font-size:30px;font-weight:900;color:var(--brand-deep)">${forecastMonth} <span style="font-size:14px">ريال</span></div>
+      <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">بناءً على متوسط آخر 4 أسابيع</div>
+    </div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">إجمالي آخر 4 أسابيع</span><b>${totalLast4Weeks} ر</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">متوسط أسبوعي</span><b>${Math.round(weeklyAvg*100)/100} ر</b></div>
+    </div>
+    <div class="legal-note">⚠️ هذا تقدير تقريبي مبني على نمط حجوزاتك الأخيرة فقط، وليس ضمانًا — قد يتأثر بموسمية الطلب أو تغييرات مفاجئة.</div>
+    ` : `<div style="text-align:center;padding:24px;color:var(--ink-dim)">تحتاج سجل حجوزات أكبر (4 حجوزات على الأقل بآخر شهر) عشان نقدر نطلع لك توقّع دقيق</div>`}
+  `;
+}
+
+// ── تصدير تقرير محاسبي (CSV) — الإيرادات والمصاريف لفترة محددة ──
+async function exportAccountingReport(){
+  showToast('جارٍ تجهيز التقرير...');
+  const { data: { user } } = await sb.auth.getUser();
+  const myFieldIds = await getMyFieldIds();
+  const [{ data: bookings }, { data: expenses }] = await Promise.all([
+    myFieldIds.length ? sb.from('bookings').select('booking_date, total_price, status, fields(name)').in('field_id', myFieldIds).in('status',['confirmed','completed']).order('booking_date') : Promise.resolve({data:[]}),
+    sb.from('facility_expenses').select('expense_date, category, amount, note, facilities(name)').eq('owner_id', user.id).order('expense_date')
+  ]);
+
+  let csv = '\uFEFF'; // BOM لدعم العربي بإكسل
+  csv += 'النوع,التاريخ,البيان,المبلغ (ريال)\n';
+  (bookings||[]).forEach(b => { csv += `إيراد,${b.booking_date},حجز - ${b.fields?.name||''},${b.total_price}\n`; });
+  (expenses||[]).forEach(e => { csv += `مصروف,${e.expense_date},${e.category} - ${e.facilities?.name||'عام'}${e.note?' ('+e.note+')':''},-${e.amount}\n`; });
+
+  const totalRevenue = (bookings||[]).reduce((s,b)=>s+Number(b.total_price||0),0);
+  const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+  csv += `\nالإجمالي,,إجمالي الإيرادات,${totalRevenue}\n`;
+  csv += `الإجمالي,,إجمالي المصاريف,-${totalExpenses}\n`;
+  csv += `الإجمالي,,صافي الربح,${Math.round((totalRevenue-totalExpenses)*100)/100}\n`;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-${riyadhTodayStr()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم تحميل التقرير ✓');
 }
 
 async function showOwnerCoupons(){
