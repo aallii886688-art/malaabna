@@ -423,25 +423,6 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   </div>
 </nav>
 
-<section class="hero">
-  <div class="hero-inner">
-    <div>
-      <div class="eyebrow"><span class="pulse"></span> بكل مدينة سعودية</div>
-      <h1>لعبتك القادمة<br>تبدأ من <span class="g">هنا</span></h1>
-      <p class="hero-sub">احجز وقتك، قسّم الحساب مع رفقتك تلقائيًا، أو انضم لمباراة ينقصها لاعبين — بدفعة إلكترونية واحدة وتأكيد فوري.</p>
-      <div class="hero-ctas">
-        <button class="btn btn-brand btn-lg neon-glow" onclick="goMod('stadiums')">🏟️ تصفّح الملاعب</button>
-        <button class="btn btn-ghost btn-lg" onclick="scrollToId('how')">كيف يعمل؟</button>
-      </div>
-      <div class="hero-stats">
-        <div class="hstat"><div class="n"><span id="heroStatBookings">—</span></div><div class="l">حجز هذا الشهر</div></div>
-        <div class="hstat"><div class="n"><span id="heroStatListings">—</span></div><div class="l">ملاعب وأكاديميات</div></div>
-        <div class="hstat"><div class="n"><span>100%</span></div><div class="l">دفع إلكتروني آمن</div></div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section class="section" id="modules">
   <div class="container">
     <div class="shead">
@@ -1605,13 +1586,15 @@ function initBackend() {
 
     // تحقق إذا كان المستخدم موظفاً مضافاً من صاحب ملعب (حتى لو حسابه الأساسي "لاعب")
     let isStaffMember = false;
+    let staffPermissions = [];
     try {
-      const { count } = await sb.from('facility_staff').select('*', { count:'exact', head:true }).eq('user_id', user.id);
+      const { data: staffRows, count } = await sb.from('facility_staff').select('permissions', { count:'exact' }).eq('user_id', user.id);
       isStaffMember = (count||0) > 0;
+      staffPermissions = [...new Set((staffRows||[]).flatMap(r => r.permissions||[]))];
     } catch(e){}
     if (isStaffMember && role === 'customer') role = 'staff';
 
-    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial, isStaffMember, avatarUrl: profile?.avatar_url || null };
+    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial, isStaffMember, staffPermissions, avatarUrl: profile?.avatar_url || null };
 
     let roleBadge = '';
     if (role === 'super_admin') roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
@@ -1903,20 +1886,12 @@ async function loadRealTournaments(){
 function openSidebar() {
   const u = window.currentUser;
   const isOwnerOrAdmin = u && (u.role === 'owner' || u.role === 'staff' || u.role === 'super_admin');
-  const navLinksHtml = `
-    <div class="side-links">
-      <a class="side-link" onclick="sideGo('nav-stadiums')"><span class="si">🏟️</span> الملاعب</a>
-      <a class="side-link" onclick="sideGo('nav-academies')"><span class="si">🎓</span> الأكاديميات</a>
-      <a class="side-link" onclick="sideGo('nav-tournaments')"><span class="si">🏆</span> البطولات</a>
-      <a class="side-link" onclick="sideGo('nav-openmatches')"><span class="si">🤝</span> أكمل الفريق</a>
-      <a class="side-link" onclick="sideGo('nav-map')"><span class="si">📍</span> الخريطة</a>
-    </div>
-    <div class="side-sep"></div>`;
 
   if (!u) {
-    document.getElementById('sidebarContent').innerHTML = navLinksHtml + `
+    document.getElementById('sidebarContent').innerHTML = `
       <div class="side-links">
         <a class="side-link" onclick="sideGo('do-login')"><span class="si">🔑</span> تسجيل الدخول</a>
+        <div class="side-sep"></div>
         <a class="side-link" onclick="sideGo('contact')"><span class="si">✉️</span> تواصل معنا</a>
         <a class="side-link" onclick="sideGo('about')"><span class="si">ℹ️</span> عن الموقع</a>
         <a class="side-link" onclick="sideGo('terms')"><span class="si">📄</span> الشروط والأحكام</a>
@@ -1926,7 +1901,7 @@ function openSidebar() {
     return;
   }
 
-  document.getElementById('sidebarContent').innerHTML = navLinksHtml + `
+  document.getElementById('sidebarContent').innerHTML = `
     <div class="side-head">
       ${avatarHtml(u.avatarUrl, u.initial, 'width:52px;height:52px;font-size:22px')}
       <div>
@@ -1958,11 +1933,6 @@ function closeSidebar(){ document.getElementById('sidebar').classList.remove('op
 async function sideGo(where) {
   closeSidebar();
   switch(where) {
-    case 'nav-stadiums':     goMod('stadiums'); break;
-    case 'nav-academies':    goMod('academies'); break;
-    case 'nav-tournaments':  goMod('tournaments'); break;
-    case 'nav-openmatches':  goMod('openmatches'); break;
-    case 'nav-map':          scrollToId('map'); break;
     case 'do-login':         openAuth('login'); break;
     case 'profile':       showProfile(); break;
     case 'bookings':      showMyBookings(); break;
@@ -2422,18 +2392,27 @@ async function openOwnerPanel(kind) {
 const OWNER_TABS = [
   {key:'overview', label:'🏠 نظرة عامة'},
   {key:'fields', label:'🏟️ ملاعبي'},
-  {key:'bookings', label:'📅 الحجوزات'},
-  {key:'academies', label:'🎓 الأكاديميات'},
-  {key:'tournaments', label:'🏆 البطولات'},
-  {key:'finance', label:'💰 المالية'},
+  {key:'bookings', label:'📅 الحجوزات', perm:'bookings'},
+  {key:'academies', label:'🎓 الأكاديميات', perm:'academies_tournaments'},
+  {key:'tournaments', label:'🏆 البطولات', perm:'academies_tournaments'},
+  {key:'finance', label:'💰 المالية', perm:'finance'},
   {key:'team', label:'👥 الفريق'},
 ];
+function visibleOwnerTabs(){
+  const u = window.currentUser;
+  const isTrueOwner = u && (u.role === 'owner' || u.role === 'super_admin');
+  if (isTrueOwner) return OWNER_TABS;
+  const perms = (u && u.staffPermissions) || [];
+  return OWNER_TABS.filter(t => t.key==='overview' || t.key==='fields' || (t.perm && perms.includes(t.perm)));
+}
 function ownerTabsHtml(active){
   return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
-    ${OWNER_TABS.map(t=>`<button onclick="ownerGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${t.label}</button>`).join('')}
+    ${visibleOwnerTabs().map(t=>`<button onclick="ownerGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${t.label}</button>`).join('')}
   </div>`;
 }
 async function ownerGoTab(tab){
+  // يمنع الموظف من فتح تبويب ما عنده صلاحية له (حتى لو حاول يستدعيه مباشرة)
+  if (!visibleOwnerTabs().some(t => t.key === tab)) { tab = 'overview'; showToast('ما عندك صلاحية لهذا القسم — تواصل مع صاحب الملعب','error'); }
   window._ownerActiveTab = tab;
   document.getElementById('ownerTitle').textContent = '🏟️ لوحة ملاعبي';
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
@@ -2676,7 +2655,7 @@ const _lt = delayedLoading(bodyEl.id);
   const { data: ownFac } = await sb.from('facilities').select('id, name').eq('owner_id', user.id);
   const facIds = (ownFac||[]).map(f=>f.id);
   const { data: staffRows } = facIds.length ? await sb
-    .from('facility_staff').select('id, facility_id, user_id, profiles(name, phone)').in('facility_id', facIds) : { data: [] };
+    .from('facility_staff').select('id, facility_id, user_id, permissions, profiles(name, phone)').in('facility_id', facIds) : { data: [] };
 
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('team')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
   const facOptions = (ownFac||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
@@ -2692,27 +2671,64 @@ const _lt = delayedLoading(bodyEl.id);
         ${facOptions}
       </select>
     </div>
+    <div class="field">
+      <label>صلاحياته <span style="color:var(--ink-dim);font-weight:400">(تعديل الملاعب وإدارة الموظفين تبقى لك أنت فقط دائمًا)</span></label>
+      ${staffPermissionCheckboxesHtml('new', ['bookings','schedule'])}
+    </div>
     <div class="legal-note">⚠️ الموظف لازم يكون سجّل حساب في المنصة برقم جواله هذا مسبقاً (أي نوع حساب).</div>
     <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="addStaffMember()">إضافة الموظف</button>
 
     <div class="dlabel" style="margin-top:22px">👥 الموظفون الحاليون</div>
     ${(staffRows&&staffRows.length)? staffRows.map(s=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
-        <div><b style="font-size:13px">${s.profiles?.name||'—'}</b><div style="font-size:11px;color:var(--ink-dim)">${s.profiles?.phone||''}</div></div>
-        <button class="btn btn-danger btn-sm" onclick="removeStaffMember(${s.id})">إزالة</button>
+      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div><b style="font-size:13px">${s.profiles?.name||'—'}</b><div style="font-size:11px;color:var(--ink-dim)">${s.profiles?.phone||''}</div></div>
+          <button class="btn btn-danger btn-sm" onclick="removeStaffMember(${s.id})">إزالة</button>
+        </div>
+        <div class="dlabel" style="font-size:11px;margin:6px 0">صلاحياته</div>
+        ${staffPermissionCheckboxesHtml(s.id, s.permissions||[])}
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="updateStaffPermissions(${s.id})">💾 حفظ الصلاحيات</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا يوجد موظفون بعد</div>'}
   `;
+}
+
+// ── قائمة صلاحيات قابلة للتقييد لكل موظف ──
+const STAFF_PERMISSIONS = [
+  { key:'bookings', label:'إدارة الحجوزات' },
+  { key:'schedule', label:'الجدولة (أوقات العمل والتسعير)' },
+  { key:'academies_tournaments', label:'الأكاديميات والبطولات' },
+  { key:'finance', label:'الاطّلاع على التحليلات والكوبونات' },
+];
+function staffPermissionCheckboxesHtml(rowKey, selected){
+  selected = selected || [];
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+    ${STAFF_PERMISSIONS.map(p=>`
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);cursor:pointer;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:7px 9px">
+        <input type="checkbox" class="staff-perm-${rowKey}" value="${p.key}" ${selected.includes(p.key)?'checked':''}>
+        <span>${p.label}</span>
+      </label>`).join('')}
+  </div>`;
+}
+function collectStaffPermissions(rowKey){
+  return Array.from(document.querySelectorAll(`.staff-perm-${rowKey}:checked`)).map(el=>el.value);
+}
+async function updateStaffPermissions(staffRowId){
+  const perms = collectStaffPermissions(staffRowId);
+  const { error } = await sb.from('facility_staff').update({ permissions: perms }).eq('id', staffRowId);
+  if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
+  showToast('تم حفظ الصلاحيات ✓');
 }
 
 async function addStaffMember(){
   const phone = document.getElementById('staff-phone').value.trim();
   const facilityId = document.getElementById('staff-facility').value;
+  const permissions = collectStaffPermissions('new');
   if (!phone || !facilityId) { showToast('أدخل رقم الجوال واختر المنشأة','error'); return; }
 
   const { data: prof, error: findErr } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
   if (findErr || !prof) { showToast('لا يوجد حساب مسجّل بهذا الرقم — اطلب منه إنشاء حساب أولاً','error'); return; }
 
-  const { error } = await sb.from('facility_staff').insert({ facility_id: facilityId, user_id: prof.id, added_by: (await sb.auth.getUser()).data.user.id });
+  const { error } = await sb.from('facility_staff').insert({ facility_id: facilityId, user_id: prof.id, added_by: (await sb.auth.getUser()).data.user.id, permissions });
   if (error) {
     if (error.code === '23505') { showToast('هذا الموظف مضاف مسبقاً لهذه المنشأة','error'); return; }
     showToast('تعذّرت الإضافة: ' + error.message,'error'); return;
