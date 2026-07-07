@@ -2625,7 +2625,8 @@ async function renderOwnerFinanceTab(){
   ownerInner().innerHTML = `
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerAnalytics()">📈 تحليلات الإيرادات</button>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">💰 التحويلات المستلمة</button>
-    <button class="btn btn-soft btn-block" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
+    <button class="btn btn-brand btn-block" onclick="showBankDetailsForm()">🏦 بيانات الحساب البنكي</button>
   `;
 }
 
@@ -3754,7 +3755,7 @@ async function adminView(kind) {
     const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
     const commissionPct = commSetting ? Number(commSetting.value) : 20;
 
-    const { data: owners } = await sb.from('profiles').select('id, name, phone').eq('role','owner');
+    const { data: owners } = await sb.from('profiles').select('id, name, phone, iban, bank_account_name').eq('role','owner');
     const rows = [];
     for (const o of (owners||[])) {
       const { data: facs } = await sb.from('facilities').select('id').eq('owner_id', o.id);
@@ -3780,6 +3781,14 @@ async function adminView(kind) {
           <div><b>${r.owner.name||'—'}</b><div style="font-size:11.5px;color:var(--ink-dim)">${r.owner.phone||''}</div></div>
           <span style="color:var(--flood);font-weight:900;font-size:16px">${r.netOwed} ر</span>
         </div>
+        ${r.owner.iban ? `
+          <div style="background:var(--bg-elev);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px">
+            <div style="color:var(--ink-dim)">اسم الحساب: <b style="color:var(--ink)">${r.owner.bank_account_name||'—'}</b></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
+              <span style="direction:ltr;font-family:'JetBrains Mono',monospace;font-weight:700">${r.owner.iban}</span>
+              <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:10.5px" onclick="navigator.clipboard.writeText('${r.owner.iban}');showToast('تم نسخ الآيبان ✓')">📋 نسخ</button>
+            </div>
+          </div>` : `<div class="legal-note" style="margin-bottom:8px">⚠️ صاحب الملعب لسه ما أضاف بياناته البنكية</div>`}
         <button class="btn btn-brand btn-block btn-sm" onclick="openPayoutReview('${r.owner.id}', ${r.gross}, ${r.commissionPct}, ${r.netOwed})">💸 نفّذ التحويل الآن</button>
       </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد مستحقات لتحويلها حاليًا ✅</div>');
   }
@@ -3836,6 +3845,34 @@ async function adminView(kind) {
 }
 
 // ── كوبونات صاحب الملعب (يديرها ويتحمّل تكلفتها) ──
+// ── بيانات الحساب البنكي (IBAN + اسم صاحب الحساب) — يستخدمها المالك لتحويل المستحقات فعليًا ──
+async function showBankDetailsForm(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🏦 بيانات الحساب البنكي';
+  const _lt = delayedLoading(bodyEl.id);
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: profile } = await sb.from('profiles').select('bank_account_name, iban').eq('id', user.id).single();
+  clearTimeout(_lt);
+  bodyEl.innerHTML = `
+    <div class="legal-note" style="margin-bottom:14px">🔒 هذي البيانات يشوفها فقط مالك المنصة عشان يحوّل مستحقاتك — ما تظهر لأي لاعب أو صاحب ملعب ثاني.</div>
+    <div class="field"><label>الاسم الكامل كما يظهر بالحساب البنكي *</label><input id="bank-name" type="text" value="${profile?.bank_account_name||''}" placeholder="مثال: محمد عبدالله السعيد"></div>
+    <div class="field"><label>رقم الآيبان (IBAN) *</label><input id="bank-iban" type="text" value="${profile?.iban||''}" placeholder="SA0000000000000000000000" style="direction:ltr;text-align:left;font-family:'JetBrains Mono',monospace"></div>
+    <div class="legal-note" style="margin-bottom:14px">الآيبان السعودي يبدأ بـ SA ويتكوّن من 24 خانة (حروف وأرقام) — تقدر تلقاه بتطبيق بنكك تحت "بيانات الحساب".</div>
+    <button class="btn btn-brand btn-block" onclick="saveBankDetails()">💾 حفظ البيانات</button>
+  `;
+}
+async function saveBankDetails(){
+  const name = document.getElementById('bank-name').value.trim();
+  const ibanRaw = document.getElementById('bank-iban').value.trim().toUpperCase().replace(/\s/g,'');
+  if (!name) { showToast('أدخل الاسم الكامل','error'); return; }
+  if (!/^SA[0-9A-Z]{22}$/.test(ibanRaw)) { showToast('رقم الآيبان غير صحيح — يجب أن يبدأ بـ SA ويتكوّن من 24 خانة بالضبط','error'); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('profiles').update({ bank_account_name: name, iban: ibanRaw }).eq('id', user.id);
+  if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
+  showToast('تم حفظ بياناتك البنكية ✓');
+  ownerGoTab('finance');
+}
+
 async function showOwnerCoupons(){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '🎟️ كوبوناتي';
@@ -3949,14 +3986,26 @@ async function saveCommissionRate(){
 
 // ── مراجعة وتنفيذ تحويل (مع رفع إيصال إلزامي كدليل) ──
 window._payoutReview = null;
-function openPayoutReview(ownerId, gross, commissionPct, netOwed){
+async function openPayoutReview(ownerId, gross, commissionPct, netOwed){
   const commissionAmount = Math.round((gross - netOwed) * 100) / 100;
   window._payoutReview = { ownerId, gross, commissionAmount, netOwed };
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '💸 مراجعة التحويل قبل التنفيذ';
   const today = riyadhTodayStr();
+  const { data: owner } = await sb.from('profiles').select('name, phone, iban, bank_account_name').eq('id', ownerId).single();
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="adminView('payouts')" style="margin-bottom:14px">→ رجوع</button>
+    ${owner?.iban ? `
+    <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">🏦 حوّل إلى</div>
+      <div style="font-weight:800;font-size:14px;margin-bottom:4px">${owner.bank_account_name||owner.name||'—'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="direction:ltr;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px">${owner.iban}</span>
+        <button class="btn btn-soft btn-sm" onclick="navigator.clipboard.writeText('${owner.iban}');showToast('تم نسخ الآيبان ✓')">📋 نسخ</button>
+      </div>
+    </div>
+    <div class="legal-note" style="margin-bottom:16px">🛡️ عند إدخال الآيبان ببنكك عبر سارie، البنك بيعرض لك اسم صاحب الحساب الحقيقي المسجّل — تأكد إنه يطابق "${owner.bank_account_name||owner.name||'الاسم أعلاه'}" قبل ما تأكد التحويل.</div>
+    ` : `<div class="legal-note" style="margin-bottom:16px">⚠️ صاحب الملعب لسه ما أضاف بياناته البنكية — تواصل معه قبل التحويل.</div>`}
     <div class="summary" style="margin-bottom:16px">
       <div class="srow"><span>إجمالي الحجوزات</span><span>${gross} ر</span></div>
       <div class="srow"><span>عمولة المنصة (${commissionPct}%)</span><span>- ${commissionAmount} ر</span></div>
