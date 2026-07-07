@@ -419,15 +419,14 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
       <div class="knob" id="knob">☀️</div>
     </div>
     <div id="navAuth" style="opacity:0;transition:opacity .15s ease"></div>
-    <button class="menu-btn" onclick="openSidebar()">☰</button>
   </div>
 </nav>
 
-<section class="section" id="modules">
+<section class="section" id="modules" style="padding-top:38px">
   <div class="container">
     <div class="shead">
       <div class="seyebrow">كل شيء في مكان واحد</div>
-      <h2 class="stitle">اختر خدمتك</h2>
+      <h2 class="stitle">اختر ملعبك</h2>
       <p class="ssub">ملاعب للحجز · أكاديميات للتدريب · بطولات للمنافسة — مع فلترة جغرافية دقيقة لمنطقتك.</p>
     </div>
 
@@ -1458,7 +1457,7 @@ async function submitJoinPayment(token, remaining){
 // هذا يمنع "ومضة" ظهور زر الدخول ثم اختفائه عند من هو مسجّل دخول أصلاً
 function renderLoggedOutNav(){
   const el = document.getElementById('navAuth');
-  el.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openAuth('login')">دخول</button>`;
+  el.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" style="font-size:18px;padding:6px 12px">☰</button>`;
   el.style.opacity = '1';
 }
 window.renderLoggedOutNav = renderLoggedOutNav;
