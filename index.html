@@ -2600,14 +2600,44 @@ async function renderOwnerTournamentsTab(){
 
 async function renderOwnerFinanceTab(){
   clearTimeout(window._tabLoadTimer);
+  const { myFieldIds } = await getMyFacilitiesData();
+  let monthRevenue = 0, monthExpenses = 0;
+  if (myFieldIds.length) {
+    const firstOfMonth = riyadhTodayStr().slice(0,7) + '-01';
+    const { data: { user } } = await sb.auth.getUser();
+    const [{ data: earnRows }, { data: expRows }] = await Promise.all([
+      sb.from('bookings').select('total_price').in('field_id', myFieldIds).in('status',['confirmed','completed']).gte('booking_date', firstOfMonth),
+      sb.from('facility_expenses').select('amount').eq('owner_id', user.id).gte('expense_date', firstOfMonth)
+    ]);
+    monthRevenue = (earnRows||[]).reduce((s,b)=>s+Number(b.total_price||0),0);
+    monthExpenses = (expRows||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+  }
+  const netThisMonth = Math.round((monthRevenue - monthExpenses) * 100) / 100;
+
   ownerInner().innerHTML = `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:8px">لمحة هذا الشهر</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+        <div><div style="font-size:17px;font-weight:900;color:var(--brand)">${monthRevenue}</div><div style="font-size:10.5px;color:var(--ink-dim)">إيرادات</div></div>
+        <div><div style="font-size:17px;font-weight:900;color:var(--danger)">${monthExpenses}</div><div style="font-size:10.5px;color:var(--ink-dim)">مصاريف</div></div>
+        <div><div style="font-size:17px;font-weight:900;color:var(--flood)">${netThisMonth}</div><div style="font-size:10.5px;color:var(--ink-dim)">صافي تقريبي</div></div>
+      </div>
+    </div>
+
+    <div class="dlabel">📊 التحليلات والتوقعات</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerAnalytics()">📈 تحليلات الإيرادات</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">💰 التحويلات المستلمة</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showFacilityExpenses()">💸 مصاريفي</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showRevenueForecast()">🔮 توقّع الإيرادات</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="exportAccountingReport()">📄 تصدير تقرير محاسبي</button>
-    <button class="btn btn-brand btn-block" onclick="showBankDetailsForm()">🏦 بيانات الحساب البنكي</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showRevenueForecast()">🔮 توقّع إيرادات الشهر القادم</button>
+
+    <div class="dlabel">💸 المصاريف والتقارير</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showFacilityExpenses()">📋 تسجيل ومتابعة المصاريف</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="exportAccountingReport()">📄 تصدير تقرير محاسبي (CSV)</button>
+
+    <div class="dlabel">💰 التحويلات والحساب البنكي</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">📥 سجل التحويلات المستلمة</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showBankDetailsForm()">🏦 بيانات الحساب البنكي</button>
+
+    <div class="dlabel">🎟️ العروض والخصومات</div>
+    <button class="btn btn-soft btn-block" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
   `;
 }
 
