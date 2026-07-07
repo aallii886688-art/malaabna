@@ -422,7 +422,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   </div>
 </nav>
 
-<section class="section" id="modules" style="padding-top:38px">
+<section class="section" id="modules" style="padding-top:90px">
   <div class="container">
     <div class="shead">
       <div class="seyebrow">كل شيء في مكان واحد</div>
@@ -815,10 +815,13 @@ function toggleTheme(){
   const next = cur==='dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   document.getElementById('knob').textContent = next==='dark' ? '🌙' : '☀️';
+  try { localStorage.setItem('malaabna-theme', next); } catch(e){}
 }
-if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
-  document.documentElement.setAttribute('data-theme','dark');
-}
+(function(){
+  let saved = null;
+  try { saved = localStorage.getItem('malaabna-theme'); } catch(e){}
+  document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+})();
 document.getElementById('knob').textContent =
   document.documentElement.getAttribute('data-theme')==='dark' ? '🌙' : '☀️';
 
