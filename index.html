@@ -3635,7 +3635,7 @@ async function adminView(kind) {
     clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + `
       <div class="legal-note">
-        ${activated ? '✅ البوابة تعمل فعليًا (تقنيات Taqnyat).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب في <b>taqnyat.sa</b>، ثم انشر Edge Function باسم <code>send-sms</code> (الكود جاهز في ملف edge-functions/send-sms.ts)، وأضف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions.'}
+        ${activated ? '✅ البوابة تعمل فعليًا (تقنيات Taqnyat).' : '⚠️ الدالة الخلفية منشورة وجاهزة — بس تحتاج تضيف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions (سجّل حساب أول في <b>taqnyat.sa</b>).'}
       </div>
       <div class="dlabel">🧪 اختبار الإرسال</div>
       <div class="field"><label>رقم الجوال</label><input id="sms-test-phone" type="tel" placeholder="05xxxxxxxx"></div>
@@ -3645,7 +3645,7 @@ async function adminView(kind) {
       <div class="dlabel" style="margin-top:18px">📋 آخر الرسائل المرسلة</div>
       ${(logs&&logs.length)? logs.map(l=>`
         <div style="padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
-          <div style="display:flex;justify-content:space-between"><b>${l.to_phone}</b><span class="badge ${l.status==='sent'?'available':'closed'}" style="font-size:10px">${l.status}</span></div>
+          <div style="display:flex;justify-content:space-between"><b>${l.phone}</b><span class="badge ${l.status==='sent'?'available':'closed'}" style="font-size:10px">${l.status}</span></div>
           <div style="color:var(--ink-dim);margin-top:3px">${l.message}</div>
         </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد رسائل بعد</div>'}
     `;
