@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://lsgakyydqomzntoebqep.supabase.co/functions/v1/dynamic-sitemap
+Sitemap: Sitemap: https://malaebnaa.com/sitemap.xml
