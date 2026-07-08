@@ -813,6 +813,13 @@ let selDate = 0, selSlot = null, playerCount = 6, payMethod = 'mada';
 let loggedIn = false, authMode = 'login';
 
 function takenSlots(id, d){ const seed=id*7+d*3; return timeSlots.filter((_,i)=>(seed+i*13)%5===0); }
+function takenSlotsWithPast(id, d){
+  const base = takenSlots(id, d);
+  if (d !== 0) return base;
+  const nowStr = riyadhNow().toISOString().slice(11,16);
+  const extra = timeSlots.filter(t => t <= nowStr && !base.includes(t));
+  return [...base, ...extra];
+}
 
 function calculateSmartSplit(totalPrice, playersCount){
   if(playersCount <= 0) return { error:"يجب تحديد عدد اللاعبين بشكل صحيح" };
@@ -992,7 +999,7 @@ async function openItem(type, id){
 // يجلب أوقات العمل الحقيقية + أيام الإغلاق + الحجوزات الفعلية لهذا الملعب واليوم المحدد
 // يرجع للوضع التجريبي تلقائياً إذا لم تكن قاعدة البيانات متصلة أو الملعب غير حقيقي (بيانات تجريبية)
 async function getFieldAvailability(fieldId, dateStr, weekday){
-  if (!window.sb) return { slots: timeSlots, taken: takenSlots(fieldId, selDate), dayClosed: false };
+  if (!window.sb) return { slots: timeSlots, taken: takenSlotsWithPast(fieldId, selDate), dayClosed: false };
   try {
     const [{ data: wh }, { data: bo }, { data: bookings }, { data: matches }, { data: sessions }, { data: priceOverride }] = await Promise.all([
       sb.from('field_working_hours').select('open_time,close_time,is_closed').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle(),
@@ -1014,10 +1021,15 @@ async function getFieldAvailability(fieldId, dateStr, weekday){
       const bs = (block.start_time||'').slice(0,5), be = (block.end_time||'').slice(0,5);
       timeSlots.forEach(t => { if (t >= bs && t < be && !taken.includes(t)) taken.push(t); });
     });
+    // لو اليوم المختار هو اليوم الحالي، أي وقت فات فعليًا يُعتبر غير متاح (ما تقدر تحجز وقت راح)
+    if (selDate === 0) {
+      const nowStr = riyadhNow().toISOString().slice(11,16);
+      timeSlots.forEach(t => { if (t <= nowStr && !taken.includes(t)) taken.push(t); });
+    }
     return { slots, taken, dayClosed, blackoutReason: bo?.reason || null, priceOverride: priceOverride?.price!=null ? Number(priceOverride.price) : null };
   } catch(e) {
     // الملعب تجريبي (id غير موجود فعلياً في قاعدة البيانات) → استخدم البيانات الوهمية
-    return { slots: timeSlots, taken: takenSlots(fieldId, selDate), dayClosed: false };
+    return { slots: timeSlots, taken: takenSlotsWithPast(fieldId, selDate), dayClosed: false };
   }
 }
 
