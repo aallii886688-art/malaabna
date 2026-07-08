@@ -1966,11 +1966,11 @@ function openSidebar() {
     </div>
     <div class="side-links">
       <a class="side-link" onclick="sideGo('profile')"><span class="si">👤</span> الملف الشخصي</a>
+      ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
+      <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
       <a class="side-link" onclick="sideGo('bookings')"><span class="si">🎽</span> ${isOwnerOrAdmin ? 'حجوزاتي كلاعب' : 'حجوزاتي'}</a>
       <a class="side-link" onclick="sideGo('registrations')"><span class="si">📋</span> تسجيلاتي</a>
       <a class="side-link" onclick="sideGo('lookup')"><span class="si">🔍</span> استعلام عن حجز</a>
-      <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
-      ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
       <div class="side-sep"></div>
       <a class="side-link" onclick="sideGo('share')"><span class="si">📤</span> مشاركة الموقع</a>
       <a class="side-link" onclick="sideGo('help')"><span class="si">🛟</span> مركز المساعدة</a>
