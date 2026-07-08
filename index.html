@@ -591,11 +591,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     </div>
     <div>
       <div class="fh">الدعم</div>
-      <div class="flinks"><a onclick="showHelpCenter()">مركز المساعدة</a><a onclick="openAuth('signup')">سجّل ملعبك</a></div>
-      <div style="margin-top:10px;font-size:12.5px;color:var(--ink-dim);line-height:1.9">
-        📞 <a onclick="showContact()" style="cursor:pointer">0559190868</a><br>
-        ✉️ <a onclick="showContact()" style="cursor:pointer">info@malaebnaa.com</a>
-      </div>
+      <div class="flinks"><a onclick="showHelpCenter()">مركز المساعدة</a><a onclick="showContact()">تواصل معنا</a><a onclick="openAuth('signup')">سجّل ملعبك</a></div>
     </div>
   </div>
   <div class="fbottom">
@@ -2427,12 +2423,15 @@ function showContact() {
       <div style="font-size:40px;margin-bottom:12px">📞</div>
       <div style="font-size:14px;color:var(--ink-soft);line-height:2">
         نسعد بتواصلك معنا<br>
-        <b>البريد:</b> info@malaebnaa.com<br>
-        <b>الجوال:</b> 0559190868
+        <b>البريد:</b> info@malaebnaa.com
       </div>
-      <div style="display:flex;gap:10px;margin-top:18px">
-        <button class="btn btn-brand" style="flex:1" onclick="window.location.href='mailto:info@malaebnaa.com'">راسلنا</button>
-        <button class="btn btn-ghost" style="flex:1" onclick="window.location.href='tel:0559190868'">اتصل بنا</button>
+      <div onclick="window.open('https://wa.me/966559190868','_blank')" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;cursor:pointer;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;direction:ltr">
+        <span style="font-size:18px">📱</span>
+        <span style="font-weight:700;font-size:14.5px;direction:ltr">+966 55 919 0868</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-brand" style="flex:1" onclick="window.location.href='mailto:info@malaebnaa.com'">راسلنا بالإيميل</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="window.open('https://wa.me/966559190868','_blank')">💬 واتساب</button>
       </div>
     </div>`);
 }
