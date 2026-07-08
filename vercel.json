@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/sitemap.xml", "destination": "https://lsgakyydqomzntoebqep.supabase.co/functions/v1/dynamic-sitemap" }
   ]
 }
