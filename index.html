@@ -3737,10 +3737,10 @@ async function adminView(kind) {
           <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
         </div>
         <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''}</div>
+        ${b.status==='pending' ? `<div style="font-size:11px;color:var(--ink-dim);margin-top:4px">⏳ بانتظار اكتمال الدفع الإلكتروني — يتأكد تلقائيًا فور الدفع</div>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
           <div style="display:flex;gap:6px">
-            ${b.status==='pending' ? `<button class="btn btn-soft btn-sm" onclick="adminSetBookingStatus(${b.id},'confirmed')">✅ تأكيد</button>` : ''}
             ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="adminCancelBooking(${b.id})">إلغاء</button>` : ''}
             ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="adminSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
           </div>
