@@ -912,12 +912,16 @@ async function loadOpenMatches(){
   grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--ink-dim)">جارٍ البحث عن مباريات مفتوحة...</div>';
 
   const todayStr = riyadhTodayStr();
+  const nowStr = riyadhNow().toISOString().slice(11,16);
   const { data, error } = await sb.from('bookings')
     .select('id, booking_date, start_time, end_time, total_price, amount_paid, players_count, share_link_token, fields(name, facilities(city, district))')
     .eq('is_open_for_join', true).eq('status', 'pending').gte('booking_date', todayStr)
     .order('booking_date');
 
-  if (error || !data || !data.length) {
+  // نستبعد يدويًا أي مباراة اليوم فات وقتها فعليًا (فلترة التاريخ فوق ما تكفي وحدها)
+  const filtered = (data||[]).filter(b => !(b.booking_date === todayStr && b.start_time.slice(0,5) <= nowStr));
+
+  if (error || !filtered.length) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:50px;color:var(--ink-dim)">
       <div style="font-size:34px;margin-bottom:8px">🤝</div>
       لا توجد مباريات مفتوحة للانضمام حاليًا<br><span style="font-size:12px">افتح حجزك للانضمام العام وقت الحجز عشان يظهر هنا</span>
@@ -925,7 +929,7 @@ async function loadOpenMatches(){
     return;
   }
 
-  grid.innerHTML = data.map(b=>{
+  grid.innerHTML = filtered.map(b=>{
     const share = b.players_count > 0 ? Math.round((b.total_price/b.players_count)*100)/100 : b.total_price;
     const remaining = Math.max(0, Number(b.total_price) - Number(b.amount_paid));
     return `<div class="card" onclick="openJoinPage('${b.share_link_token}')">
@@ -1940,8 +1944,12 @@ async function loadRealAcademies(){
 // ── تحميل البطولات الحقيقية (تحل محل القائمة التجريبية) ──
 async function loadRealTournaments(){
   if (!window.sb) return;
-  const { data, error } = await sb.from('tournaments').select('*, tournament_teams(status)').eq('status','open').eq('approved', true).eq('is_deleted', false);
-  if (error || !data || !data.length) { console.log('ℹ️ لا توجد بطولات حقيقية بعد — عرض بيانات تجريبية'); return; }
+  const todayStr = riyadhTodayStr();
+  const { data: raw, error } = await sb.from('tournaments').select('*, tournament_teams(status)').eq('status','open').eq('approved', true).eq('is_deleted', false);
+  if (error || !raw || !raw.length) { console.log('ℹ️ لا توجد بطولات حقيقية بعد — عرض بيانات تجريبية'); return; }
+  // نستبعد أي بطولة تاريخ بدايتها فات فعليًا (لو محدد تاريخ) — بطولات بدون تاريخ تبقى ظاهرة
+  const data = raw.filter(t => !t.start_date || t.start_date >= todayStr);
+  if (!data.length) { console.log('ℹ️ لا توجد بطولات مفتوحة حاليًا'); return; }
   DATA.tournaments = data.map(t => {
     const confirmed = (t.tournament_teams||[]).filter(x=>x.status==='confirmed').length;
     return {
