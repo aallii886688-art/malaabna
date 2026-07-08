@@ -1448,6 +1448,12 @@ setTimeout(()=>{ if (typeof initRealMap==='function') initRealMap(); }, 0);
   if (token) setTimeout(()=>openJoinPage(token), 300);
 })();
 
+// ── رابط التحقق من رمز QR للحجز ──
+(function checkVerifyLinkOnLoad(){
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('verify')) setTimeout(()=>checkVerifyLink(), 300);
+})();
+
 async function openJoinPage(token){
   if (!window.sb) { showToast('الرابط يحتاج اتصال قاعدة بيانات فعّال','error'); return; }
   document.getElementById('ownerTitle').textContent = '🤝 أكمل القطة';
@@ -2067,7 +2073,7 @@ async function showMyBookings() {
   const _lt = delayedLoading('ownerBody');
   const { data, error } = await sb
     .from('bookings')
-    .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, fields(name, facilities(name, city))')
+    .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, verify_token, checked_in, fields(name, facilities(name, city))')
     .order('booking_date', { ascending: false });
   clearTimeout(_lt);
   if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
@@ -2094,6 +2100,10 @@ async function showMyBookings() {
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
       <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</div>
+      ${b.status==='confirmed' ? `
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showBookingQR(${b.id},'${b.verify_token}')">
+          ${b.checked_in ? '✅ تم تسجيل الحضور' : '📱 عرض رمز الدخول'}
+        </button>` : ''}
       ${(!b.is_split && b.status==='pending' && b.payment_status==='unpaid') ? `
         <div style="font-size:11px;color:var(--danger);margin-top:5px">⚠️ لم يكتمل الدفع بعد — سيُلغى الحجز تلقائيًا عند بداية وقت التمرين إذا لم يتم الدفع</div>
       ` : ''}
@@ -2174,6 +2184,60 @@ async function showItemReviews(kind, itemId){
         <div style="font-size:10.5px;color:var(--ink-dim);margin-top:6px">${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</div>
       </div>`).join('')}
   `;
+}
+
+// ── عرض رمز QR لتأكيد الحضور — صاحب الملعب يصوّره بكاميرا جواله العادية ──
+function showBookingQR(bookingId, token){
+  const verifyUrl = `https://malaebnaa.com/?verify=${token}`;
+  const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(verifyUrl)}`;
+  openInfoModal('📱 رمز الدخول', `
+    <div style="text-align:center;padding:10px">
+      <img src="${qrImg}" alt="رمز QR للحجز" style="width:220px;height:220px;border-radius:12px;border:1px solid var(--line);margin-bottom:14px">
+      <div style="font-size:13px;color:var(--ink-soft)">وريه لصاحب الملعب عند الوصول — يصوّره بكاميرا جواله العادية ويتأكد من حجزك فورًا.</div>
+    </div>`);
+}
+
+// ── صفحة التحقق من رمز QR (تفتح تلقائيًا لو الرابط فيه ?verify=) ──
+async function checkVerifyLink(){
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('verify');
+  if (!token) return;
+
+  openInfoModal('🔍 التحقق من الحجز', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحقق...</div>');
+  const { data, error } = await sb.rpc('get_booking_by_token', { p_token: token });
+  const b = data && data[0];
+  if (error || !b) {
+    document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">رمز غير صحيح أو الحجز غير موجود</div>';
+    return;
+  }
+
+  const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+
+  document.getElementById('ownerBody').innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:34px">${b.checked_in ? '✅' : '🎫'}</div>
+      <div style="font-size:18px;font-weight:900;margin-top:6px">${escapeHtml(b.field_name)}</div>
+      <div style="font-size:12.5px;color:var(--ink-dim)">${escapeHtml(b.facility_name)}</div>
+    </div>
+    <div class="summary" style="margin-bottom:16px">
+      <div class="srow"><span>اللاعب</span><span>${escapeHtml(b.player_name)}</span></div>
+      <div class="srow"><span>التاريخ</span><span>${b.booking_date}</span></div>
+      <div class="srow"><span>الوقت</span><span>${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</span></div>
+      <div class="srow"><span>عدد اللاعبين</span><span>${b.players_count}</span></div>
+      <div class="srow tot"><span>حالة الحجز</span><span class="amt">${statusMap[b.status]||b.status}</span></div>
+    </div>
+    ${b.checked_in
+      ? `<div class="legal-note">✅ تم تسجيل حضور هذا الحجز مسبقًا بتاريخ ${new Date(b.checked_in_at).toLocaleString('ar-SA-u-nu-latn')}</div>`
+      : (b.status==='confirmed'
+        ? `<button class="btn btn-brand btn-block" onclick="confirmCheckin(${b.id})">✅ تأكيد الحضور الآن</button>`
+        : `<div class="legal-note">⚠️ هذا الحجز مو مؤكد بعد — ما يمكن تسجيل الحضور له</div>`)}
+  `;
+}
+async function confirmCheckin(bookingId){
+  const { data, error } = await sb.from('bookings').update({ checked_in: true, checked_in_at: new Date().toISOString() }).eq('id', bookingId).select();
+  if (error || !data || !data.length) { showToast('ما عندك صلاحية تأكيد هذا الحجز — بس صاحب الملعب أو موظفه يقدر','error'); return; }
+  showToast('تم تأكيد الحضور ✓');
+  checkVerifyLink();
 }
 
 async function submitReview(bookingId, fieldId) {
