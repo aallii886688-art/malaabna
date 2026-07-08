@@ -4021,8 +4021,10 @@ async function adminView(kind) {
 
   else if (kind === 'commission') {
     titleEl.textContent = '⚙️ نسبة عمولة المنصة';
-    const { data: setting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
-    const current = setting ? setting.value : '20';
+    const { data: settings } = await sb.from('platform_settings').select('key, value').in('key', ['commission_percent','gateway_fee_percent','gateway_fee_fixed']);
+    const current = settings?.find(s=>s.key==='commission_percent')?.value ?? '20';
+    const feePct = settings?.find(s=>s.key==='gateway_fee_percent')?.value ?? '2';
+    const feeFixed = settings?.find(s=>s.key==='gateway_fee_fixed')?.value ?? '1';
     clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + `
       <div style="text-align:center;background:var(--bg-soft);border-radius:12px;padding:20px;margin-bottom:16px">
@@ -4032,6 +4034,14 @@ async function adminView(kind) {
       <div class="field"><label>النسبة الجديدة (%)</label><input id="commission-input" type="number" min="0" max="100" value="${current}"></div>
       <div class="legal-note">⚠️ هذي النسبة تُخصم من كل حجز جديد يُدفع من الآن فصاعدًا. الحجوزات السابقة لا تتأثر.</div>
       <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="saveCommissionRate()">💾 حفظ النسبة</button>
+
+      <div class="dlabel" style="margin-top:24px">💳 رسوم بوابة الدفع (غير قابلة للاسترجاع)</div>
+      <div class="legal-note" style="margin-bottom:12px">تُخصم هذي الرسوم تلقائيًا من أي مبلغ يُسترجع للاعب — عدّلها لما توصلك نسبتك الفعلية من جيديا.</div>
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1"><label>النسبة (%)</label><input id="fee-pct-input" type="number" min="0" max="100" step="0.01" value="${feePct}"></div>
+        <div class="field" style="flex:1"><label>الرسم الثابت (ريال)</label><input id="fee-fixed-input" type="number" min="0" step="0.01" value="${feeFixed}"></div>
+      </div>
+      <button class="btn btn-soft btn-block" onclick="saveGatewayFeeSettings()">💾 حفظ رسوم البوابة</button>
     `;
   }
 
@@ -4404,6 +4414,19 @@ async function saveCommissionRate(){
   const { error } = await sb.from('platform_settings').update({ value: String(val) }).eq('key','commission_percent');
   if (error) { showToast('تعذّر الحفظ: '+error.message,'error'); return; }
   showToast('تم تحديث نسبة العمولة ✓');
+  adminView('commission');
+}
+async function saveGatewayFeeSettings(){
+  const pct = parseFloat(document.getElementById('fee-pct-input').value);
+  const fixed = parseFloat(document.getElementById('fee-fixed-input').value);
+  if (isNaN(pct) || pct < 0 || pct > 100) { showToast('أدخل نسبة صحيحة بين 0 و100','error'); return; }
+  if (isNaN(fixed) || fixed < 0) { showToast('أدخل رسم ثابت صحيح','error'); return; }
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    sb.from('platform_settings').update({ value: String(pct) }).eq('key','gateway_fee_percent'),
+    sb.from('platform_settings').update({ value: String(fixed) }).eq('key','gateway_fee_fixed'),
+  ]);
+  if (e1 || e2) { showToast('تعذّر الحفظ','error'); return; }
+  showToast('تم تحديث رسوم البوابة ✓');
   adminView('commission');
 }
 
