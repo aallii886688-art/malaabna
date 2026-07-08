@@ -591,10 +591,10 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     </div>
     <div>
       <div class="fh">الدعم</div>
-      <div class="flinks"><a onclick="showContact()">تواصل معنا</a><a onclick="showContact()">مركز المساعدة</a><a onclick="openAuth('signup')">سجّل ملعبك</a></div>
+      <div class="flinks"><a onclick="showHelpCenter()">مركز المساعدة</a><a onclick="openAuth('signup')">سجّل ملعبك</a></div>
       <div style="margin-top:10px;font-size:12.5px;color:var(--ink-dim);line-height:1.9">
-        📞 0559190868<br>
-        ✉️ info@malaebnaa.com
+        📞 <a onclick="showContact()" style="cursor:pointer">0559190868</a><br>
+        ✉️ <a onclick="showContact()" style="cursor:pointer">info@malaebnaa.com</a>
       </div>
     </div>
   </div>
@@ -1950,6 +1950,7 @@ function openSidebar() {
       <div class="side-links">
         <a class="side-link" onclick="sideGo('do-login')"><span class="si">🔑</span> تسجيل الدخول</a>
         <div class="side-sep"></div>
+        <a class="side-link" onclick="sideGo('help')"><span class="si">🛟</span> مركز المساعدة</a>
         <a class="side-link" onclick="sideGo('contact')"><span class="si">✉️</span> تواصل معنا</a>
         <a class="side-link" onclick="sideGo('about')"><span class="si">ℹ️</span> عن الموقع</a>
         <a class="side-link" onclick="sideGo('terms')"><span class="si">📄</span> الشروط والأحكام</a>
@@ -1976,6 +1977,7 @@ function openSidebar() {
       ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
       <div class="side-sep"></div>
       <a class="side-link" onclick="sideGo('share')"><span class="si">📤</span> مشاركة الموقع</a>
+      <a class="side-link" onclick="sideGo('help')"><span class="si">🛟</span> مركز المساعدة</a>
       <a class="side-link" onclick="sideGo('contact')"><span class="si">✉️</span> تواصل معنا</a>
       <a class="side-link" onclick="sideGo('about')"><span class="si">ℹ️</span> عن الموقع</a>
       <a class="side-link" onclick="sideGo('terms')"><span class="si">📄</span> الشروط والأحكام</a>
@@ -1999,6 +2001,7 @@ async function sideGo(where) {
     case 'notifications': showNotifications(); break;
     case 'panel':         openOwnerPanel(window.currentUser.role==='super_admin'?'admin':'owner'); break;
     case 'share':         shareSite(); break;
+    case 'help':           showHelpCenter(); break;
     case 'contact':       showContact(); break;
     case 'about':         showAbout(); break;
     case 'terms':         openLegal('terms'); break;
@@ -2398,6 +2401,26 @@ function shareSite() {
   }
 }
 
+function showHelpCenter() {
+  const faqs = [
+    { q: 'كيف أحجز ملعب؟', a: 'اختر المدينة والملعب اللي يناسبك، حدد اليوم والوقت المتاح، وأكمل الدفع الإلكتروني — يتأكد حجزك فورًا بعد الدفع.' },
+    { q: 'كيف ألغي حجزي؟', a: 'من "حجوزاتي" بالقائمة الجانبية، اختر الحجز واضغط إلغاء. نسبة الاسترجاع تعتمد على وقت الإلغاء بالنسبة لموعد الحجز (راجع سياسة الاسترجاع بالشروط والأحكام).' },
+    { q: 'كيف تشتغل "القطة"؟', a: 'وقت الحجز، اختر وضع "قسّم مع فريقك"، وحدد عدد اللاعبين — تنشئ لك المنصة رابط مشاركة كل واحد يدفع نصيبه منه مباشرة.' },
+    { q: 'وش "أكمل الفريق"؟', a: 'حجوزات فتحها لاعبون ثانيون وناقصهم عدد، تقدر تتصفحها وتنضم لأي وحدة تناسب وقتك.' },
+    { q: 'كيف أسجّل ملعبي بالمنصة؟', a: 'اضغط "سجّل ملعبك" بالفوتر أو أنشئ حساب "صاحب ملعب"، وأضف بيانات منشأتك — تحتاج موافقة إدارية قبل ما تظهر للعامة.' },
+    { q: 'كيف أسجّل بأكاديمية أو بطولة؟', a: 'من الصفحة الرئيسية، اختر تبويب الأكاديميات أو البطولات، وسجّل مباشرة مع الدفع الإلكتروني.' },
+  ];
+  openInfoModal('🛟 مركز المساعدة', `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${faqs.map(f => `
+        <details style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+          <summary style="cursor:pointer;font-weight:700;font-size:13.5px">${f.q}</summary>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.8">${f.a}</div>
+        </details>`).join('')}
+    </div>
+    <div class="legal-note" style="margin-top:14px">ما لقيت إجابتك؟ <a onclick="showContact()" style="cursor:pointer;color:var(--brand);font-weight:700">تواصل معنا مباشرة</a>.</div>
+  `);
+}
 function showContact() {
   openInfoModal('✉️ تواصل معنا', `
     <div style="text-align:center;padding:10px">
