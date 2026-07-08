@@ -449,9 +449,9 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   </div>
   <div class="nav-right">
     <div class="theme-toggle-3" id="themeToggle3">
-      <button class="tt-seg" data-mode="light" onclick="setThemeMode('light')" title="فاتح">☀️</button>
-      <button class="tt-seg" data-mode="auto" onclick="setThemeMode('auto')" title="تلقائي (حسب جهازك)">A</button>
-      <button class="tt-seg" data-mode="dark" onclick="setThemeMode('dark')" title="داكن">🌙</button>
+      <button class="tt-seg" data-mode="light" onclick="setThemeMode('light')" title="فاتح" aria-label="الوضع الفاتح">☀️</button>
+      <button class="tt-seg" data-mode="auto" onclick="setThemeMode('auto')" title="تلقائي (حسب جهازك)" aria-label="الوضع التلقائي حسب الجهاز">A</button>
+      <button class="tt-seg" data-mode="dark" onclick="setThemeMode('dark')" title="داكن" aria-label="الوضع الداكن">🌙</button>
     </div>
     <div id="navAuth" style="opacity:0;transition:opacity .15s ease"></div>
   </div>
@@ -607,7 +607,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 <div class="ov" id="ov" onclick="closeAll()"></div>
 
 <div class="drawer" id="drawer">
-  <div class="dhead"><div class="t" id="drawerTitle">تفاصيل</div><div class="dclose" onclick="closeAll()">✕</div></div>
+  <div class="dhead"><div class="t" id="drawerTitle">تفاصيل</div><div class="dclose" role="button" aria-label="إغلاق" onclick="closeAll()">✕</div></div>
   <div class="dbody" id="drawerBody"></div>
 </div>
 
@@ -623,7 +623,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 
 <div class="modal" id="mAuth">
   <div class="mcard" style="text-align:right">
-    <div class="dclose" style="margin-bottom:12px;margin-right:auto" onclick="closeAll()">✕</div>
+    <div class="dclose" role="button" aria-label="إغلاق" style="margin-bottom:12px;margin-right:auto" onclick="closeAll()">✕</div>
     <div class="tabs"><div class="tab active" id="tabLogin" onclick="authTab('login')">دخول</div><div class="tab" id="tabSignup" onclick="authTab('signup')">حساب جديد</div></div>
     <div id="fieldName" style="display:none"><div class="field"><label>الاسم الكامل</label><input id="au-name" type="text" placeholder="أحمد محمد"></div></div>
     <div id="fieldRole" style="display:none">
@@ -651,7 +651,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 
 <div class="modal" id="mLegal">
   <div class="mcard" style="width:560px">
-    <div class="dclose" style="margin-bottom:8px;margin-right:auto" onclick="closeAll()">✕</div>
+    <div class="dclose" role="button" aria-label="إغلاق" style="margin-bottom:8px;margin-right:auto" onclick="closeAll()">✕</div>
     <h3 id="legalTitle" style="text-align:right">الشروط والأحكام</h3>
     <div class="legal-body" id="legalBody"></div>
     <button class="btn btn-soft btn-block" style="margin-top:18px" onclick="closeAll()">إغلاق</button>
@@ -662,7 +662,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   <div class="mcard" style="width:560px;max-height:88vh;overflow-y:auto">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
       <h3 id="ownerTitle" style="flex:1;text-align:right;margin:0">لوحة التحكم</h3>
-      <div class="dclose" onclick="closeAll()">✕</div>
+      <div class="dclose" role="button" aria-label="إغلاق" onclick="closeAll()">✕</div>
     </div>
     <div id="ownerBody"></div>
   </div>
@@ -671,7 +671,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
 <div class="sidebar" id="sidebar">
   <div class="side-top">
     <span style="font-weight:800;font-size:15px">القائمة</span>
-    <div class="dclose" onclick="closeSidebar()">✕</div>
+    <div class="dclose" role="button" aria-label="إغلاق" onclick="closeSidebar()">✕</div>
   </div>
   <div id="sidebarContent"></div>
 </div>
@@ -1516,7 +1516,7 @@ async function submitJoinPayment(token, remaining){
 // هذا يمنع "ومضة" ظهور زر الدخول ثم اختفائه عند من هو مسجّل دخول أصلاً
 function renderLoggedOutNav(){
   const el = document.getElementById('navAuth');
-  el.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" style="font-size:18px;padding:6px 12px">☰</button>`;
+  el.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" aria-label="فتح القائمة" style="font-size:18px;padding:6px 12px">☰</button>`;
   el.style.opacity = '1';
 }
 window.renderLoggedOutNav = renderLoggedOutNav;
@@ -1659,7 +1659,7 @@ function initBackend() {
     else if (role === 'owner' || role === 'staff') roleBadge = '<span style="font-size:10px;color:var(--brand);font-weight:700">🏟️ صاحب ملعب</span>';
 
     document.getElementById('navAuth').innerHTML = `
-      <div class="nav-user" onclick="openSidebar()" style="cursor:pointer;position:relative">
+      <div class="nav-user" onclick="openSidebar()" role="button" tabindex="0" aria-label="فتح القائمة الجانبية" style="cursor:pointer;position:relative">
         <div style="position:relative">${avatarHtml(profile?.avatar_url, initial, 'position:relative')}<span id="navNotifDot" style="display:none;position:absolute;top:-2px;left:-2px;width:9px;height:9px;border-radius:50%;background:var(--danger);border:1.5px solid var(--bg);z-index:2"></span></div>
         <div style="display:flex;flex-direction:column;line-height:1.1">
           <span>${name.split(' ')[0]}</span>${roleBadge}
@@ -2128,7 +2128,7 @@ function openRateBooking(bookingId, fieldId) {
   window._rateStars = 5;
   openInfoModal('⭐ قيّم تجربتك', `
     <div style="text-align:center;margin-bottom:16px">
-      <div id="starPicker" style="font-size:32px;letter-spacing:6px;cursor:pointer">★★★★★</div>
+      <div id="starPicker" role="radiogroup" aria-label="تقييم من 5 نجوم" style="font-size:32px;letter-spacing:6px;cursor:pointer">★★★★★</div>
       <div style="font-size:12px;color:var(--ink-dim);margin-top:6px">اضغط على النجوم لاختيار تقييمك</div>
     </div>
     <div class="field"><label>تعليقك (اختياري)</label><input id="rv-comment" type="text" placeholder="كيف كانت تجربتك في الملعب؟"></div>
@@ -2193,7 +2193,7 @@ function openRateRegistration(kind, refId, targetId){
   window._rateStars = 5;
   openInfoModal('⭐ قيّم تجربتك', `
     <div style="text-align:center;margin-bottom:16px">
-      <div id="starPicker" style="font-size:32px;letter-spacing:6px;cursor:pointer">★★★★★</div>
+      <div id="starPicker" role="radiogroup" aria-label="تقييم من 5 نجوم" style="font-size:32px;letter-spacing:6px;cursor:pointer">★★★★★</div>
       <div style="font-size:12px;color:var(--ink-dim);margin-top:6px">اضغط على النجوم لاختيار تقييمك</div>
     </div>
     <div class="field"><label>تعليقك (اختياري)</label><input id="rv-comment" type="text" placeholder="كيف كانت تجربتك؟"></div>
