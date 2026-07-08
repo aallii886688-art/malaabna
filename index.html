@@ -26,11 +26,17 @@
 }
 </script>
 <script>
-  // الوضع الليلي افتراضي دائمًا (إلا لو المستخدم بدّل يدويًا من قبل) — يُطبَّق هنا فورًا قبل أي تصميم عشان ما يصير أي وميض
+  // الوضع الليلي افتراضي دائمًا (إلا لو المستخدم اختار غيره) — يُطبَّق هنا فورًا قبل أي تصميم عشان ما يصير أي وميض
   (function(){
-    let saved = null;
-    try { saved = localStorage.getItem('malaabna-theme'); } catch(e){}
-    document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+    let mode = null;
+    try { mode = localStorage.getItem('malaabna-theme-mode'); } catch(e){}
+    if (!mode) mode = 'dark';
+    let effective = mode;
+    if (mode === 'auto') {
+      effective = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', effective);
+    window._themeMode = mode;
   })();
 </script>
 <style>
@@ -148,16 +154,15 @@ html[data-theme="dark"] .brand-logo{box-shadow:0 0 18px rgba(57,255,20,.4)}
 .nav-links a:hover{color:var(--brand)}
 .nav-right{margin-right:auto;display:flex;align-items:center;gap:12px}
 
-.theme-toggle{
-  width:54px;height:30px;border-radius:30px;background:var(--bg-soft);
-  border:1px solid var(--line);position:relative;cursor:pointer;transition:all .3s;flex-shrink:0;
+.theme-toggle-3{
+  display:flex;align-items:center;gap:2px;background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:30px;padding:3px;flex-shrink:0;
 }
-.theme-toggle .knob{
-  position:absolute;top:2px;right:2px;width:24px;height:24px;border-radius:50%;
-  background:var(--flood);display:grid;place-items:center;font-size:13px;
-  transition:transform .35s cubic-bezier(.4,1.4,.5,1);
+.tt-seg{
+  width:28px;height:24px;border-radius:20px;border:none;background:transparent;color:var(--ink-dim);
+  font-size:13px;display:grid;place-items:center;cursor:pointer;transition:all .2s;font-family:inherit;font-weight:700;
 }
-html[data-theme="dark"] .theme-toggle .knob{transform:translateX(-24px);background:var(--brand)}
+.tt-seg.active{background:var(--bg-elev);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .nav-user{display:flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--line);border-radius:30px;font-size:13px;font-weight:600}
 .nav-user .av{width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700}
 
@@ -443,8 +448,10 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
     <a onclick="scrollToId('map')">الخريطة</a>
   </div>
   <div class="nav-right">
-    <div class="theme-toggle" onclick="toggleTheme()" title="الوضع الليلي / النهاري">
-      <div class="knob" id="knob">☀️</div>
+    <div class="theme-toggle-3" id="themeToggle3">
+      <button class="tt-seg" data-mode="light" onclick="setThemeMode('light')" title="فاتح">☀️</button>
+      <button class="tt-seg" data-mode="auto" onclick="setThemeMode('auto')" title="تلقائي (حسب جهازك)">A</button>
+      <button class="tt-seg" data-mode="dark" onclick="setThemeMode('dark')" title="داكن">🌙</button>
     </div>
     <div id="navAuth" style="opacity:0;transition:opacity .15s ease"></div>
   </div>
@@ -587,7 +594,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
       <div class="flinks"><a onclick="showContact()">تواصل معنا</a><a onclick="showContact()">مركز المساعدة</a><a onclick="openAuth('signup')">سجّل ملعبك</a></div>
       <div style="margin-top:10px;font-size:12.5px;color:var(--ink-dim);line-height:1.9">
         📞 0559190868<br>
-        ✉️ HFALGY2@GMAIL.COM
+        ✉️ info@malaebnaa.com
       </div>
     </div>
   </div>
@@ -852,15 +859,27 @@ function updateCouponUI(basePrice){
   }
 }
 
-function toggleTheme(){
-  const cur = document.documentElement.getAttribute('data-theme');
-  const next = cur==='dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  document.getElementById('knob').textContent = next==='dark' ? '🌙' : '☀️';
-  try { localStorage.setItem('malaabna-theme', next); } catch(e){}
+function applyThemeMode(mode){
+  let effective = mode;
+  if (mode === 'auto') {
+    effective = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', effective);
+  document.querySelectorAll('.tt-seg').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
 }
-document.getElementById('knob').textContent =
-  document.documentElement.getAttribute('data-theme')==='dark' ? '🌙' : '☀️';
+function setThemeMode(mode){
+  window._themeMode = mode;
+  try { localStorage.setItem('malaabna-theme-mode', mode); } catch(e){}
+  applyThemeMode(mode);
+}
+applyThemeMode(window._themeMode || 'dark');
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    if (window._themeMode === 'auto') applyThemeMode('auto');
+  });
+}
 
 function switchMod(mod, el){
   currentMod = mod;
@@ -2385,11 +2404,11 @@ function showContact() {
       <div style="font-size:40px;margin-bottom:12px">📞</div>
       <div style="font-size:14px;color:var(--ink-soft);line-height:2">
         نسعد بتواصلك معنا<br>
-        <b>البريد:</b> HFALGY2@GMAIL.COM<br>
+        <b>البريد:</b> info@malaebnaa.com<br>
         <b>الجوال:</b> 0559190868
       </div>
       <div style="display:flex;gap:10px;margin-top:18px">
-        <button class="btn btn-brand" style="flex:1" onclick="window.location.href='mailto:HFALGY2@GMAIL.COM'">راسلنا</button>
+        <button class="btn btn-brand" style="flex:1" onclick="window.location.href='mailto:info@malaebnaa.com'">راسلنا</button>
         <button class="btn btn-ghost" style="flex:1" onclick="window.location.href='tel:0559190868'">اتصل بنا</button>
       </div>
     </div>`);
