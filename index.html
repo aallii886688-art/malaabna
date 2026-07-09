@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2SKNRK2FYH"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-2SKNRK2FYH');
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2339ff14'/%3E%3Cstop offset='100%25' stop-color='%231f9d57'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='112' fill='url(%23g)'/%3E%3Cline x1='256' y1='80' x2='256' y2='432' stroke='%230a1408' stroke-width='26'/%3E%3Ccircle cx='256' cy='256' r='108' fill='none' stroke='%230a1408' stroke-width='26'/%3E%3Ccircle cx='256' cy='256' r='26' fill='%230a1408'/%3E%3C/svg%3E">
@@ -2001,6 +2009,7 @@ function openSidebar() {
       <a class="side-link" onclick="sideGo('profile')"><span class="si">👤</span> الملف الشخصي</a>
       ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('seo')"><span class="si">📈</span> صحة السيو</a>` : ''}
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('analytics')"><span class="si">📊</span> إحصائيات الموقع</a>` : ''}
       <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
       <a class="side-link" onclick="sideGo('bookings')"><span class="si">🎽</span> ${isOwnerOrAdmin ? 'حجوزاتي كلاعب' : 'حجوزاتي'}</a>
       <a class="side-link" onclick="sideGo('registrations')"><span class="si">📋</span> تسجيلاتي</a>
@@ -2033,6 +2042,7 @@ async function sideGo(where) {
     case 'share':         shareSite(); break;
     case 'help':           showHelpCenter(); break;
     case 'seo':             showSeoHealth(); break;
+    case 'analytics':       showSiteAnalytics(); break;
     case 'contact':       showContact(); break;
     case 'about':         showAbout(); break;
     case 'terms':         openLegal('terms'); break;
@@ -3804,6 +3814,27 @@ async function renderAdminFinanceTab(){
     <div class="dlabel">💸 التحويلات</div>
     <button class="btn btn-brand btn-block" onclick="adminView('payouts')">تنفيذ التحويلات المستحقة لأصحاب الملاعب</button>
   `;
+}
+
+function showSiteAnalytics(){
+  openInfoModal('📊 إحصائيات الموقع', `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:24px">✅</span>
+      <div>
+        <div style="font-weight:800;font-size:13.5px">Google Analytics مفعّل</div>
+        <div style="font-size:11.5px;color:var(--ink-dim)">يجمع بيانات الزوار تلقائيًا منذ التركيب</div>
+      </div>
+    </div>
+    <div class="dlabel">📈 وش تقدر تشوفه</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px">
+      ${['عدد الزوار اليومي والشهري','من أي مدينة/دولة يجونك','من أي جهاز (جوال/حاسوب)','أكثر الأقسام زيارة بالموقع','مصدر الزيارة (بحث، رابط مباشر، سوشيال ميديا)']
+        .map(item=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--bg-soft);border-radius:8px;padding:8px 12px"><span style="color:var(--brand)">📌</span> ${item}</div>`).join('')}
+    </div>
+    <a href="https://analytics.google.com" target="_blank" style="text-decoration:none">
+      <button class="btn btn-brand btn-block">فتح لوحة Google Analytics الكاملة ↗</button>
+    </a>
+    <div class="legal-note" style="margin-top:12px">📌 البيانات التفصيلية الحيّة تُعرض حاليًا بموقع Google Analytics نفسه (بحسابك الشخصي) — عرضها مباشرة داخل هذي اللوحة يحتاج ربط تقني إضافي (نفس خطوات Google Cloud اللي ناقشناها لصحة السيو).</div>
+  `);
 }
 
 async function showSeoHealth(){
