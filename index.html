@@ -2839,7 +2839,7 @@ async function renderOwnerBookingsTab(){
   const myFieldIds = await getMyFieldIds();
   if (!myFieldIds.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
   const { data, error } = await sb.from('bookings')
-    .select('id, booking_date, start_time, end_time, status, total_price, players_count, profiles(name, phone), fields(name)')
+    .select('id, booking_date, start_time, end_time, status, total_price, players_count, guest_name, guest_phone, profiles(name, phone), fields(name)')
     .in('field_id', myFieldIds).order('booking_date', { ascending: false });
   if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`; return; }
@@ -2849,7 +2849,7 @@ async function renderOwnerBookingsTab(){
   ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>` + data.map(b => `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name)||''} · ${escapeHtml(b.profiles?.phone)||''}</div></div>
+        <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
         <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
       </div>
       <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''} - ${b.end_time?formatTime12(b.end_time):''} · 👥 ${b.players_count||''} لاعب</div>
@@ -2873,8 +2873,9 @@ async function showManualBookingForm(){
   const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('bookings')" style="margin-bottom:14px">→ رجوع</button>`;
   bodyEl.innerHTML = backBtn + `
     <div class="legal-note" style="margin-bottom:14px">🔒 هذا الحجز يقفل الخانة فورًا لمنع التعارض مع حجوزات المنصة، لكن **لازم يكتمل بدفع إلكتروني حقيقي** — ما فيه خيار "استلمت الفلوس نقدًا" لضمان احتساب عمولة المنصة بشكل صحيح على كل حجز.</div>
+    <div class="field"><label>اسم اللاعب *</label><input id="mb-name" type="text" placeholder="مثال: خالد العتيبي"></div>
     <div class="field"><label>رقم جوال اللاعب *</label><input id="mb-phone" type="tel" placeholder="05xxxxxxxx"></div>
-    <div class="legal-note" style="margin-bottom:14px">⚠️ اللاعب لازم يكون مسجّل حساب بالمنصة (أي نوع حساب) عشان نقدر نربط له الحجز ونرسله رابط الدفع.</div>
+    <div class="legal-note" style="margin-bottom:14px">💡 ما يحتاج يكون عنده حساب مسبقًا — لو عنده حساب بنفس الرقم بنربطه تلقائيًا، ولو لا بنسجّله كحجز ضيف.</div>
     <div class="field">
       <label>الملعب *</label>
       <select id="mb-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
@@ -2894,6 +2895,7 @@ async function showManualBookingForm(){
   `;
 }
 async function createManualBooking(){
+  const name = document.getElementById('mb-name').value.trim();
   const phone = document.getElementById('mb-phone').value.trim();
   const fieldId = document.getElementById('mb-field').value;
   const date = document.getElementById('mb-date').value;
@@ -2901,14 +2903,21 @@ async function createManualBooking(){
   const end = document.getElementById('mb-end').value;
   const players = parseInt(document.getElementById('mb-players').value) || 1;
   const price = parseFloat(document.getElementById('mb-price').value);
-  if (!phone || !fieldId || !date || !start || !end || !price || price<=0) { showToast('املأ كل الحقول الإلزامية (*)','error'); return; }
+  if (!name || !phone || !fieldId || !date || !start || !end || !price || price<=0) { showToast('املأ كل الحقول الإلزامية (*)','error'); return; }
 
-  const { data: prof, error: findErr } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
-  if (findErr || !prof) { showToast('لا يوجد حساب مسجّل بهذا الرقم — اطلب من اللاعب إنشاء حساب أولاً','error'); return; }
+  // لو عنده حساب مسجّل بنفس الرقم نربطه تلقائيًا، ولو ما عنده نسجّله كحجز ضيف بدون أي عائق
+  const { data: prof } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
+  const { data: { user: currentOwner } } = await sb.auth.getUser();
+
+  const payload = {
+    field_id: fieldId, booking_date: date, start_time: start, end_time: end,
+    players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid',
+    created_by: currentOwner?.id || null,
+  };
+  if (prof) { payload.user_id = prof.id; } else { payload.guest_name = name; payload.guest_phone = phone; }
 
   const { data: booking, error } = await sb.from('bookings').insert({
-    user_id: prof.id, field_id: fieldId, booking_date: date, start_time: start, end_time: end,
-    players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid'
+    ...payload,
   }).select().single();
   if (error) {
     if (error.code === '23514' || error.message?.includes('conflict')) { showToast('هذا الوقت متعارض مع حجز أو نشاط آخر بنفس الملعب','error'); return; }
@@ -2918,7 +2927,7 @@ async function createManualBooking(){
   showToast('تم قفل الخانة ✓ جارٍ تجهيز رابط الدفع...');
   try {
     const { data, error } = await sb.functions.invoke('create-payment', {
-      body: { booking_id: booking.id, amount: price, payer_name: prof.name, is_organizer: true }
+      body: { booking_id: booking.id, amount: price, payer_name: prof?.name || name, is_organizer: true }
     });
     if (error || data?.error) {
       showToast((data?.error || 'تعذّر تجهيز رابط الدفع') + ' — الخانة محجوزة، جهّز الدفع لاحقًا من تفاصيل الحجز','error');
