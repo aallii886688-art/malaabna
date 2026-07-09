@@ -2000,6 +2000,7 @@ function openSidebar() {
     <div class="side-links">
       <a class="side-link" onclick="sideGo('profile')"><span class="si">👤</span> الملف الشخصي</a>
       ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('seo')"><span class="si">📈</span> صحة السيو</a>` : ''}
       <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
       <a class="side-link" onclick="sideGo('bookings')"><span class="si">🎽</span> ${isOwnerOrAdmin ? 'حجوزاتي كلاعب' : 'حجوزاتي'}</a>
       <a class="side-link" onclick="sideGo('registrations')"><span class="si">📋</span> تسجيلاتي</a>
@@ -2031,6 +2032,7 @@ async function sideGo(where) {
     case 'panel':         openOwnerPanel(window.currentUser.role==='super_admin'?'admin':'owner'); break;
     case 'share':         shareSite(); break;
     case 'help':           showHelpCenter(); break;
+    case 'seo':             showSeoHealth(); break;
     case 'contact':       showContact(); break;
     case 'about':         showAbout(); break;
     case 'terms':         openLegal('terms'); break;
@@ -3677,7 +3679,6 @@ const ADMIN_TABS = [
   {key:'finance', label:'💰 المالية'},
   {key:'reviews', label:'⭐ التقييمات'},
   {key:'integrations', label:'🔌 التكاملات'},
-  {key:'seo', label:'📈 صحة السيو'},
 ];
 function adminTabsHtml(active){
   return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
@@ -3697,7 +3698,6 @@ async function adminGoTab(tab){
     case 'reviews':      await adminView('reviews'); break;
     case 'finance':      await renderAdminFinanceTab(); break;
     case 'integrations': await renderAdminIntegrationsTab(); break;
-    case 'seo':          await renderAdminSeoTab(); break;
   }
 }
 
@@ -3806,7 +3806,8 @@ async function renderAdminFinanceTab(){
   `;
 }
 
-async function renderAdminSeoTab(){
+async function showSeoHealth(){
+  openInfoModal('📈 صحة السيو', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
   const [{ count: fieldsCount }, { count: acadCount }, { count: tournCount }, { count: reviewsCount }, { data: avgData }] = await Promise.all([
     sb.from('fields').select('*', { count:'exact', head:true }).eq('approved', true).eq('is_deleted', false),
     sb.from('academies').select('*', { count:'exact', head:true }).eq('approved', true).eq('is_deleted', false),
@@ -3824,8 +3825,7 @@ async function renderAdminSeoTab(){
     if (match) sitemapLastmod = match[1];
   } catch(e){}
 
-  clearTimeout(window._tabLoadTimer);
-  document.getElementById('adminTabInner').innerHTML = `
+  document.getElementById('ownerBody').innerHTML = `
     <div class="dlabel">📊 حجم المحتوى الحقيقي (يفيد السيو)</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:20px">
       <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center">
