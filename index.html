@@ -575,7 +575,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
       <div class="fbrand"><div class="brand-logo" style="width:32px;height:32px;font-size:16px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22" stroke="#0a1408" stroke-width="1.8"/><circle cx="12" cy="12" r="5.2" stroke="#0a1408" stroke-width="1.8"/><circle cx="12" cy="12" r="1.4" fill="#0a1408"/></svg></div> ملاعبنا</div>
       <p class="fdesc">منصة حجز الملاعب والأكاديميات والبطولات في جميع مناطق المملكة العربية السعودية. احجز، قسّم، والعب بدون تعقيد.</p>
       <div style="margin-top:14px"><span class="vat-badge">🔒 دفع إلكتروني آمن</span></div>
-      <p style="margin-top:10px;font-size:11.5px;color:var(--ink-dim)">يُدار هذا الموقع من قبل: علي بن محمد أحمد عسيري</p>
+      <p style="margin-top:10px;font-size:11.5px;color:var(--ink-dim)">يُدار هذا الموقع من قبل: علي بن محمد أحمد عسيري<br>خميس البحر، المملكة العربية السعودية</p>
     </div>
     <div>
       <div class="fh">المنصة</div>
@@ -2532,7 +2532,7 @@ function showAbout() {
         <br><br>
         نخدم جميع مناطق المملكة العربية السعودية 🌱
         <br><br>
-        <span style="font-size:12px;color:var(--ink-dim)">يُدار هذا الموقع من قبل: علي بن محمد أحمد عسيري</span>
+        <span style="font-size:12px;color:var(--ink-dim)">يُدار هذا الموقع من قبل: علي بن محمد أحمد عسيري<br>خميس البحر، المملكة العربية السعودية</span>
       </div>
       <div style="margin-top:16px;font-size:12px;color:var(--ink-dim)">الإصدار 2.0 · 2026</div>
     </div>`);
@@ -3671,6 +3671,7 @@ const ADMIN_TABS = [
   {key:'finance', label:'💰 المالية'},
   {key:'reviews', label:'⭐ التقييمات'},
   {key:'integrations', label:'🔌 التكاملات'},
+  {key:'seo', label:'📈 صحة السيو'},
 ];
 function adminTabsHtml(active){
   return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
@@ -3690,6 +3691,7 @@ async function adminGoTab(tab){
     case 'reviews':      await adminView('reviews'); break;
     case 'finance':      await renderAdminFinanceTab(); break;
     case 'integrations': await renderAdminIntegrationsTab(); break;
+    case 'seo':          await renderAdminSeoTab(); break;
   }
 }
 
@@ -3795,6 +3797,54 @@ async function renderAdminFinanceTab(){
 
     <div class="dlabel">💸 التحويلات</div>
     <button class="btn btn-brand btn-block" onclick="adminView('payouts')">تنفيذ التحويلات المستحقة لأصحاب الملاعب</button>
+  `;
+}
+
+async function renderAdminSeoTab(){
+  const [{ count: fieldsCount }, { count: acadCount }, { count: tournCount }, { count: reviewsCount }, { data: avgData }] = await Promise.all([
+    sb.from('fields').select('*', { count:'exact', head:true }).eq('approved', true).eq('is_deleted', false),
+    sb.from('academies').select('*', { count:'exact', head:true }).eq('approved', true).eq('is_deleted', false),
+    sb.from('tournaments').select('*', { count:'exact', head:true }).eq('approved', true).eq('is_deleted', false),
+    sb.from('reviews').select('*', { count:'exact', head:true }),
+    sb.from('reviews').select('rating'),
+  ]);
+  const avgRating = (avgData && avgData.length) ? (avgData.reduce((s,r)=>s+r.rating,0)/avgData.length).toFixed(1) : '—';
+
+  let sitemapLastmod = '—';
+  try {
+    const res = await fetch('https://lsgakyydqomzntoebqep.supabase.co/functions/v1/dynamic-sitemap');
+    const xml = await res.text();
+    const match = xml.match(/<lastmod>(.*?)<\/lastmod>/);
+    if (match) sitemapLastmod = match[1];
+  } catch(e){}
+
+  clearTimeout(window._tabLoadTimer);
+  document.getElementById('adminTabInner').innerHTML = `
+    <div class="dlabel">📊 حجم المحتوى الحقيقي (يفيد السيو)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:20px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center">
+        <div style="font-size:18px;font-weight:900;color:var(--brand)">${fieldsCount||0}</div><div style="font-size:10px;color:var(--ink-dim)">ملعب</div></div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center">
+        <div style="font-size:18px;font-weight:900;color:var(--brand)">${acadCount||0}</div><div style="font-size:10px;color:var(--ink-dim)">أكاديمية</div></div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center">
+        <div style="font-size:18px;font-weight:900;color:var(--brand)">${tournCount||0}</div><div style="font-size:10px;color:var(--ink-dim)">بطولة</div></div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center">
+        <div style="font-size:18px;font-weight:900;color:var(--flood)">${avgRating}</div><div style="font-size:10px;color:var(--ink-dim)">متوسط تقييم (${reviewsCount||0})</div></div>
+    </div>
+
+    <div class="dlabel">🗺️ خارطة الموقع</div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>آخر تحديث حقيقي مسجّل</span><b>${sitemapLastmod}</b></div>
+      <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">تتحدث تلقائيًا لحظة اعتماد أي منشأة/أكاديمية/بطولة جديدة</div>
+    </div>
+
+    <div class="dlabel">✅ العناصر التقنية المطبّقة</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+      ${['خارطة موقع ديناميكية (sitemap.xml)','ملف توجيه الزحف (robots.txt)','بيانات مهيكلة (Schema.org)','ملف llms.txt للذكاء الاصطناعي','عناوين ووصف Open Graph','أسماء وصفية لكل عنصر تفاعلي (aria-label)','تحقق ملكية Google Search Console']
+        .map(item=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--bg-soft);border-radius:8px;padding:8px 12px"><span style="color:var(--brand)">✅</span> ${item}</div>`).join('')}
+    </div>
+
+    <div class="legal-note">📌 لمتابعة الترتيب الفعلي بنتائج البحث وعدد الظهور، هذي بيانات حيّة تتطلب حسابك الشخصي — راجعها مباشرة عبر <a href="https://search.google.com/search-console" target="_blank" style="color:var(--brand);font-weight:700">Google Search Console</a>.</div>
   `;
 }
 
