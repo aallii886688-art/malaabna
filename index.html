@@ -2891,6 +2891,16 @@ async function showManualBookingForm(){
       <div class="field" style="flex:1"><label>عدد اللاعبين</label><input id="mb-players" type="number" value="6" min="1"></div>
     </div>
     <div class="field"><label>السعر الإجمالي (ريال) *</label><input id="mb-price" type="number" placeholder="150"></div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="mb-recurring" onchange="document.getElementById('mb-weeks-wrap').style.display=this.checked?'block':'none'">
+        🔁 عميل دائم — يتكرر أسبوعيًا (نفس اليوم والوقت)
+      </label>
+    </div>
+    <div id="mb-weeks-wrap" style="display:none">
+      <div class="field"><label>عدد الأسابيع</label><input id="mb-weeks" type="number" value="4" min="2" max="12"></div>
+      <div class="legal-note" style="margin-bottom:14px">📌 كل أسبوع يصير له رابط دفع منفصل — تقدر ترسلها كلها دفعة وحدة، أو أسبوعيًا حسب راحتك.</div>
+    </div>
     <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="createManualBooking()">🔒 احجز الخانة وجهّز رابط الدفع</button>
   `;
 }
@@ -2903,48 +2913,59 @@ async function createManualBooking(){
   const end = document.getElementById('mb-end').value;
   const players = parseInt(document.getElementById('mb-players').value) || 1;
   const price = parseFloat(document.getElementById('mb-price').value);
+  const isRecurring = document.getElementById('mb-recurring').checked;
+  const weeks = isRecurring ? (parseInt(document.getElementById('mb-weeks').value) || 4) : 1;
   if (!name || !phone || !fieldId || !date || !start || !end || !price || price<=0) { showToast('املأ كل الحقول الإلزامية (*)','error'); return; }
 
   // لو عنده حساب مسجّل بنفس الرقم نربطه تلقائيًا، ولو ما عنده نسجّله كحجز ضيف بدون أي عائق
   const { data: prof } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
   const { data: { user: currentOwner } } = await sb.auth.getUser();
 
-  const payload = {
-    field_id: fieldId, booking_date: date, start_time: start, end_time: end,
-    players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid',
-    created_by: currentOwner?.id || null,
-  };
-  if (prof) { payload.user_id = prof.id; } else { payload.guest_name = name; payload.guest_phone = phone; }
+  showToast(isRecurring ? `جارٍ حجز ${weeks} أسابيع...` : 'جارٍ قفل الخانة...');
+  const results = []; // { date, ok, payment_url?, reason? }
+  for (let w = 0; w < weeks; w++) {
+    const d = new Date(date + 'T00:00:00');
+    d.setDate(d.getDate() + (w * 7));
+    const weekDate = d.toISOString().split('T')[0];
 
-  const { data: booking, error } = await sb.from('bookings').insert({
-    ...payload,
-  }).select().single();
-  if (error) {
-    if (error.code === '23514' || error.message?.includes('conflict')) { showToast('هذا الوقت متعارض مع حجز أو نشاط آخر بنفس الملعب','error'); return; }
-    showToast('تعذّر إنشاء الحجز: ' + error.message,'error'); return;
-  }
+    const payload = {
+      field_id: fieldId, booking_date: weekDate, start_time: start, end_time: end,
+      players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid',
+      created_by: currentOwner?.id || null,
+    };
+    if (prof) { payload.user_id = prof.id; } else { payload.guest_name = name; payload.guest_phone = phone; }
 
-  showToast('تم قفل الخانة ✓ جارٍ تجهيز رابط الدفع...');
-  try {
-    const { data, error } = await sb.functions.invoke('create-payment', {
-      body: { booking_id: booking.id, amount: price, payer_name: prof?.name || name, is_organizer: true }
-    });
-    if (error || data?.error) {
-      showToast((data?.error || 'تعذّر تجهيز رابط الدفع') + ' — الخانة محجوزة، جهّز الدفع لاحقًا من تفاصيل الحجز','error');
-      ownerGoTab('bookings');
-      return;
+    const { data: booking, error } = await sb.from('bookings').insert(payload).select().single();
+    if (error) {
+      results.push({ date: weekDate, ok: false, reason: (error.code === '23514' || error.message?.includes('conflict')) ? 'الوقت متعارض مع حجز آخر' : error.message });
+      continue;
     }
-    document.getElementById('ownerTitle').textContent = '✅ الخانة محجوزة';
-    document.getElementById('ownerBody').innerHTML = `
-      <div class="legal-note" style="margin-bottom:14px">✅ تم قفل الخانة بنجاح. أرسل رابط الدفع هذا للاعب (واتساب/رسالة) — الحجز ما يتأكد نهائيًا إلا بعد ما يدفع منه.</div>
-      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px;word-break:break-all;font-size:12px;direction:ltr;text-align:left;margin-bottom:12px">${data.payment_url}</div>
-      <button class="btn btn-brand btn-block" onclick="navigator.clipboard.writeText('${data.payment_url}');showToast('تم نسخ رابط الدفع ✓')">📋 نسخ رابط الدفع</button>
-      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="ownerGoTab('bookings')">رجوع لقائمة الحجوزات</button>
-    `;
-  } catch(e) {
-    showToast('تعذّر الاتصال ببوابة الدفع — الخانة محجوزة، جهّز الدفع لاحقًا','error');
-    ownerGoTab('bookings');
+    try {
+      const { data: pay, error: payErr } = await sb.functions.invoke('create-payment', {
+        body: { booking_id: booking.id, amount: price, payer_name: prof?.name || name, is_organizer: true }
+      });
+      if (payErr || pay?.error) { results.push({ date: weekDate, ok: false, reason: pay?.error || 'تعذّر تجهيز رابط الدفع (الخانة محجوزة)' }); }
+      else { results.push({ date: weekDate, ok: true, payment_url: pay.payment_url }); }
+    } catch(e) { results.push({ date: weekDate, ok: false, reason: 'تعذّر الاتصال ببوابة الدفع (الخانة محجوزة)' }); }
   }
+
+  const successCount = results.filter(r=>r.ok).length;
+  document.getElementById('ownerTitle').textContent = isRecurring ? '✅ نتيجة الحجز المتكرر' : '✅ الخانة محجوزة';
+  document.getElementById('ownerBody').innerHTML = `
+    <div class="legal-note" style="margin-bottom:14px">✅ تم حجز ${successCount} من ${weeks} — أرسل رابط كل أسبوع للاعب. الحجز ما يتأكد نهائيًا إلا بعد الدفع منه.</div>
+    ${results.map(r => `
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:13px">${r.date}</b>
+          <span class="badge ${r.ok?'available':'closed'}" style="font-size:10px">${r.ok?'جاهز':'فشل'}</span>
+        </div>
+        ${r.ok ? `
+          <div style="word-break:break-all;font-size:11.5px;direction:ltr;text-align:left;color:var(--ink-dim);margin-bottom:6px">${r.payment_url}</div>
+          <button class="btn btn-soft btn-sm btn-block" onclick="navigator.clipboard.writeText('${r.payment_url}');showToast('تم نسخ رابط ${r.date} ✓')">📋 نسخ الرابط</button>
+        ` : `<div style="font-size:11.5px;color:var(--danger)">⚠️ ${escapeHtml(r.reason)}</div>`}
+      </div>`).join('')}
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="ownerGoTab('bookings')">رجوع لقائمة الحجوزات</button>
+  `;
 }
 
 
