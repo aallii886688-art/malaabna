@@ -2842,11 +2842,11 @@ async function renderOwnerBookingsTab(){
     .select('id, booking_date, start_time, end_time, status, total_price, players_count, profiles(name, phone), fields(name)')
     .in('field_id', myFieldIds).order('booking_date', { ascending: false });
   if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
-  if (!data || !data.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>'; return; }
+  if (!data || !data.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`; return; }
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
   clearTimeout(window._tabLoadTimer);
-  ownerInner().innerHTML = data.map(b => `
+  ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>` + data.map(b => `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name)||''} · ${escapeHtml(b.profiles?.phone)||''}</div></div>
@@ -2861,6 +2861,81 @@ async function renderOwnerBookingsTab(){
         </div>
       </div>
     </div>`).join('');
+}
+
+// ── حجز يدوي (هاتفي/حضوري) — يحجز الخانة فورًا، لكن ما يتأكد إلا بدفع إلكتروني حقيقي عبر المنصة ──
+async function showManualBookingForm(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '➕ حجز يدوي';
+  const _lt = delayedLoading(bodyEl.id);
+  const fieldOpts = await myFieldsOptionsHtml();
+  clearTimeout(_lt);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('bookings')" style="margin-bottom:14px">→ رجوع</button>`;
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">🔒 هذا الحجز يقفل الخانة فورًا لمنع التعارض مع حجوزات المنصة، لكن **لازم يكتمل بدفع إلكتروني حقيقي** — ما فيه خيار "استلمت الفلوس نقدًا" لضمان احتساب عمولة المنصة بشكل صحيح على كل حجز.</div>
+    <div class="field"><label>رقم جوال اللاعب *</label><input id="mb-phone" type="tel" placeholder="05xxxxxxxx"></div>
+    <div class="legal-note" style="margin-bottom:14px">⚠️ اللاعب لازم يكون مسجّل حساب بالمنصة (أي نوع حساب) عشان نقدر نربط له الحجز ونرسله رابط الدفع.</div>
+    <div class="field">
+      <label>الملعب *</label>
+      <select id="mb-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        ${fieldOpts}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>التاريخ *</label><input id="mb-date" type="date" value="${riyadhTodayStr()}"></div>
+      <div class="field" style="flex:1"><label>وقت البداية *</label><input id="mb-start" type="time"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>وقت النهاية *</label><input id="mb-end" type="time"></div>
+      <div class="field" style="flex:1"><label>عدد اللاعبين</label><input id="mb-players" type="number" value="6" min="1"></div>
+    </div>
+    <div class="field"><label>السعر الإجمالي (ريال) *</label><input id="mb-price" type="number" placeholder="150"></div>
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="createManualBooking()">🔒 احجز الخانة وجهّز رابط الدفع</button>
+  `;
+}
+async function createManualBooking(){
+  const phone = document.getElementById('mb-phone').value.trim();
+  const fieldId = document.getElementById('mb-field').value;
+  const date = document.getElementById('mb-date').value;
+  const start = document.getElementById('mb-start').value;
+  const end = document.getElementById('mb-end').value;
+  const players = parseInt(document.getElementById('mb-players').value) || 1;
+  const price = parseFloat(document.getElementById('mb-price').value);
+  if (!phone || !fieldId || !date || !start || !end || !price || price<=0) { showToast('املأ كل الحقول الإلزامية (*)','error'); return; }
+
+  const { data: prof, error: findErr } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
+  if (findErr || !prof) { showToast('لا يوجد حساب مسجّل بهذا الرقم — اطلب من اللاعب إنشاء حساب أولاً','error'); return; }
+
+  const { data: booking, error } = await sb.from('bookings').insert({
+    user_id: prof.id, field_id: fieldId, booking_date: date, start_time: start, end_time: end,
+    players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid'
+  }).select().single();
+  if (error) {
+    if (error.code === '23514' || error.message?.includes('conflict')) { showToast('هذا الوقت متعارض مع حجز أو نشاط آخر بنفس الملعب','error'); return; }
+    showToast('تعذّر إنشاء الحجز: ' + error.message,'error'); return;
+  }
+
+  showToast('تم قفل الخانة ✓ جارٍ تجهيز رابط الدفع...');
+  try {
+    const { data, error } = await sb.functions.invoke('create-payment', {
+      body: { booking_id: booking.id, amount: price, payer_name: prof.name, is_organizer: true }
+    });
+    if (error || data?.error) {
+      showToast((data?.error || 'تعذّر تجهيز رابط الدفع') + ' — الخانة محجوزة، جهّز الدفع لاحقًا من تفاصيل الحجز','error');
+      ownerGoTab('bookings');
+      return;
+    }
+    document.getElementById('ownerTitle').textContent = '✅ الخانة محجوزة';
+    document.getElementById('ownerBody').innerHTML = `
+      <div class="legal-note" style="margin-bottom:14px">✅ تم قفل الخانة بنجاح. أرسل رابط الدفع هذا للاعب (واتساب/رسالة) — الحجز ما يتأكد نهائيًا إلا بعد ما يدفع منه.</div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px;word-break:break-all;font-size:12px;direction:ltr;text-align:left;margin-bottom:12px">${data.payment_url}</div>
+      <button class="btn btn-brand btn-block" onclick="navigator.clipboard.writeText('${data.payment_url}');showToast('تم نسخ رابط الدفع ✓')">📋 نسخ رابط الدفع</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="ownerGoTab('bookings')">رجوع لقائمة الحجوزات</button>
+    `;
+  } catch(e) {
+    showToast('تعذّر الاتصال ببوابة الدفع — الخانة محجوزة، جهّز الدفع لاحقًا','error');
+    ownerGoTab('bookings');
+  }
 }
 
 
