@@ -11,6 +11,11 @@
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdn.moyasar.com/mpf/1.7.3/moyasar.css">
+<script src="https://cdn.moyasar.com/mpf/1.7.3/moyasar.js"></script>
+<style>
+  .mysr-form{direction:ltr}
+</style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2339ff14'/%3E%3Cstop offset='100%25' stop-color='%231f9d57'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='112' fill='url(%23g)'/%3E%3Cline x1='256' y1='80' x2='256' y2='432' stroke='%230a1408' stroke-width='26'/%3E%3Ccircle cx='256' cy='256' r='108' fill='none' stroke='%230a1408' stroke-width='26'/%3E%3Ccircle cx='256' cy='256' r='26' fill='%230a1408'/%3E%3C/svg%3E">
 <meta name="description" content="حجز ملعب أونلاين في الرياض، جدة، الدمام، وجميع مدن السعودية. منصة ملاعبنا تتيح لك حجز ملعب، تقسيم التكلفة تلقائيًا مع رفقتك، الانضمام لمباراة مفتوحة، والتسجيل بأكاديميات وبطولات رياضية.">
 <link rel="canonical" href="https://malaebnaa.com/">
@@ -1484,6 +1489,19 @@ setTimeout(()=>{ if (typeof initRealMap==='function') initRealMap(); }, 0);
   if (params.get('verify')) setTimeout(()=>checkVerifyLink(), 300);
 })();
 
+// ── لو صار تحويل خارجي مؤقت (3D Secure) ورجع المستخدم، نكمل التأكيد تلقائيًا ──
+(function checkPaymentConfirmOnLoad(){
+  const params = new URLSearchParams(window.location.search);
+  const paymentRowId = params.get('payment_confirm');
+  const paymentId = params.get('id');
+  if (paymentRowId && paymentId) {
+    setTimeout(async () => {
+      openInfoModal('💳 إتمام الدفع', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحقق من الدفع...</div>');
+      await confirmFormPayment(paymentRowId, paymentId, null);
+    }, 300);
+  }
+})();
+
 async function openJoinPage(token){
   if (!window.sb) { showToast('الرابط يحتاج اتصال قاعدة بيانات فعّال','error'); return; }
   document.getElementById('ownerTitle').textContent = '🤝 أكمل القطة';
@@ -1841,7 +1859,7 @@ function initBackend() {
 
   // ── يبدأ عملية دفع إلكتروني حقيقية عبر Moyasar، ويحوّل المستخدم لصفحة الدفع ──
   async function startRealPayment(bookingId, amount, isOrganizer, payerName, shareToken) {
-    showToast('جارٍ تجهيز صفحة الدفع...');
+    showToast('جارٍ تجهيز نموذج الدفع...');
     try {
       const { data, error } = await sb.functions.invoke('create-payment', {
         body: { booking_id: bookingId, amount, payer_name: payerName, is_organizer: isOrganizer }
@@ -1855,13 +1873,56 @@ function initBackend() {
         try { await navigator.clipboard.writeText(window.location.origin + '?join=' + shareToken); } catch(e){}
         showToast('تم نسخ رابط إكمال القطة ✓ شاركه بعد إتمام دفعتك');
       }
-      window.location.href = data.payment_url;
+
+      openInfoModal('💳 إتمام الدفع', `
+        <div id="mysrPayWrap">
+          <div class="mysr-form"></div>
+          <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
+        </div>
+      `);
+
+      Moyasar.init({
+        element: '.mysr-form',
+        amount: data.amount_halalas,
+        currency: 'SAR',
+        description: data.description,
+        publishable_api_key: data.publishable_key,
+        callback_url: window.location.origin + '?payment_confirm=' + data.payment_row_id,
+        methods: ['creditcard'],
+        supported_networks: ['mada', 'visa', 'mastercard'],
+        on_completed: async function (payment) {
+          await confirmFormPayment(data.payment_row_id, payment.id, bookingId);
+        }
+      });
     } catch(e) {
       showToast('تعذّر الاتصال ببوابة الدفع','error');
       closeAll();
     }
   }
   window.startRealPayment = startRealPayment;
+
+  async function confirmFormPayment(paymentRowId, paymentId, bookingId) {
+    document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع...</div>';
+    try {
+      const { data, error } = await sb.functions.invoke('confirm-form-payment', {
+        body: { payment_row_id: paymentRowId, payment_id: paymentId }
+      });
+      if (error || data?.error) {
+        document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">⚠️ تعذّر تأكيد الدفع — تواصل مع الدعم مع ذكر رقم الحجز #${bookingId}</div>`;
+        return;
+      }
+      document.getElementById('ownerBody').innerHTML = `
+        <div style="text-align:center;padding:20px">
+          <div style="font-size:44px">✅</div>
+          <div style="font-weight:800;font-size:16px;margin-top:8px">${data.fully_paid ? 'تم تأكيد حجزك بنجاح!' : 'تم استلام دفعتك ✓'}</div>
+        </div>
+        <button class="btn btn-brand btn-block" onclick="closeAll(); showMyBookings();">عرض حجوزاتي</button>
+      `;
+    } catch(e) {
+      document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">⚠️ تعذّر الاتصال — تواصل مع الدعم</div>';
+    }
+  }
+  window.confirmFormPayment = confirmFormPayment;
 
   // ── دفع تسجيل أكاديمية/بطولة (رسم كامل، بدون قطة) ──
   async function startRegistrationPayment(entityType, entityId, amount){
