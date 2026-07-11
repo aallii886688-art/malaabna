@@ -2905,7 +2905,7 @@ async function renderOwnerBookingsTab(){
   const myFieldIds = await getMyFieldIds();
   if (!myFieldIds.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
   const { data, error } = await sb.from('bookings')
-    .select('id, booking_date, start_time, end_time, status, total_price, players_count, guest_name, guest_phone, profiles(name, phone), fields(name)')
+    .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, guest_name, guest_phone, profiles(name, phone), fields(name)')
     .in('field_id', myFieldIds).order('booking_date', { ascending: false });
   if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
   if (!data || !data.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`; return; }
@@ -2920,7 +2920,11 @@ async function renderOwnerBookingsTab(){
       </div>
       <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''} - ${b.end_time?formatTime12(b.end_time):''} · 👥 ${b.players_count||''} لاعب</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
-        <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
+        <span style="color:var(--flood);font-weight:700">
+          ${Number(b.refunded_amount||0) > 0
+            ? `${Math.round((b.total_price - b.refunded_amount)*100)/100} ريال <span style="font-size:10.5px;color:var(--ink-dim);font-weight:400">(استُرجع ${b.refunded_amount} من ${b.total_price})</span>`
+            : `${b.total_price} ريال`}
+        </span>
         <div style="display:flex;gap:6px">
           ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="ownerSetBookingStatus(${b.id},'cancelled')">إلغاء</button>` : ''}
           ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="ownerSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
@@ -4151,7 +4155,7 @@ async function adminView(kind) {
   else if (kind === 'bookings') {
     titleEl.textContent = '📅 الحجوزات';
     const { data, error } = await sb.from('bookings')
-      .select('id, booking_date, start_time, status, total_price, profiles(name, phone), fields(name)')
+      .select('id, booking_date, start_time, status, total_price, refunded_amount, profiles(name, phone), fields(name)')
       .order('booking_date', { ascending:false }).limit(50);
     if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
     if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
@@ -4167,7 +4171,11 @@ async function adminView(kind) {
         <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''}</div>
         ${b.status==='pending' ? `<div style="font-size:11px;color:var(--ink-dim);margin-top:4px">⏳ بانتظار اكتمال الدفع الإلكتروني — يتأكد تلقائيًا فور الدفع</div>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-          <span style="color:var(--flood);font-weight:700">${b.total_price} ريال</span>
+          <span style="color:var(--flood);font-weight:700">
+            ${Number(b.refunded_amount||0) > 0
+              ? `${Math.round((b.total_price - b.refunded_amount)*100)/100} ريال <span style="font-size:10.5px;color:var(--ink-dim);font-weight:400">(استُرجع ${b.refunded_amount} من ${b.total_price})</span>`
+              : `${b.total_price} ريال`}
+          </span>
           <div style="display:flex;gap:6px">
             ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="adminCancelBooking(${b.id})">إلغاء</button>` : ''}
             ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="adminSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
@@ -4568,7 +4576,13 @@ async function exportAccountingReport(){
 
   let csv = '\uFEFF'; // BOM لدعم العربي بإكسل
   csv += 'النوع,التاريخ,البيان,المبلغ (ريال)\n';
-  (bookings||[]).forEach(b => { csv += `إيراد,${b.booking_date},حجز - ${escapeHtml(b.fields?.name)||''},${b.total_price}\n`; });
+  (bookings||[]).forEach(b => {
+    const net = Math.round((Number(b.total_price||0) - Number(b.refunded_amount||0)) * 100) / 100;
+    const label = (b.status === 'cancelled' && Number(b.refunded_amount||0) > 0)
+      ? `حجز ملغي (استُرجع ${b.refunded_amount} من ${b.total_price}) - ${escapeHtml(b.fields?.name)||''}`
+      : `حجز - ${escapeHtml(b.fields?.name)||''}`;
+    csv += `إيراد,${b.booking_date},${label},${net}\n`;
+  });
   (expenses||[]).forEach(e => { csv += `مصروف,${e.expense_date},${escapeHtml(e.category)} - ${escapeHtml(e.facilities?.name)||'عام'}${e.note?' ('+escapeHtml(e.note)+')':''},-${e.amount}\n`; });
 
   const totalRevenue = (bookings||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
