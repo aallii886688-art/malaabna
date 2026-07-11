@@ -2373,7 +2373,7 @@ async function cancelMyBooking(bookingId) {
   if (wasPaid) {
     try {
       const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
-      if (refundErr || data?.error) { console.log('REFUND DEBUG:', JSON.stringify(data)); alert('تفاصيل الخطأ (مؤقت للتشخيص): ' + JSON.stringify(data)); showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error'); }
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
       else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
     } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
   } else {
@@ -3418,7 +3418,7 @@ async function ownerSetBookingStatus(bookingId, newStatus) {
   if (newStatus === 'cancelled' && wasPaid) {
     try {
       const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
-      if (refundErr || data?.error) { console.log('REFUND DEBUG:', JSON.stringify(data)); alert('تفاصيل الخطأ (مؤقت للتشخيص): ' + JSON.stringify(data)); showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error'); }
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
       else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
     } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
   }
@@ -4904,7 +4904,7 @@ async function adminCancelBooking(bookingId) {
   if (wasPaid) {
     try {
       const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
-      if (refundErr || data?.error) { console.log('REFUND DEBUG:', JSON.stringify(data)); alert('تفاصيل الخطأ (مؤقت للتشخيص): ' + JSON.stringify(data)); showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error'); }
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
       else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
     } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
   } else {
