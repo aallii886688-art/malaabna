@@ -804,6 +804,18 @@ function delayedLoading(elId, delay){
   }, delay || 250);
 }
 // يمنع حقن HTML/سكربت من أي محتوى يكتبه المستخدمون (تعليقات، أسماء، إلخ) قبل عرضه بالصفحة
+// يعرض حالة الحجز بوضوح — يميّز بين ملغي عادي (ما فيه دفع) وملغي مع استرجاع جزئي أو كامل
+function bookingStatusLabel(b, statusMap){
+  if (b.status === 'cancelled') {
+    const refunded = Number(b.refunded_amount||0);
+    const total = Number(b.total_price||0);
+    if (refunded > 0 && refunded < total) return 'ملغي (مسترجع جزئيًا)';
+    if (refunded > 0 && refunded >= total - 0.01) return 'ملغي (مسترجع بالكامل)';
+    return 'ملغي';
+  }
+  return statusMap[b.status] || b.status;
+}
+
 function escapeHtml(str){
   if (str === null || str === undefined) return '';
   return String(str)
@@ -2194,7 +2206,7 @@ async function showMyBookings(highlightBookingId) {
     <div id="booking-card-${b.id}" style="padding:14px;background:var(--bg-soft);border:1px solid ${isHighlighted ? 'var(--brand)' : 'var(--line)'};border-radius:12px;margin-bottom:10px${isHighlighted ? ';box-shadow:0 0 0 2px var(--brand)' : ''}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div><b>${escapeHtml(b.fields?.name)||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.fields?.facilities?.city)||''}</div></div>
-        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
+        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
       </div>
       <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</div>
       ${b.status==='confirmed' ? `
@@ -2328,7 +2340,7 @@ async function checkVerifyLink(){
       <div class="srow"><span>التاريخ</span><span>${b.booking_date}</span></div>
       <div class="srow"><span>الوقت</span><span>${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</span></div>
       <div class="srow"><span>عدد اللاعبين</span><span>${b.players_count}</span></div>
-      <div class="srow tot"><span>حالة الحجز</span><span class="amt">${statusMap[b.status]||b.status}</span></div>
+      <div class="srow tot"><span>حالة الحجز</span><span class="amt">${bookingStatusLabel(b, statusMap)}</span></div>
     </div>
     ${b.checked_in
       ? `<div class="legal-note">✅ تم تسجيل حضور هذا الحجز مسبقًا بتاريخ ${new Date(b.checked_in_at).toLocaleString('ar-SA-u-nu-latn')}</div>`
@@ -2352,6 +2364,16 @@ async function submitReview(bookingId, fieldId) {
     rating: window._rateStars || 5, comment: comment || null
   });
   if (error) { showToast('تعذّر إرسال التقييم: ' + error.message, 'error'); return; }
+  try {
+    const { data: fieldInfo } = await sb.from('fields').select('name, facilities(owner_id)').eq('id', fieldId).single();
+    const ownerId = fieldInfo?.facilities?.owner_id;
+    if (ownerId) {
+      await sb.from('notifications').insert({
+        user_id: ownerId, title: 'تقييم جديد ⭐',
+        body: `حصل ${escapeHtml(fieldInfo.name)} على تقييم ${window._rateStars || 5} نجوم من لاعب`
+      });
+    }
+  } catch(e){}
   showToast('شكراً على تقييمك ✓ ⭐');
   closeAll();
 }
@@ -2916,7 +2938,7 @@ async function renderOwnerBookingsTab(){
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
-        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
+        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
       </div>
       <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''} - ${b.end_time?formatTime12(b.end_time):''} · 👥 ${b.players_count||''} لاعب</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
@@ -4166,7 +4188,7 @@ async function adminView(kind) {
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name)||''} · ${escapeHtml(b.profiles?.phone)||''}</div></div>
-          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${statusMap[b.status]||b.status}</span>
+          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
         </div>
         <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''}</div>
         ${b.status==='pending' ? `<div style="font-size:11px;color:var(--ink-dim);margin-top:4px">⏳ بانتظار اكتمال الدفع الإلكتروني — يتأكد تلقائيًا فور الدفع</div>` : ''}
@@ -4812,44 +4834,68 @@ async function confirmPayout(){
 }
 
 async function approveFacility(facilityId){
+  const { data: fac } = await sb.from('facilities').select('owner_id, name').eq('id', facilityId).single();
   const { error } = await sb.from('facilities').update({ approved:true }).eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (fac?.owner_id) {
+    try { await sb.from('notifications').insert({ user_id: fac.owner_id, title: 'تمت الموافقة على منشأتك ✅', body: `منشأة "${escapeHtml(fac.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
+  }
   showToast('تمت الموافقة ونُشرت المنشأة وكل ملاعبها ✓');
   loadRealFields();
   adminView('approvals');
 }
 async function approveAcademy(id){
+  const { data: acad } = await sb.from('academies').select('owner_id, name').eq('id', id).single();
   const { error } = await sb.from('academies').update({ approved:true }).eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (acad?.owner_id) {
+    try { await sb.from('notifications').insert({ user_id: acad.owner_id, title: 'تمت الموافقة على أكاديميتك ✅', body: `أكاديمية "${escapeHtml(acad.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
+  }
   showToast('تمت الموافقة ونُشرت الأكاديمية ✓');
   loadRealAcademies();
   adminView('approvals');
 }
 async function rejectAcademy(id){
   if (!confirm('رفض هذه الأكاديمية وحذفها نهائياً؟')) return;
+  const { data: acad } = await sb.from('academies').select('owner_id, name').eq('id', id).single();
   const { error } = await sb.from('academies').delete().eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (acad?.owner_id) {
+    try { await sb.from('notifications').insert({ user_id: acad.owner_id, title: 'تم رفض أكاديميتك ❌', body: `أكاديمية "${escapeHtml(acad.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
+  }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
 }
 async function approveTournament(id){
+  const { data: t } = await sb.from('tournaments').select('owner_id, name').eq('id', id).single();
   const { error } = await sb.from('tournaments').update({ approved:true }).eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (t?.owner_id) {
+    try { await sb.from('notifications').insert({ user_id: t.owner_id, title: 'تمت الموافقة على بطولتك ✅', body: `بطولة "${escapeHtml(t.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
+  }
   showToast('تمت الموافقة ونُشرت البطولة ✓');
   loadRealTournaments();
   adminView('approvals');
 }
 async function rejectTournament(id){
   if (!confirm('رفض هذه البطولة وحذفها نهائياً؟')) return;
+  const { data: t } = await sb.from('tournaments').select('owner_id, name').eq('id', id).single();
   const { error } = await sb.from('tournaments').delete().eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (t?.owner_id) {
+    try { await sb.from('notifications').insert({ user_id: t.owner_id, title: 'تم رفض بطولتك ❌', body: `بطولة "${escapeHtml(t.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
+  }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
 }
 async function rejectFacility(facilityId){
   if (!confirm('رفض هذه المنشأة وحذفها نهائياً مع كل ملاعبها؟')) return;
+  const { data: fac } = await sb.from('facilities').select('owner_id, name').eq('id', facilityId).single();
   const { error } = await sb.from('facilities').delete().eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (fac?.owner_id) {
+    try { await sb.from('notifications').insert({ user_id: fac.owner_id, title: 'تم رفض منشأتك ❌', body: `منشأة "${escapeHtml(fac.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
+  }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
 }
