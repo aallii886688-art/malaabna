@@ -3397,9 +3397,31 @@ async function saveTournament(editId){
 // ── حجوزات ملاعب صاحب الملعب (يشوف حجوزات ملاعبه هو فقط، ويتحكم فيها) ──
 async function ownerSetBookingStatus(bookingId, newStatus) {
   const msgs = { confirmed:'تأكيد هذا الحجز؟', cancelled:'إلغاء هذا الحجز؟', completed:'تحديد هذا الحجز كمكتمل؟' };
-  if (!confirm(msgs[newStatus] || 'تأكيد العملية؟')) return;
+
+  let refundNote = '', bkInfo = null;
+  if (newStatus === 'cancelled') {
+    const { data: bk } = await sb.from('bookings').select('booking_date, start_time, payment_status').eq('id', bookingId).single();
+    bkInfo = bk;
+    if (bk) {
+      try {
+        const { data: pct } = await sb.rpc('calc_refund_percent', { p_booking_date: bk.booking_date, p_start_time: bk.start_time });
+        refundNote = pct!=null ? `\n\nحسب سياسة الإلغاء، نسبة الاسترجاع المتوقعة: ${pct}%` : '';
+      } catch(e){}
+    }
+  }
+  if (!confirm((msgs[newStatus] || 'تأكيد العملية؟') + refundNote)) return;
+
   const { error } = await sb.from('bookings').update({ status: newStatus }).eq('id', bookingId);
   if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+
+  const wasPaid = bkInfo?.payment_status === 'paid' || bkInfo?.payment_status === 'partial';
+  if (newStatus === 'cancelled' && wasPaid) {
+    try {
+      const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
+      else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
+    } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
+  }
 
   try {
     const { data: booking } = await sb.from('bookings').select('user_id, fields(name)').eq('id', bookingId).single();
@@ -3412,7 +3434,7 @@ async function ownerSetBookingStatus(bookingId, newStatus) {
     }
   } catch(e){}
 
-  showToast('تم التحديث ✓');
+  if (!(newStatus === 'cancelled' && wasPaid)) showToast('تم التحديث ✓');
   renderOwnerBookingsTab();
 }
 
@@ -4865,10 +4887,29 @@ async function ownerControl(userId, newRole) {
 }
 
 async function adminCancelBooking(bookingId) {
-  if (!confirm('هل تريد إلغاء هذا الحجز؟')) return;
+  const { data: bk } = await sb.from('bookings').select('booking_date, start_time, payment_status').eq('id', bookingId).single();
+  let refundNote = '';
+  if (bk) {
+    try {
+      const { data: pct } = await sb.rpc('calc_refund_percent', { p_booking_date: bk.booking_date, p_start_time: bk.start_time });
+      refundNote = pct!=null ? `\n\nحسب سياسة الإلغاء، نسبة الاسترجاع المتوقعة: ${pct}%` : '';
+    } catch(e){}
+  }
+  if (!confirm('هل تريد إلغاء هذا الحجز؟' + refundNote)) return;
+
+  const wasPaid = bk?.payment_status === 'paid' || bk?.payment_status === 'partial';
   const { error } = await sb.from('bookings').update({ status:'cancelled' }).eq('id', bookingId);
   if (error) { showToast('تعذّر الإلغاء', 'error'); return; }
-  showToast('تم إلغاء الحجز ✓');
+
+  if (wasPaid) {
+    try {
+      const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
+      else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
+    } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
+  } else {
+    showToast('تم إلغاء الحجز ✓');
+  }
   adminView('bookings');
 }
 
