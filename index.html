@@ -1039,7 +1039,7 @@ async function getFieldAvailability(fieldId, dateStr, weekday){
     const [{ data: wh }, { data: bo }, { data: bookings }, { data: matches }, { data: sessions }, { data: priceOverride }] = await Promise.all([
       sb.from('field_working_hours').select('open_time,close_time,is_closed').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle(),
       sb.from('field_blackouts').select('id,reason').eq('field_id', fieldId).eq('blackout_date', dateStr).maybeSingle(),
-      sb.from('bookings').select('start_time').eq('field_id', fieldId).eq('booking_date', dateStr).in('status', ['pending','confirmed']),
+      sb.from('bookings').select('start_time').eq('field_id', fieldId).eq('booking_date', dateStr).in('status', ['pending','confirmed']).eq('payment_status', 'paid'),
       sb.from('tournament_matches').select('start_time,end_time').eq('field_id', fieldId).eq('match_date', dateStr).neq('status','cancelled'),
       sb.from('academy_sessions').select('start_time,end_time').eq('field_id', fieldId).eq('weekday', weekday),
       sb.from('field_weekday_pricing').select('price').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle()
