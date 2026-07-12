@@ -2965,26 +2965,33 @@ async function submitOwnerReply(reviewId){
 async function renderOwnerFinanceTab(){
   clearTimeout(window._tabLoadTimer);
   const { myFieldIds } = await getMyFacilitiesData();
-  let monthRevenue = 0, monthExpenses = 0;
+  let monthGrossRevenue = 0, monthExpenses = 0, commissionPct = 20;
   if (myFieldIds.length) {
     const firstOfMonth = riyadhTodayStr().slice(0,7) + '-01';
     const { data: { user } } = await sb.auth.getUser();
-    const [{ data: earnRows }, { data: expRows }] = await Promise.all([
+    const [{ data: earnRows }, { data: expRows }, { data: commSetting }] = await Promise.all([
       sb.from('bookings').select('total_price, refunded_amount').in('field_id', myFieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').gte('booking_date', firstOfMonth),
-      sb.from('facility_expenses').select('amount').eq('owner_id', user.id).gte('expense_date', firstOfMonth)
+      sb.from('facility_expenses').select('amount').eq('owner_id', user.id).gte('expense_date', firstOfMonth),
+      sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
     ]);
-    monthRevenue = (earnRows||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+    monthGrossRevenue = (earnRows||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
     monthExpenses = (expRows||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+    commissionPct = commSetting ? Number(commSetting.value) : 20;
   }
-  const netThisMonth = Math.round((monthRevenue - monthExpenses) * 100) / 100;
+  const monthCommission = Math.round(monthGrossRevenue * (commissionPct/100) * 100) / 100;
+  const monthNetRevenue = Math.round((monthGrossRevenue - monthCommission) * 100) / 100;
+  const netThisMonth = Math.round((monthNetRevenue - monthExpenses) * 100) / 100;
 
   ownerInner().innerHTML = `
     <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
-      <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:8px">لمحة هذا الشهر</div>
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:8px">لمحة هذا الشهر (بعد خصم عمولة المنصة ${commissionPct}%)</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
-        <div><div style="font-size:17px;font-weight:900;color:var(--brand)">${monthRevenue}</div><div style="font-size:10.5px;color:var(--ink-dim)">إيرادات</div></div>
+        <div><div style="font-size:17px;font-weight:900;color:var(--brand)">${monthNetRevenue}</div><div style="font-size:10.5px;color:var(--ink-dim)">إيرادات صافية لك</div></div>
         <div><div style="font-size:17px;font-weight:900;color:var(--danger)">${monthExpenses}</div><div style="font-size:10.5px;color:var(--ink-dim)">مصاريف</div></div>
         <div><div style="font-size:17px;font-weight:900;color:var(--flood)">${netThisMonth}</div><div style="font-size:10.5px;color:var(--ink-dim)">صافي تقريبي</div></div>
+      </div>
+      <div style="text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+        <span style="font-size:11px;color:var(--ink-dim)">إجمالي الحجوزات ${monthGrossRevenue} ريال، منها ${monthCommission} ريال عمولة المنصة</span>
       </div>
     </div>
 
@@ -2995,7 +3002,8 @@ async function renderOwnerFinanceTab(){
 
     <div class="dlabel">💸 المصاريف والتقارير</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showFacilityExpenses()">📋 تسجيل ومتابعة المصاريف</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="exportAccountingReport()">📄 تصدير تقرير محاسبي (CSV)</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="exportAccountingReport()">📄 تصدير تقرير محاسبي (CSV)</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showOwnerMonthlyReports()">🗓️ الأرشيف الشهري (يُنشأ تلقائيًا)</button>
 
     <div class="dlabel">💰 التحويلات والحساب البنكي</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">📥 سجل التحويلات المستلمة</button>
@@ -4656,6 +4664,7 @@ async function renderAdminOverviewTab(){
   `;
 }
 
+// ── تقرير محاسبي شامل للمنصة: يفصّل الإيرادات والعمولة المستحقة لكل منشأة على حدة، مع تقدير ضريبي ──
 async function renderAdminFinanceTab(){
   const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
   const commissionPct = commSetting ? Number(commSetting.value) : 20;
@@ -4681,12 +4690,122 @@ async function renderAdminFinanceTab(){
     <div class="dlabel">📈 التحليلات</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="adminView('analytics')">تحليلات الإيرادات التفصيلية</button>
 
+    <div class="dlabel">📄 التقارير المحاسبية</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="exportAdminAccountingReport()">تصدير تقرير محاسبي شامل للمنصة (CSV)</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showAdminMonthlyReports()">🗓️ الأرشيف الشهري (يُنشأ تلقائيًا)</button>
+
     <div class="dlabel">⚙️ الإعدادات</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="adminView('commission')">نسبة عمولة المنصة</button>
 
     <div class="dlabel">💸 التحويلات</div>
     <button class="btn btn-brand btn-block" onclick="adminView('payouts')">تنفيذ التحويلات المستحقة لأصحاب الملاعب</button>
   `;
+}
+
+// ── الأرشيف الشهري للمنصة: يعرض التقارير المُنشأة تلقائيًا كل يوم 1 ميلادي عن الشهر السابق ──
+async function showAdminMonthlyReports(){
+  const titleEl = document.getElementById('ownerTitle');
+  const bodyEl = document.getElementById('adminTabInner') || document.getElementById('ownerBody');
+  titleEl.textContent = '🗓️ الأرشيف الشهري';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="adminGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  const { data, error } = await sb.from('monthly_accounting_reports')
+    .select('id, month_label, report_year, report_month, generated_at')
+    .eq('scope', 'platform')
+    .order('report_year', { ascending:false }).order('report_month', { ascending:false });
+  clearTimeout(_lt);
+  if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) {
+    bodyEl.innerHTML = backBtn + `
+      <div style="text-align:center;padding:24px;color:var(--ink-dim)">
+        <div style="font-size:32px;margin-bottom:8px">🗓️</div>
+        لا توجد تقارير شهرية بعد<br>
+        <span style="font-size:12px">يُنشأ تقرير جديد تلقائيًا في اليوم الأول من كل شهر ميلادي عن الشهر السابق</span>
+      </div>`;
+    return;
+  }
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">🗓️ تقرير شامل للمنصة يُنشأ تلقائيًا كل يوم 1 ميلادي عن الشهر الذي فات.</div>
+    ${data.map(r => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div><b style="font-size:14px">تقرير شهر ${escapeHtml(r.month_label)}</b><div style="font-size:11px;color:var(--ink-dim)">أُنشئ بتاريخ ${new Date(r.generated_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}</div></div>
+        <button class="btn btn-brand btn-sm" onclick="downloadAdminMonthlyReport(${r.id}, '${escapeHtml(r.month_label)}')">📥 تحميل</button>
+      </div>`).join('')}
+  `;
+}
+
+async function downloadAdminMonthlyReport(reportId, monthLabel){
+  showToast('جارٍ التحميل...');
+  const { data, error } = await sb.from('monthly_accounting_reports').select('csv_content').eq('id', reportId).maybeSingle();
+  if (error || !data) { showToast('تعذّر تحميل التقرير', 'error'); return; }
+  const blob = new Blob([data.csv_content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-المنصة-${monthLabel}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم التحميل ✓');
+}
+
+async function exportAdminAccountingReport(){
+  showToast('جارٍ تجهيز التقرير...');
+  const [{ data: commSetting }, { data: bookings }, { data: payoutRows }] = await Promise.all([
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
+    sb.from('bookings').select('booking_date, total_price, refunded_amount, status, fields(name, facilities(name, owner_id, profiles(name)))').in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').order('booking_date'),
+    sb.from('payouts').select('net_amount, facility_id, facilities(name)')
+  ]);
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  // تجميع حسب المنشأة
+  const byFacility = {};
+  (bookings||[]).forEach(b => {
+    const facName = b.fields?.facilities?.name || 'غير محدد';
+    const ownerName = b.fields?.facilities?.profiles?.name || '—';
+    if (!byFacility[facName]) byFacility[facName] = { ownerName, gross: 0, count: 0 };
+    byFacility[facName].gross += (Number(b.total_price||0) - Number(b.refunded_amount||0));
+    byFacility[facName].count += 1;
+  });
+  const payoutsByFacility = {};
+  (payoutRows||[]).forEach(p => {
+    const facName = p.facilities?.name || 'غير محدد';
+    payoutsByFacility[facName] = (payoutsByFacility[facName]||0) + Number(p.net_amount||0);
+  });
+
+  let csv = '\uFEFF'; // BOM لدعم العربي بإكسل
+  csv += 'المنشأة,المالك,عدد الحجوزات,إجمالي الحجوزات (ريال),عمولة المنصة (ريال),صافي مستحق للمالك (ريال),تم تحويله فعليًا (ريال)\n';
+
+  let grandTotalGross = 0, grandTotalCommission = 0, grandTotalNet = 0, grandTotalPaid = 0;
+  Object.entries(byFacility).sort((a,b) => b[1].gross - a[1].gross).forEach(([facName, d]) => {
+    const gross = Math.round(d.gross * 100) / 100;
+    const commission = Math.round(gross * (commissionPct/100) * 100) / 100;
+    const net = Math.round((gross - commission) * 100) / 100;
+    const paid = Math.round((payoutsByFacility[facName]||0) * 100) / 100;
+    csv += `${escapeHtml(facName)},${escapeHtml(d.ownerName)},${d.count},${gross},${commission},${net},${paid}\n`;
+    grandTotalGross += gross; grandTotalCommission += commission; grandTotalNet += net; grandTotalPaid += paid;
+  });
+
+  grandTotalGross = Math.round(grandTotalGross*100)/100;
+  grandTotalCommission = Math.round(grandTotalCommission*100)/100;
+  grandTotalNet = Math.round(grandTotalNet*100)/100;
+  grandTotalPaid = Math.round(grandTotalPaid*100)/100;
+  const outstandingPayouts = Math.round((grandTotalNet - grandTotalPaid)*100)/100;
+
+  csv += `\nملخص,,,${grandTotalGross},${grandTotalCommission},${grandTotalNet},${grandTotalPaid}\n`;
+  csv += `\nبند,,,,,,القيمة (ريال)\n`;
+  csv += `إجمالي حجوزات المنصة,,,,,,${grandTotalGross}\n`;
+  csv += `إجمالي عمولة المنصة (إيراد المنصة) (${commissionPct}%),,,,,,${grandTotalCommission}\n`;
+  csv += `إجمالي مستحق لأصحاب الملاعب,,,,,,${grandTotalNet}\n`;
+  csv += `إجمالي ما تم تحويله فعليًا,,,,,,${grandTotalPaid}\n`;
+  csv += `تحويلات معلّقة لم تُنفَّذ بعد,,,,,,${outstandingPayouts}\n`;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-المنصة-${riyadhTodayStr()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم تحميل التقرير ✓');
 }
 
 function showSiteAnalytics(){
@@ -5274,32 +5393,89 @@ async function showRevenueForecast(){
   `;
 }
 
+// ── الأرشيف الشهري: يعرض التقارير المُنشأة تلقائيًا كل يوم 1 ميلادي عن الشهر السابق ──
+async function showOwnerMonthlyReports(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🗓️ الأرشيف الشهري';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data, error } = await sb.from('monthly_accounting_reports')
+    .select('id, month_label, report_year, report_month, generated_at')
+    .eq('scope', 'owner').eq('owner_id', user.id)
+    .order('report_year', { ascending:false }).order('report_month', { ascending:false });
+  clearTimeout(_lt);
+  if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) {
+    bodyEl.innerHTML = backBtn + `
+      <div style="text-align:center;padding:24px;color:var(--ink-dim)">
+        <div style="font-size:32px;margin-bottom:8px">🗓️</div>
+        لا توجد تقارير شهرية بعد<br>
+        <span style="font-size:12px">يُنشأ تقرير جديد تلقائيًا في اليوم الأول من كل شهر ميلادي عن الشهر السابق</span>
+      </div>`;
+    return;
+  }
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">🗓️ تقرير جديد يُنشأ تلقائيًا كل يوم 1 ميلادي عن الشهر الذي فات — لا حاجة لأي إجراء منك.</div>
+    ${data.map(r => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div><b style="font-size:14px">تقرير شهر ${escapeHtml(r.month_label)}</b><div style="font-size:11px;color:var(--ink-dim)">أُنشئ بتاريخ ${new Date(r.generated_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}</div></div>
+        <button class="btn btn-brand btn-sm" onclick="downloadMonthlyReport(${r.id}, '${escapeHtml(r.month_label)}')">📥 تحميل</button>
+      </div>`).join('')}
+  `;
+}
+
+// ── يحمّل نص CSV المخزَّن مسبقًا لتقرير شهري معيّن ويبدأ التنزيل ──
+async function downloadMonthlyReport(reportId, monthLabel){
+  showToast('جارٍ التحميل...');
+  const { data, error } = await sb.from('monthly_accounting_reports').select('csv_content').eq('id', reportId).maybeSingle();
+  if (error || !data) { showToast('تعذّر تحميل التقرير', 'error'); return; }
+  const blob = new Blob([data.csv_content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-${monthLabel}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم التحميل ✓');
+}
+
 // ── تصدير تقرير محاسبي (CSV) — الإيرادات والمصاريف لفترة محددة ──
 async function exportAccountingReport(){
   showToast('جارٍ تجهيز التقرير...');
   const { data: { user } } = await sb.auth.getUser();
   const myFieldIds = await getMyFieldIds();
-  const [{ data: bookings }, { data: expenses }] = await Promise.all([
+  const [{ data: bookings }, { data: expenses }, { data: commSetting }] = await Promise.all([
     myFieldIds.length ? sb.from('bookings').select('booking_date, total_price, refunded_amount, status, fields(name)').in('field_id', myFieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').order('booking_date') : Promise.resolve({data:[]}),
-    sb.from('facility_expenses').select('expense_date, category, amount, note, facilities(name)').eq('owner_id', user.id).order('expense_date')
+    sb.from('facility_expenses').select('expense_date, category, amount, note, facilities(name)').eq('owner_id', user.id).order('expense_date'),
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
   ]);
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
 
   let csv = '\uFEFF'; // BOM لدعم العربي بإكسل
-  csv += 'النوع,التاريخ,البيان,المبلغ (ريال)\n';
+  csv += 'النوع,التاريخ,البيان,المبلغ الإجمالي (ريال),عمولة المنصة (ريال),الصافي لك (ريال)\n';
   (bookings||[]).forEach(b => {
-    const net = Math.round((Number(b.total_price||0) - Number(b.refunded_amount||0)) * 100) / 100;
+    const gross = Math.round((Number(b.total_price||0) - Number(b.refunded_amount||0)) * 100) / 100;
+    const commission = Math.round(gross * (commissionPct/100) * 100) / 100;
+    const net = Math.round((gross - commission) * 100) / 100;
     const label = (b.status === 'cancelled' && Number(b.refunded_amount||0) > 0)
       ? `حجز ملغي (استُرجع ${b.refunded_amount} من ${b.total_price}) - ${escapeHtml(b.fields?.name)||''}`
       : `حجز - ${escapeHtml(b.fields?.name)||''}`;
-    csv += `إيراد,${b.booking_date},${label},${net}\n`;
+    csv += `إيراد,${b.booking_date},${label},${gross},-${commission},${net}\n`;
   });
-  (expenses||[]).forEach(e => { csv += `مصروف,${e.expense_date},${escapeHtml(e.category)} - ${escapeHtml(e.facilities?.name)||'عام'}${e.note?' ('+escapeHtml(e.note)+')':''},-${e.amount}\n`; });
+  (expenses||[]).forEach(e => { csv += `مصروف,${e.expense_date},${escapeHtml(e.category)} - ${escapeHtml(e.facilities?.name)||'عام'}${e.note?' ('+escapeHtml(e.note)+')':''},-${e.amount},,-${e.amount}\n`; });
 
-  const totalRevenue = (bookings||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+  const totalGross = (bookings||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+  const totalCommission = Math.round(totalGross * (commissionPct/100) * 100) / 100;
+  const totalNetFromBookings = Math.round((totalGross - totalCommission) * 100) / 100;
   const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
-  csv += `\nالإجمالي,,إجمالي الإيرادات,${totalRevenue}\n`;
-  csv += `الإجمالي,,إجمالي المصاريف,-${totalExpenses}\n`;
-  csv += `الإجمالي,,صافي الربح,${Math.round((totalRevenue-totalExpenses)*100)/100}\n`;
+  const finalNetProfit = Math.round((totalNetFromBookings - totalExpenses) * 100) / 100;
+
+  csv += `\nملخص,,إجمالي الإيرادات (قبل عمولة المنصة),${Math.round(totalGross*100)/100},,\n`;
+  csv += `ملخص,,عمولة المنصة (${commissionPct}%),,-${totalCommission},\n`;
+  csv += `ملخص,,صافي مستحق لك من الحجوزات,,,${totalNetFromBookings}\n`;
+  csv += `ملخص,,إجمالي المصاريف المسجّلة,,,-${totalExpenses}\n`;
+  csv += `ملخص,,صافي الربح النهائي,,,${finalNetProfit}\n`;
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
