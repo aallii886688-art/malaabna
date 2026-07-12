@@ -2419,6 +2419,7 @@ async function doLookup() {
   const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   box.innerHTML = `
     <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);margin-bottom:4px"><span style="color:var(--ink-dim)">رقم الحجز</span><b class="mono" style="color:var(--brand)">#${data.id}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${escapeHtml(data.fields?.name)||'—'}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ</span><b>${data.booking_date}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الوقت</span><b>${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</b></div>
@@ -2945,7 +2946,7 @@ async function renderOwnerBookingsTab(){
   const myFieldIds = await getMyFieldIds();
   if (!myFieldIds.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
   const { data, error } = await sb.from('bookings')
-    .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, guest_name, guest_phone, profiles(name, phone), fields(name)')
+    .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, guest_name, guest_phone, payment_status, amount_paid, verify_token, checked_in, checked_in_at, created_at, profiles(name, phone), fields(name, price_per_hour, facilities(name, city, district))')
     .in('field_id', myFieldIds).order('booking_date', { ascending: false });
   if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
   clearTimeout(window._tabLoadTimer);
@@ -2978,13 +2979,29 @@ function renderOwnerBookingsView(){
 function ownerBookingCardHtml(b){
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+  const paymentStatusMap = { unpaid:'غير مدفوع', partial:'مدفوع جزئيًا', paid:'مدفوع بالكامل', refunded:'مسترجع' };
   return `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
-        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="toggleBookingDetails(${b.id})">
+        <div><b>${escapeHtml(b.fields?.name)||'—'}</b> <span class="mono" style="font-size:12px;color:var(--ink-dim)">#${b.id}</span><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+          <span id="chevron-${b.id}" style="color:var(--ink-dim);font-size:13px;transition:transform .2s">▾</span>
+        </div>
       </div>
       <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''} - ${b.end_time?formatTime12(b.end_time):''} · 👥 ${b.players_count||''} لاعب</div>
+
+      <div id="details-${b.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المنشأة</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.name)||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">الموقع</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.district)||''}، ${escapeHtml(b.fields?.facilities?.city)||''}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">جوال المتصل</span><b style="font-size:12.5px" class="mono">${escapeHtml(b.profiles?.phone || b.guest_phone)||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">حالة الدفع</span><b style="font-size:12.5px">${paymentStatusMap[b.payment_status]||b.payment_status||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المدفوع</span><b style="font-size:12.5px">${b.amount_paid||0} من ${b.total_price} ريال</b></div>
+        ${Number(b.refunded_amount||0)>0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المسترجع</span><b style="font-size:12.5px;color:var(--danger)">${b.refunded_amount} ريال</b></div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تسجيل الحضور</span><b style="font-size:12.5px">${b.checked_in ? ('✅ ' + (b.checked_in_at ? new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '')) : '⏳ لم يسجّل بعد'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تاريخ إنشاء الحجز</span><b style="font-size:12.5px">${b.created_at ? new Date(b.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>
+      </div>
+
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
         <span style="color:var(--flood);font-weight:700">
           ${Number(b.refunded_amount||0) > 0
@@ -3914,7 +3931,7 @@ async function renderPlayerOverviewTab(){
 async function renderPlayerBookingsTab(highlightBookingId){
   const { data, error } = await sb
     .from('bookings')
-    .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, verify_token, checked_in, fields(name, facilities(name, city))')
+    .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, verify_token, checked_in, checked_in_at, players_count, refunded_amount, created_at, fields(name, price_per_hour, facilities(name, city, district))')
     .order('id', { ascending: false });
   clearTimeout(window._tabLoadTimer);
   if (error) { playerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
@@ -3938,13 +3955,30 @@ async function renderPlayerBookingsTab(highlightBookingId){
     const pct = b.total_price>0 ? Math.min(100, Math.round((b.amount_paid/b.total_price)*100)) : 0;
     const needsMore = b.is_split && b.status==='pending' && b.payment_status!=='paid';
     const isHighlighted = highlightBookingId && String(b.id) === String(highlightBookingId);
+    const paymentStatusMap = { unpaid:'غير مدفوع', partial:'مدفوع جزئيًا', paid:'مدفوع بالكامل', refunded:'مسترجع' };
     return `
     <div id="booking-card-${b.id}" style="padding:14px;background:var(--bg-soft);border:1px solid ${isHighlighted ? 'var(--brand)' : 'var(--line)'};border-radius:12px;margin-bottom:10px${isHighlighted ? ';box-shadow:0 0 0 2px var(--brand)' : ''}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-        <div><b>${escapeHtml(b.fields?.name)||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.fields?.facilities?.city)||''}</div></div>
-        <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;cursor:pointer" onclick="toggleBookingDetails(${b.id})">
+        <div><b>${escapeHtml(b.fields?.name)||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.fields?.facilities?.city)||''} · <span class="mono">#${b.id}</span></div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+          <span id="chevron-${b.id}" style="color:var(--ink-dim);font-size:13px;transition:transform .2s">▾</span>
+        </div>
       </div>
       <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</div>
+
+      <div id="details-${b.id}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المنشأة</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.name)||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">الحي</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.district)||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">عدد اللاعبين</span><b style="font-size:12.5px">${b.players_count||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">سعر الساعة</span><b style="font-size:12.5px">${b.fields?.price_per_hour||'—'} ريال</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">حالة الدفع</span><b style="font-size:12.5px">${paymentStatusMap[b.payment_status]||b.payment_status}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المدفوع</span><b style="font-size:12.5px">${b.amount_paid||0} من ${b.total_price} ريال</b></div>
+        ${Number(b.refunded_amount||0)>0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المسترجع</span><b style="font-size:12.5px;color:var(--danger)">${b.refunded_amount} ريال</b></div>` : ''}
+        ${b.checked_in ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">وقت تسجيل الحضور</span><b style="font-size:12.5px">${b.checked_in_at ? new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تاريخ إنشاء الحجز</span><b style="font-size:12.5px">${b.created_at ? new Date(b.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>
+      </div>
+
       ${b.status==='confirmed' ? `
         <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showBookingQR(${b.id},'${b.verify_token}')">
           ${b.checked_in ? '✅ تم تسجيل الحضور' : '📱 عرض رمز الدخول'}
@@ -4097,6 +4131,16 @@ async function renderPlayerLookupTab(){
     <button class="btn btn-brand btn-block" onclick="doLookup()">استعلام</button>
     <div id="lookupResult" style="margin-top:16px"></div>
   `;
+}
+
+// ── يفتح/يقفل قسم التفاصيل الموسّعة داخل بطاقة الحجز نفسها (بدون تنقل لصفحة أخرى) — مستخدمة من اللاعب وصاحب الملعب والأدمن ──
+function toggleBookingDetails(bookingId){
+  const details = document.getElementById('details-' + bookingId);
+  const chevron = document.getElementById('chevron-' + bookingId);
+  if (!details) return;
+  const isOpen = details.style.display !== 'none';
+  details.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
 }
 
 // ── تحليلات صاحب الملعب (لملاعبه فقط) ──
@@ -4573,21 +4617,42 @@ async function adminView(kind) {
   else if (kind === 'bookings') {
     titleEl.textContent = '📅 الحجوزات';
     const { data, error } = await sb.from('bookings')
-      .select('id, booking_date, start_time, status, total_price, refunded_amount, profiles(name, phone), fields(name)')
+      .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, payment_status, amount_paid, players_count, checked_in, checked_in_at, created_at, guest_name, guest_phone, profiles(name, phone), fields(name, price_per_hour, facilities(name, city, district, owner_id))')
       .order('booking_date', { ascending:false }).limit(50);
     if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
     if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
     const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
     const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+    const paymentStatusMap = { unpaid:'غير مدفوع', partial:'مدفوع جزئيًا', paid:'مدفوع بالكامل', refunded:'مسترجع' };
     clearTimeout(_lt);
-    bodyEl.innerHTML = backBtn + data.map(b => `
+    bodyEl.innerHTML = backBtn + `
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input id="admin-booking-search" type="number" placeholder="ابحث برقم الحجز #..." onkeydown="if(event.key==='Enter')adminSearchBookingById()" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        <button class="btn btn-soft btn-sm" onclick="adminSearchBookingById()">بحث</button>
+      </div>
+      <div id="admin-bookings-list">` + data.map(b => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name)||''} · ${escapeHtml(b.profiles?.phone)||''}</div></div>
-          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="toggleBookingDetails(${b.id})">
+          <div><b>${escapeHtml(b.fields?.name)||'—'}</b> <span class="mono" style="font-size:12px;color:var(--ink-dim)">#${b.id}</span><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+            <span id="chevron-${b.id}" style="color:var(--ink-dim);font-size:13px;transition:transform .2s">▾</span>
+          </div>
         </div>
         <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''}</div>
         ${b.status==='pending' ? `<div style="font-size:11px;color:var(--ink-dim);margin-top:4px">⏳ بانتظار اكتمال الدفع الإلكتروني — يتأكد تلقائيًا فور الدفع</div>` : ''}
+
+        <div id="details-${b.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المنشأة</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.name)||'—'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">الموقع</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.district)||''}، ${escapeHtml(b.fields?.facilities?.city)||''}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">عدد اللاعبين</span><b style="font-size:12.5px">${b.players_count||'—'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">حالة الدفع</span><b style="font-size:12.5px">${paymentStatusMap[b.payment_status]||b.payment_status||'—'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المدفوع</span><b style="font-size:12.5px">${b.amount_paid||0} من ${b.total_price} ريال</b></div>
+          ${Number(b.refunded_amount||0)>0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المسترجع</span><b style="font-size:12.5px;color:var(--danger)">${b.refunded_amount} ريال</b></div>` : ''}
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تسجيل الحضور</span><b style="font-size:12.5px">${b.checked_in ? ('✅ ' + (b.checked_in_at ? new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '')) : '⏳ لم يسجّل بعد'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تاريخ إنشاء الحجز</span><b style="font-size:12.5px">${b.created_at ? new Date(b.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>
+        </div>
+
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="color:var(--flood);font-weight:700">
             ${Number(b.refunded_amount||0) > 0
@@ -4599,7 +4664,7 @@ async function adminView(kind) {
             ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="adminSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
           </div>
         </div>
-      </div>`).join('');
+      </div>`).join('') + `</div>`;
   }
 
   else if (kind === 'reviews') {
@@ -5413,6 +5478,29 @@ async function ownerControl(userId, newRole) {
   } catch(e){}
   showToast('تم التحديث ✓');
   adminView('users');
+}
+
+// ── بحث سريع برقم الحجز داخل لوحة الأدمن — يفيد عند استفسار لاعب أو صاحب ملعب برقم معيّن ──
+async function adminSearchBookingById(){
+  const id = document.getElementById('admin-booking-search')?.value.trim();
+  const listEl = document.getElementById('admin-bookings-list');
+  if (!id) { adminView('bookings'); return; }
+  const { data, error } = await sb.from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, profiles(name, phone), fields(name, facilities(name, city))')
+    .eq('id', id).maybeSingle();
+  if (error || !data) { listEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">لم يُعثر على حجز برقم #${escapeHtml(id)}</div>`; return; }
+  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  listEl.innerHTML = `
+    <div style="background:var(--brand-soft);border:1px solid rgba(57,255,20,.3);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);margin-bottom:4px"><span style="color:var(--ink-dim)">رقم الحجز</span><b class="mono" style="color:var(--brand)">#${data.id}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${escapeHtml(data.fields?.name)||'—'} (${escapeHtml(data.fields?.facilities?.city)||''})</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">اللاعب</span><b>${escapeHtml(data.profiles?.name)||'—'} · ${escapeHtml(data.profiles?.phone)||''}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ والوقت</span><b>${data.booking_date} · ${formatTime12(data.start_time)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${statusMap[data.status]||data.status}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">المبلغ</span><b style="color:var(--flood)">${data.total_price} ريال</b></div>
+    </div>
+    <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" onclick="adminView('bookings')">← عرض كل الحجوزات</button>
+  `;
 }
 
 async function adminCancelBooking(bookingId) {
