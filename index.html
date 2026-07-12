@@ -2254,7 +2254,7 @@ async function showItemReviews(kind, itemId){
           <span style="color:var(--flood);font-size:13px">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
         </div>
         ${r.comment ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">${escapeHtml(r.comment)}</div>` : ''}
-        <div style="font-size:10.5px;color:var(--ink-dim);margin-top:6px">${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</div>
+        <div style="font-size:10.5px;color:var(--ink-dim);margin-top:6px">${new Date(r.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}</div>
       </div>`).join('')}
   `;
 }
@@ -2300,7 +2300,7 @@ async function checkVerifyLink(){
       <div class="srow tot"><span>حالة الحجز</span><span class="amt">${bookingStatusLabel(b, statusMap)}</span></div>
     </div>
     ${b.checked_in
-      ? `<div class="legal-note">✅ تم تسجيل حضور هذا الحجز مسبقًا بتاريخ ${new Date(b.checked_in_at).toLocaleString('ar-SA-u-nu-latn')}</div>`
+      ? `<div class="legal-note">✅ تم تسجيل حضور هذا الحجز مسبقًا بتاريخ ${new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn')}</div>`
       : (b.status==='confirmed'
         ? `<button class="btn btn-brand btn-block" onclick="confirmCheckin(${b.id})">✅ تأكيد الحضور الآن</button>`
         : `<div class="legal-note">⚠️ هذا الحجز مو مؤكد بعد — ما يمكن تسجيل الحضور له</div>`)}
@@ -2444,7 +2444,7 @@ async function showNotifications() {
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:14px">${escapeHtml(n.title)}</div>
             ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${escapeHtml(n.body)}</div>`:''}
-            <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
+            <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn')}</div>
           </div>
         </div>
       </div>`).join('');
@@ -2664,7 +2664,7 @@ async function renderOwnerOverviewTab(){
     const now = riyadhNow(); const day = now.getUTCDay();
     const daysToNext = [ (3-day+7)%7 || 7, (0-day+7)%7 || 7 ].sort((a,b)=>a-b)[0];
     const nd = new Date(now); nd.setUTCDate(now.getUTCDate() + daysToNext);
-    nextPayoutDate = nd.toLocaleDateString('ar-SA-u-nu-latn', { weekday:'long', day:'numeric', month:'long', timeZone:'UTC' });
+    nextPayoutDate = nd.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday:'long', day:'numeric', month:'long', timeZone:'UTC' });
   }
 
   clearTimeout(window._tabLoadTimer);
@@ -2862,7 +2862,8 @@ async function renderOwnerFinanceTab(){
 
     <div class="dlabel">📊 التحليلات والتوقعات</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerAnalytics()">📈 تحليلات الإيرادات</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showRevenueForecast()">🔮 توقّع إيرادات الشهر القادم</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showRevenueForecast()">🔮 توقّع إيرادات الشهر القادم</button>
+    ${myFieldIds.length > 1 ? `<button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showFieldsComparison()">⚖️ مقارنة أداء ملاعبي</button>` : '<div style="margin-bottom:12px"></div>'}
 
     <div class="dlabel">💸 المصاريف والتقارير</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showFacilityExpenses()">📋 تسجيل ومتابعة المصاريف</button>
@@ -2874,6 +2875,61 @@ async function renderOwnerFinanceTab(){
 
     <div class="dlabel">🎟️ العروض والخصومات</div>
     <button class="btn btn-soft btn-block" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
+  `;
+}
+
+// ── مقارنة أداء الملاعب المتعددة لنفس المالك: إيرادات، عدد حجوزات، ومتوسط تقييم لكل ملعب ──
+async function showFieldsComparison(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '⚖️ مقارنة أداء ملاعبي';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  const { myFacilities } = await getMyFacilitiesData();
+  const allFields = myFacilities.flatMap(f => (f.fields||[]).filter(fd=>!fd.is_deleted).map(fd => ({...fd, facilityName: f.name})));
+  if (!allFields.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد ملاعب بعد</div>'; return; }
+
+  const fieldIds = allFields.map(f=>f.id);
+  const firstOfMonth = riyadhTodayStr().slice(0,7) + '-01';
+  const [{ data: bookingsRows }, { data: reviewRows }] = await Promise.all([
+    sb.from('bookings').select('field_id, total_price, refunded_amount, status, payment_status, booking_date').in('field_id', fieldIds).gte('booking_date', firstOfMonth),
+    sb.from('reviews').select('field_id, rating').in('field_id', fieldIds)
+  ]);
+  clearTimeout(_lt);
+
+  const statsByField = {};
+  fieldIds.forEach(id => statsByField[id] = { revenue:0, count:0, ratingSum:0, ratingCount:0 });
+  (bookingsRows||[]).forEach(b => {
+    const st = statsByField[b.field_id]; if (!st) return;
+    if (['confirmed','completed','cancelled'].includes(b.status) && b.payment_status !== 'unpaid') {
+      st.revenue += (Number(b.total_price||0) - Number(b.refunded_amount||0));
+    }
+    if (b.status !== 'cancelled') st.count++;
+  });
+  (reviewRows||[]).forEach(r => { const st = statsByField[r.field_id]; if (!st) return; st.ratingSum += r.rating; st.ratingCount++; });
+
+  const rows = allFields.map(f => {
+    const st = statsByField[f.id];
+    return { ...f, revenue: Math.round(st.revenue*100)/100, count: st.count, avgRating: st.ratingCount ? Math.round((st.ratingSum/st.ratingCount)*10)/10 : null };
+  }).sort((a,b) => b.revenue - a.revenue);
+
+  const maxRevenue = Math.max(1, ...rows.map(r=>r.revenue));
+
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">📊 مقارنة إيرادات الشهر الحالي وعدد الحجوزات لكل ملعب — الملعب الأعلى إيرادًا بالأعلى.</div>
+    ${rows.map((r,i) => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div>${i===0 && r.revenue>0 ? '🥇 ' : ''}<b>${escapeHtml(r.name)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(r.facilityName)}</div></div>
+          <div style="text-align:left">
+            <div style="font-weight:900;color:var(--brand)">${r.revenue} ريال</div>
+            <div style="font-size:11px;color:var(--ink-dim)">${r.count} حجز${r.avgRating!=null?` · ⭐ ${r.avgRating}`:''}</div>
+          </div>
+        </div>
+        <div style="background:var(--bg-elev);border-radius:8px;height:8px;overflow:hidden">
+          <div style="height:100%;width:${Math.round((r.revenue/maxRevenue)*100)}%;background:var(--brand)"></div>
+        </div>
+      </div>`).join('')}
   `;
 }
 
@@ -2892,11 +2948,37 @@ async function renderOwnerBookingsTab(){
     .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, guest_name, guest_phone, profiles(name, phone), fields(name)')
     .in('field_id', myFieldIds).order('booking_date', { ascending: false });
   if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
-  if (!data || !data.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`; return; }
+  clearTimeout(window._tabLoadTimer);
+  window._ownerBookingsCache = data || [];
+  window._ownerBookingsView = window._ownerBookingsView || 'list';
+  renderOwnerBookingsView();
+}
+
+function ownerBookingsToggleHtml(){
+  const v = window._ownerBookingsView || 'list';
+  return `<div style="display:flex;gap:6px;margin-bottom:14px">
+    <button class="btn ${v==='list'?'btn-brand':'btn-ghost'} btn-sm" style="flex:1" onclick="setOwnerBookingsView('list')">📋 قائمة</button>
+    <button class="btn ${v==='calendar'?'btn-brand':'btn-ghost'} btn-sm" style="flex:1" onclick="setOwnerBookingsView('calendar')">🗓️ تقويم الأسبوع</button>
+  </div>`;
+}
+function setOwnerBookingsView(v){ window._ownerBookingsView = v; window._ownerCalendarWeekOffset = 0; renderOwnerBookingsView(); }
+
+function renderOwnerBookingsView(){
+  const data = window._ownerBookingsCache || [];
+  if (!data.length) {
+    ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`;
+    return;
+  }
+  const view = window._ownerBookingsView || 'list';
+  ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>`
+    + ownerBookingsToggleHtml()
+    + (view === 'calendar' ? ownerBookingsCalendarHtml(data) : data.map(ownerBookingCardHtml).join(''));
+}
+
+function ownerBookingCardHtml(b){
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
-  clearTimeout(window._tabLoadTimer);
-  ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>` + data.map(b => `
+  return `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
@@ -2914,7 +2996,52 @@ async function renderOwnerBookingsTab(){
           ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="ownerSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+}
+
+// ── عرض تقويم أسبوعي: يجمّع حجوزات صاحب الملعب حسب اليوم، مع تنقّل بين الأسابيع ──
+function ownerBookingsCalendarHtml(data){
+  window._ownerCalendarWeekOffset = window._ownerCalendarWeekOffset || 0;
+  const byDate = {};
+  data.forEach(b => { (byDate[b.booking_date] = byDate[b.booking_date] || []).push(b); });
+
+  const today = riyadhNow();
+  const weekStart = new Date(today);
+  weekStart.setUTCDate(today.getUTCDate() - today.getUTCDay() + (window._ownerCalendarWeekOffset * 7));
+
+  const statusDot = { pending:'var(--flood)', confirmed:'var(--brand)', cancelled:'var(--danger)', completed:'var(--ink-dim)' };
+  let daysHtml = '';
+  for (let i=0;i<7;i++){
+    const d = new Date(weekStart); d.setUTCDate(weekStart.getUTCDate()+i);
+    const dStr = d.toISOString().split('T')[0];
+    const dayBookings = (byDate[dStr]||[]).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+    const isToday = dStr === riyadhTodayStr();
+    daysHtml += `
+      <div style="background:var(--bg-soft);border:1px solid ${isToday?'var(--brand)':'var(--line)'};border-radius:10px;padding:10px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:800;margin-bottom:6px;color:${isToday?'var(--brand)':'var(--ink)'}">${dayNames[d.getUTCDay()]} ${d.getUTCDate()}/${d.getUTCMonth()+1}${isToday?' · اليوم':''}</div>
+        ${dayBookings.length ? dayBookings.map(b => `
+          <div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-top:1px solid var(--line-soft);cursor:pointer" onclick="ownerBookingsJumpToCard(${b.id})">
+            <span style="width:8px;height:8px;border-radius:50%;background:${statusDot[b.status]||'var(--ink-dim)'};flex-shrink:0"></span>
+            <span style="font-size:11.5px;color:var(--ink-soft);flex-shrink:0">${formatTime12(b.start_time)}</span>
+            <span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(b.fields?.name)||''}</span>
+          </div>`).join('') : '<div style="font-size:11.5px;color:var(--ink-dim);padding:4px 0">لا حجوزات</div>'}
+      </div>`;
+  }
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" onclick="shiftOwnerCalendarWeek(-1)">→ الأسبوع السابق</button>
+      <button class="btn btn-ghost btn-sm" onclick="shiftOwnerCalendarWeek(1)">الأسبوع القادم ←</button>
+    </div>
+    ${daysHtml}
+  `;
+}
+function shiftOwnerCalendarWeek(delta){
+  window._ownerCalendarWeekOffset = (window._ownerCalendarWeekOffset||0) + delta;
+  renderOwnerBookingsView();
+}
+function ownerBookingsJumpToCard(bookingId){
+  setOwnerBookingsView('list');
 }
 
 // ── حجز يدوي (هاتفي/حضوري) — يحجز الخانة فورًا، لكن ما يتأكد إلا بدفع إلكتروني حقيقي عبر المنصة ──
@@ -4163,7 +4290,13 @@ async function renderAdminOverviewTab(){
   const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
   const commissionPct = commSetting ? Number(commSetting.value) : 20;
 
-  const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFacCount }, { count: pendingAcadCount }, { count: pendingTournCount }, { data: earnRows }, { data: paidRows }, { data: smsRows }] = await Promise.all([
+  const today = riyadhNow();
+  const weekAgo = new Date(today); weekAgo.setUTCDate(today.getUTCDate()-7);
+  const twoWeeksAgo = new Date(today); twoWeeksAgo.setUTCDate(today.getUTCDate()-14);
+  const weekAgoIso = weekAgo.toISOString();
+  const twoWeeksAgoIso = twoWeeksAgo.toISOString();
+
+  const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFacCount }, { count: pendingAcadCount }, { count: pendingTournCount }, { data: earnRows }, { data: paidRows }, { data: smsRows }, { count: usersThisWeek }, { count: usersPrevWeek }, { count: bookingsThisWeek }, { count: bookingsPrevWeek }, { data: oldestPendingFac }] = await Promise.all([
     sb.from('profiles').select('*', { count: 'exact', head: true }),
     sb.from('facilities').select('*', { count: 'exact', head: true }),
     sb.from('bookings').select('*', { count: 'exact', head: true }),
@@ -4173,6 +4306,11 @@ async function renderAdminOverviewTab(){
     sb.from('bookings').select('total_price, refunded_amount').in('status', ['confirmed','completed','cancelled']).neq('payment_status','unpaid'),
     sb.from('booking_payments').select('id').eq('status','paid').limit(1),
     sb.from('sms_logs').select('id').eq('status','sent').limit(1),
+    sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
+    sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', twoWeeksAgoIso).lt('created_at', weekAgoIso),
+    sb.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
+    sb.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', twoWeeksAgoIso).lt('created_at', weekAgoIso),
+    sb.from('facilities').select('name, created_at').eq('approved', false).order('created_at', { ascending: true }).limit(1),
   ]);
   const totalPending = (pendingFacCount||0) + (pendingAcadCount||0) + (pendingTournCount||0);
   const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + (Number(b.total_price||0) - Number(b.refunded_amount||0)), 0);
@@ -4180,9 +4318,34 @@ async function renderAdminOverviewTab(){
   const paymentActive = (paidRows||[]).length > 0;
   const smsActive = (smsRows||[]).length > 0;
 
+  const growthPct = (curr, prev) => prev>0 ? Math.round(((curr-prev)/prev)*100) : (curr>0 ? 100 : 0);
+  const usersGrowth = growthPct(usersThisWeek||0, usersPrevWeek||0);
+  const bookingsGrowth = growthPct(bookingsThisWeek||0, bookingsPrevWeek||0);
+  const growthBadge = (pct) => `<span style="font-size:11px;font-weight:700;color:${pct>=0?'var(--brand)':'var(--danger)'}">${pct>=0?'▲':'▼'} ${Math.abs(pct)}%</span>`;
+
+  let oldestPendingDays = null, oldestPendingName = null;
+  if (oldestPendingFac && oldestPendingFac.length) {
+    oldestPendingName = oldestPendingFac[0].name;
+    oldestPendingDays = Math.floor((today - new Date(oldestPendingFac[0].created_at)) / (1000*60*60*24));
+  }
+
   clearTimeout(window._tabLoadTimer);
 
   document.getElementById('adminTabInner').innerHTML = `
+    <div class="dlabel">📈 النمو الأسبوعي</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:20px;font-weight:900">${usersThisWeek||0}</div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">مستخدم جديد هذا الأسبوع</div>
+        ${growthBadge(usersGrowth)}
+      </div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:20px;font-weight:900">${bookingsThisWeek||0}</div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">حجز جديد هذا الأسبوع</div>
+        ${growthBadge(bookingsGrowth)}
+      </div>
+    </div>
+
     <div class="dlabel">📊 الأرقام الأساسية</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
       <div class="stat-click" onclick="adminGoTab('users')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
@@ -4198,10 +4361,14 @@ async function renderAdminOverviewTab(){
 
     ${totalPending>0 ? `
     <div class="dlabel">⏳ يحتاج انتباهك</div>
-    <div class="stat-click" onclick="adminView('approvals')" style="background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+    <div class="stat-click" onclick="adminView('approvals')" style="background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:13px;font-weight:700">⏳ ${totalPending} عنصر بانتظار موافقتك</span>
       <span style="font-size:12px">راجع الآن ←</span>
-    </div>` : ''}
+    </div>
+    ${(oldestPendingDays!=null && oldestPendingDays>=3) ? `
+    <div class="stat-click" onclick="adminGoTab('facilities')" style="background:var(--danger-soft);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:16px">
+      <span style="font-size:12.5px;font-weight:700;color:var(--danger)">⚠️ منشأة "${escapeHtml(oldestPendingName)}" بانتظار الموافقة منذ ${oldestPendingDays} يوم</span>
+    </div>` : ''}` : ''}
 
     <div class="dlabel">💰 لمحة مالية</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
