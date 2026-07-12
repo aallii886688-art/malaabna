@@ -627,7 +627,7 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   <div class="dbody" id="drawerBody"></div>
 </div>
 
-<div class="modal" id="mConfirm">
+<div class="modal" id="mConfirm" style="z-index:1200">
   <div class="mcard">
     <div class="micon">✅</div>
     <h3 id="confirmTitle">تم تأكيد حجزك!</h3>
@@ -1524,7 +1524,7 @@ function showConfirmDialog(message, confirmLabel, onConfirmCallback){
   document.getElementById('confirmText').textContent = message;
   document.getElementById('receipt').innerHTML = `
     <div style="display:flex;gap:8px;margin-top:6px">
-      <button class="btn btn-ghost" style="flex:1" onclick="closeAll()">تراجع</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="_closeConfirmDialogOnly()">تراجع</button>
       <button class="btn btn-danger" style="flex:1" onclick="_confirmDialogAccept()">${escapeHtml(confirmLabel || 'تأكيد')}</button>
     </div>
   `;
@@ -1533,12 +1533,17 @@ function showConfirmDialog(message, confirmLabel, onConfirmCallback){
   document.getElementById('mConfirm').classList.add('open');
   document.getElementById('ov').classList.add('open');
 }
+// يقفل نافذة التأكيد فقط، ويبقي أي صفحة تحتها (مثل "حجوزاتي") مفتوحة كما كانت
+function _closeConfirmDialogOnly(){
+  window._pendingConfirmCallback = null;
+  document.getElementById('mConfirm').classList.remove('open');
+  const btn = document.querySelector('#mConfirm .btn-brand');
+  if (btn) btn.style.display = '';
+}
 function _confirmDialogAccept(){
   const cb = window._pendingConfirmCallback;
   window._pendingConfirmCallback = null;
-  closeAll();
-  const btn = document.querySelector('#mConfirm .btn-brand');
-  if (btn) btn.style.display = '';
+  _closeConfirmDialogOnly();
   if (typeof cb === 'function') cb();
 }
 function showToast(msg,type='success'){ const t=document.createElement('div'); t.className=`toast ${type}`;
