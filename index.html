@@ -1027,6 +1027,33 @@ async function openItem(type, id){
   active = DATA[type].find(x=>x.id===id);
   selDate=0; selSlot=null; playerCount=6;
   appliedCoupon=null; finalBookingPrice=null; bookingMode='solo';
+
+  // لو الملعب/الأكاديمية/البطولة مو موجود بالقائمة المحمّلة مسبقًا (مثلاً صار "مغلق" أو "تحت صيانة" بعد تحميل الصفحة)
+  // نتحقق مباشرة من قاعدة البيانات بدل ما نفتح شاشة فاضية بصمت
+  if (!active && type === 'stadiums' && window.sb) {
+    try {
+      const { data: fd } = await sb.from('fields').select('id, name, status, is_deleted').eq('id', id).maybeSingle();
+      if (!fd || fd.is_deleted) {
+        showToast('عذرًا، هذا الملعب لم يعد متاحًا','error');
+        return;
+      }
+      if (fd.status !== 'available') {
+        showToast(`عذرًا، ملعب "${fd.name}" مغلق مؤقتًا حاليًا — جرّب لاحقًا`,'error');
+        return;
+      }
+      // الملعب فعليًا متاح لكنه غير محمّل بالذاكرة بعد (حالة نادرة) — نطلب تحديث القائمة
+      showToast('جارٍ تحديث بيانات الملعب...','error');
+      if (window.loadRealFields) await window.loadRealFields();
+      active = DATA[type].find(x=>x.id===id);
+      if (!active) { showToast('تعذّر فتح الملعب — جرّب تحديث الصفحة','error'); return; }
+    } catch(e) {
+      showToast('تعذّر التحقق من حالة الملعب','error');
+      return;
+    }
+  }
+
+  if (!active) { showToast('عذرًا، هذا العنصر لم يعد متاحًا','error'); return; }
+
   if(type==='stadiums') await renderStadiumDrawer();
   else renderSimpleDrawer();
   document.getElementById('ov').classList.add('open');
@@ -1277,53 +1304,6 @@ async function setDate(i){ selDate=i; selSlot=null; appliedCoupon=null; finalBoo
 function setSlot(t){ selSlot=t; renderStadiumDrawer(true); }
 async function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); await renderStadiumDrawer(true); }
 
-function proceed(){
-  if(!loggedIn){ showToast('سجّل الدخول أولًا لإتمام العملية','error'); closeDrawer(); openAuth('login'); return; }
-  const it = active;
-  const isStadium = activeType==='stadiums';
-  let extraRow = '';
-  if(isStadium){
-    const split = calculateSmartSplit(it.price, playerCount);
-    extraRow = `<div class="r"><span>نصيب كل لاعب (${playerCount})</span><b>${split.sharePerPlayer} ر</b></div>`;
-  }
-  document.getElementById('confirmTitle').textContent = 'تأكيد الحجز';
-  document.getElementById('confirmText').textContent = 'الدفع الإلكتروني غير مفعّل بعد — احجز الآن وادفع نقدًا أو تحويلًا عند وصولك للملعب.';
-  document.querySelector('#mConfirm .micon').textContent = '📝';
-  document.getElementById('receipt').innerHTML = `
-    <div class="r"><span>الخدمة</span><b>${escapeHtml(it.name)}</b></div>
-    ${isStadium? `<div class="r"><span>الوقت</span><b>${formatTime12(selSlot)} - ${formatTime12((parseInt(selSlot)+1)+':00')}</b></div>`:''}
-    ${extraRow}
-    <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق عند الملعب</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
-  `;
-  const btn = document.querySelector('#mConfirm .btn-brand');
-  btn.textContent = `تأكيد الحجز`;
-  btn.onclick = finalizePayment;
-  closeDrawer();
-  document.getElementById('mConfirm').classList.add('open');
-  document.getElementById('ov').classList.add('open');
-}
-
-function finalizePayment(){
-  const it = active;
-  const isStadium = activeType==='stadiums';
-  const today = new Date(); today.setDate(today.getDate()+selDate);
-  const dateStr = isStadium? `${dayNames[today.getDay()]} ${today.getDate()}/${today.getMonth()+1}` : '—';
-  document.querySelector('#mConfirm .micon').textContent = '✅';
-  document.getElementById('confirmTitle').textContent = isStadium ? 'تم تأكيد حجزك!' : 'تم تسجيلك بنجاح!';
-  document.getElementById('confirmText').textContent = `احتفظ برقم الحجز، وادفع نقدًا أو تحويلًا عند وصولك ⚽`;
-  document.getElementById('receipt').innerHTML = `
-    <div class="r"><span>الخدمة</span><b>${escapeHtml(it.name)}</b></div>
-    ${isStadium? `<div class="r"><span>التاريخ</span><b>${dateStr}</b></div><div class="r"><span>الوقت</span><b>${formatTime12(selSlot)} - ${formatTime12((parseInt(selSlot)+1)+':00')}</b></div>`:''}
-    <div class="r"><span>رقم الحجز</span><b class="mono">#${Math.floor(10000+Math.random()*89999)}</b></div>
-    <div class="r"><span>طريقة الدفع</span><b>عند الملعب (نقدًا / تحويل)</b></div>
-    <div class="r" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>المبلغ المستحق</span><b style="color:var(--flood);font-size:16px">${it.price} ريال</b></div>
-  `;
-  const btn = document.querySelector('#mConfirm .btn-brand');
-  btn.textContent = 'تم';
-  btn.onclick = closeAll;
-  showToast(isStadium?'تم تأكيد الحجز ✓':'تم التسجيل ✓');
-}
-
 function openAuth(mode){ authTab(mode); document.getElementById('mAuth').classList.add('open'); document.getElementById('ov').classList.add('open'); }
 function authTab(mode){ authMode=mode;
   document.getElementById('tabLogin').classList.toggle('active',mode==='login');
@@ -1533,6 +1513,33 @@ function closeAll(){
   if (params.has('payment_confirm') || params.has('id') || params.has('verify') || params.has('join')) {
     history.replaceState(null, '', window.location.origin + window.location.pathname);
   }
+}
+
+// ── نافذة تأكيد مخصّصة بنفس تصميم التطبيق — بديل لنافذة confirm() الافتراضية بالمتصفح ──
+window._pendingConfirmCallback = null;
+function showConfirmDialog(message, confirmLabel, onConfirmCallback){
+  window._pendingConfirmCallback = onConfirmCallback;
+  document.querySelector('#mConfirm .micon').textContent = '❓';
+  document.getElementById('confirmTitle').textContent = 'تأكيد العملية';
+  document.getElementById('confirmText').textContent = message;
+  document.getElementById('receipt').innerHTML = `
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeAll()">تراجع</button>
+      <button class="btn btn-danger" style="flex:1" onclick="_confirmDialogAccept()">${escapeHtml(confirmLabel || 'تأكيد')}</button>
+    </div>
+  `;
+  const btn = document.querySelector('#mConfirm .btn-brand');
+  if (btn) btn.style.display = 'none';
+  document.getElementById('mConfirm').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+function _confirmDialogAccept(){
+  const cb = window._pendingConfirmCallback;
+  window._pendingConfirmCallback = null;
+  closeAll();
+  const btn = document.querySelector('#mConfirm .btn-brand');
+  if (btn) btn.style.display = '';
+  if (typeof cb === 'function') cb();
 }
 function showToast(msg,type='success'){ const t=document.createElement('div'); t.className=`toast ${type}`;
   t.innerHTML=`<span>${type==='success'?'✅':'⚠️'}</span><span>${msg}</span>`;
@@ -1833,7 +1840,6 @@ function initBackend() {
     showToast('تم إرسال رابط استعادة كلمة المرور لبريدك ✓');
   };
 
-  const _finalizePayment = window.finalizePayment;
   window.proceed = async function () {
     if (!loggedIn) { showToast('سجّل الدخول أولاً','error'); closeDrawer(); openAuth('login'); return; }
 
@@ -2262,7 +2268,6 @@ function showProfile() {
   openInfoModal('👤 الملف الشخصي', `
     <div style="text-align:center;margin-bottom:16px">
       <div id="profileAvatarBox">${avatarHtml(u.avatarUrl, u.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto')}</div>
-      <div style="font-size:18px;font-weight:800;margin-top:10px">${escapeHtml(u.name)}</div>
     </div>
     <div class="dlabel" style="justify-content:center">🖼️ الصورة الرمزية</div>
     <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">
@@ -2273,11 +2278,29 @@ function showProfile() {
       📷 ارفع صورتك الشخصية
       <input id="avatar-upload-input" type="file" accept="image/*" style="display:none" onchange="uploadPersonalAvatar(this)">
     </label>
+
+    <div class="dlabel" style="margin-top:18px">✏️ بياناتك</div>
+    <div class="field"><label>الاسم</label><input id="profile-name-input" type="text" value="${escapeHtml(u.name)}" placeholder="اسمك الكامل"></div>
+    <div class="field">
+      <label>رقم الجوال</label>
+      <input type="text" value="${escapeHtml(u.phone)||'—'}" disabled style="opacity:.6;cursor:not-allowed">
+      <div class="legal-note" style="margin-top:4px">🔒 تغيير رقم الجوال سيكون متاحًا قريبًا عبر رمز تحقق (OTP)</div>
+    </div>
+    <button class="btn btn-brand btn-block" onclick="saveProfileName()">💾 حفظ التغييرات</button>
+
     <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px">
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">الاسم</span><b>${escapeHtml(u.name)}</b></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span style="color:var(--ink-dim)">رقم الجوال</span><b>${escapeHtml(u.phone)||'—'}</b></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--ink-dim)">نوع الحساب</span><b>${u.role==='super_admin'?'🛡️ مالك':u.role==='owner'?'🏟️ صاحب ملعب':'⚽ لاعب'}</b></div>
     </div>`);
+}
+
+async function saveProfileName(){
+  const newName = document.getElementById('profile-name-input').value.trim();
+  if (!newName) { showToast('أدخل اسمًا صحيحًا','error'); return; }
+  const { error } = await sb.from('profiles').update({ name: newName }).eq('id', window.currentUser.id);
+  if (error) { showToast('تعذّر الحفظ: ' + error.message, 'error'); return; }
+  window.currentUser.name = newName;
+  showToast('تم حفظ التغييرات ✓');
+  if (typeof afterLogin === 'function') afterLogin();
 }
 
 async function setDefaultAvatar(kind){
@@ -2487,11 +2510,13 @@ async function cancelMyBooking(bookingId) {
   if (bk) {
     try {
       const { data: pct } = await sb.rpc('calc_refund_percent', { p_booking_date: bk.booking_date, p_start_time: bk.start_time });
-      refundNote = pct!=null ? `\n\nحسب سياسة الإلغاء، نسبة الاسترجاع المتوقعة: ${pct}%` : '';
+      refundNote = pct!=null ? ` (نسبة الاسترجاع المتوقعة: ${pct}%)` : '';
     } catch(e){}
   }
-  if (!confirm('هل تريد إلغاء هذا الحجز؟' + refundNote)) return;
+  showConfirmDialog('هل تريد إلغاء هذا الحجز؟' + refundNote, 'نعم، ألغِ الحجز', () => _executeCancelMyBooking(bookingId, bk));
+}
 
+async function _executeCancelMyBooking(bookingId, bk) {
   const wasPaid = bk?.payment_status === 'paid' || bk?.payment_status === 'partial';
   const { error } = await sb.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
   if (error) { showToast('تعذّر الإلغاء','error'); return; }
@@ -4204,9 +4229,9 @@ async function renderPlayerOverviewTab(){
   const needsPayment = upcoming.filter(b => b.payment_status !== 'paid');
   const completed = all.filter(b => b.status==='completed');
 
-  // الملعب الأكثر حجزًا (مفضّل ضمنيًا)
+  // الملعب الأكثر حجزًا (مفضّل ضمنيًا) — نحسبها فقط من الحجوزات الفعلية (مكتملة أو مؤكدة)، مو الملغاة
   const fieldCounts = {};
-  all.forEach(b => { const n = b.fields?.name; if (n) fieldCounts[n] = (fieldCounts[n]||0) + 1; });
+  all.filter(b => b.status==='completed' || b.status==='confirmed').forEach(b => { const n = b.fields?.name; if (n) fieldCounts[n] = (fieldCounts[n]||0) + 1; });
   const topField = Object.entries(fieldCounts).sort((a,b)=>b[1]-a[1])[0];
 
   playerInner().innerHTML = `
@@ -4335,8 +4360,8 @@ async function renderPlayerBookingsTab(highlightBookingId){
 async function renderPlayerRegistrationsTab(){
   const { data: { user } } = await sb.auth.getUser();
   const [{ data: enrollments }, { data: teams }, { data: myReviews }] = await Promise.all([
-    sb.from('academy_enrollments').select('id, player_name, status, payment_status, academies(id, name)').eq('user_id', user.id),
-    sb.from('tournament_teams').select('id, team_name, status, tournaments(id, name)').eq('user_id', user.id),
+    sb.from('academy_enrollments').select('id, player_name, status, payment_status, amount, academies(id, name)').eq('user_id', user.id),
+    sb.from('tournament_teams').select('id, team_name, status, payment_status, amount, tournaments(id, name)').eq('user_id', user.id),
     sb.from('reviews').select('enrollment_id, team_id').eq('user_id', user.id)
   ]);
   clearTimeout(window._tabLoadTimer);
@@ -4351,6 +4376,8 @@ async function renderPlayerRegistrationsTab(){
         <div><b>🎓 ${escapeHtml(e.academies?.name)||'أكاديمية'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(e.player_name)}</div></div>
         <span class="badge ${statusCls[e.status]||'pending'}" style="font-size:11px">${statusMap[e.status]||e.status}</span>
       </div>
+      ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="startRegistrationPayment('enrollment',${e.id},${e.amount})">💳 أكمل الدفع</button>` : ''}
+      ${(e.status==='pending'||e.status==='confirmed') ? `<button class="btn btn-danger btn-sm btn-block" style="margin-top:6px" onclick="cancelMyRegistration('enrollment',${e.id})">إلغاء التسجيل</button>` : ''}
       ${(e.status==='confirmed' && !reviewedEnroll.has(e.id)) ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="openRateRegistration('enrollment',${e.id},${e.academies?.id})">⭐ قيّم تجربتك</button>` : ''}
       ${reviewedEnroll.has(e.id) ? `<div style="font-size:12px;color:var(--ink-dim);margin-top:6px">✓ تم تقييمه</div>` : ''}
     </div>`).join('');
@@ -4361,6 +4388,8 @@ async function renderPlayerRegistrationsTab(){
         <div><b>🏆 ${escapeHtml(t.tournaments?.name)||'بطولة'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(t.team_name)}</div></div>
         <span class="badge ${statusCls[t.status]||'pending'}" style="font-size:11px">${statusMap[t.status]||t.status}</span>
       </div>
+      ${(t.status==='pending' && t.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="startRegistrationPayment('team',${t.id},${t.amount})">💳 أكمل الدفع</button>` : ''}
+      ${(t.status==='pending'||t.status==='confirmed') ? `<button class="btn btn-danger btn-sm btn-block" style="margin-top:6px" onclick="cancelMyRegistration('team',${t.id})">إلغاء التسجيل</button>` : ''}
       ${(t.status==='confirmed' && !reviewedTeam.has(t.id)) ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="openRateRegistration('team',${t.id},${t.tournaments?.id})">⭐ قيّم تجربتك</button>` : ''}
       ${reviewedTeam.has(t.id) ? `<div style="font-size:12px;color:var(--ink-dim);margin-top:6px">✓ تم تقييمه</div>` : ''}
     </div>`).join('');
@@ -4368,6 +4397,18 @@ async function renderPlayerRegistrationsTab(){
   playerInner().innerHTML =
     `<div class="dlabel">🎓 أكاديمياتي</div>${enrollHtml || '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد تسجيلات بعد</div>'}
      <div class="dlabel" style="margin-top:16px">🏆 فرقي بالبطولات</div>${teamHtml || '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد تسجيلات بعد</div>'}`;
+}
+
+// ── يلغي تسجيل اللاعب بأكاديمية أو فريق بطولة — الاسترجاع (لو دُفع مسبقًا) يحتاج مراجعة يدوية من صاحب الأكاديمية/البطولة ──
+function cancelMyRegistration(entityType, entityId){
+  showConfirmDialog('هل تريد إلغاء هذا التسجيل؟ لو كنت دفعت مسبقًا، تواصل مع صاحب الأكاديمية/البطولة لمتابعة الاسترجاع.', 'نعم، ألغِ التسجيل', () => _executeCancelRegistration(entityType, entityId));
+}
+async function _executeCancelRegistration(entityType, entityId){
+  const table = entityType === 'enrollment' ? 'academy_enrollments' : 'tournament_teams';
+  const { error } = await sb.from(table).update({ status: 'cancelled' }).eq('id', entityId);
+  if (error) { showToast('تعذّر الإلغاء: ' + error.message, 'error'); return; }
+  showToast('تم إلغاء التسجيل ✓');
+  renderPlayerRegistrationsTab();
 }
 
 async function renderPlayerFavoritesTab(){
@@ -4388,13 +4429,16 @@ async function renderPlayerFavoritesTab(){
   }
   playerInner().innerHTML = data.map(f => f.fields ? `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;display:flex;gap:10px;align-items:center">
-      ${f.fields.image_url ? `<img src="${f.fields.image_url}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0">` : ''}
+      ${f.fields.image_url ? `<img src="${f.fields.image_url}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;${f.fields.status!=='available'?'filter:grayscale(1);opacity:.6':''}">` : ''}
       <div style="flex:1;min-width:0">
         <b style="font-size:13px">${escapeHtml(f.fields.name)}</b>
         <div style="font-size:11.5px;color:var(--ink-dim)">${escapeHtml(f.fields.facilities?.city)||''} · ${f.fields.price_per_hour} ر/ساعة</div>
+        ${f.fields.status!=='available' ? `<div style="font-size:11px;color:var(--danger);font-weight:700;margin-top:2px">⛔ مغلق مؤقتًا</div>` : ''}
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
-        <button class="btn btn-brand btn-sm" onclick="closeAll(); openItem('stadiums', ${f.field_id})">احجز</button>
+        ${f.fields.status==='available'
+          ? `<button class="btn btn-brand btn-sm" onclick="closeAll(); openItem('stadiums', ${f.field_id})">احجز</button>`
+          : `<button class="btn btn-ghost btn-sm" disabled style="opacity:.5;cursor:not-allowed">غير متاح</button>`}
         <button class="btn btn-ghost btn-sm" onclick="toggleFavoriteField(${f.field_id}, true)">🗑️</button>
       </div>
     </div>` : '').join('');
