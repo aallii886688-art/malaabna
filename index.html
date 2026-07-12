@@ -2346,6 +2346,18 @@ function shareBookingLink(token){
   else { navigator.clipboard.writeText(url).then(()=>showToast('تم نسخ الرابط ✓')).catch(()=>showToast(url)); }
 }
 
+// ── يكمل دفع حجز موجود مسبقًا لم يكتمل دفعه بعد — يجيب المتبقي الفعلي من قاعدة البيانات ويفتح نموذج الدفع المضمّن مباشرة ──
+async function resumeBookingPayment(bookingId){
+  showToast('جارٍ تجهيز نموذج الدفع...');
+  const { data: bk, error } = await sb.from('bookings').select('total_price, amount_paid, status').eq('id', bookingId).single();
+  if (error || !bk) { showToast('تعذّر تحميل بيانات الحجز','error'); return; }
+  if (bk.status !== 'pending') { showToast('هذا الحجز لم يعد بانتظار الدفع','error'); showMyBookings(); return; }
+  const remaining = Math.round((Number(bk.total_price) - Number(bk.amount_paid)) * 100) / 100;
+  if (remaining <= 0) { showToast('لا يوجد مبلغ متبقٍ على هذا الحجز','error'); showMyBookings(); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  await startRealPayment(bookingId, remaining, true, user?.user_metadata?.name || 'اللاعب', null);
+}
+
 // ── تقييم الملعب بعد اكتمال الحجز ──
 function openRateBooking(bookingId, fieldId) {
   window._rateStars = 5;
@@ -4338,6 +4350,7 @@ async function renderPlayerBookingsTab(highlightBookingId){
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
         <span style="color:var(--flood);font-weight:800">${b.total_price} ريال</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${(b.status==='pending' && b.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm" onclick="resumeBookingPayment(${b.id})">💳 أكمل الدفع</button>` : ''}
           ${needsMore ? `<button class="btn btn-soft btn-sm" onclick="shareBookingLink('${b.share_link_token}')">📤 شارك الرابط</button>` : ''}
           ${(b.status==='pending'||b.status==='confirmed')? `<button class="btn btn-danger btn-sm" onclick="cancelMyBooking(${b.id})">إلغاء الحجز</button>`:''}
           ${(b.status==='completed' && !reviewedBookingIds.has(b.id)) ? `<button class="btn btn-soft btn-sm" onclick="openRateBooking(${b.id},${b.field_id})">⭐ قيّم تجربتك</button>` : ''}
