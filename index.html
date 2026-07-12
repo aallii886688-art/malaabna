@@ -1175,10 +1175,6 @@ async function renderStadiumDrawer(skipFetch){
     <div class="dlabel" style="margin:16px 0 10px">✨ مميزات الملعب</div>
     <div class="card-tags" style="margin-bottom:6px">${amenityBadgesHtml(s.amenities, 8)}</div>
     ` : ''}
-    ${s.description ? `
-    <div class="dlabel" style="margin:16px 0 10px">📝 وصف إضافي</div>
-    <div class="irow" style="white-space:pre-wrap">${escapeHtml(s.description)}</div>
-    ` : ''}
 
     <div class="dlabel">📅 اختر اليوم</div>
     <div class="dates">${pills}</div>
@@ -2022,7 +2018,7 @@ function initBackend() {
     initRealMap();
     const { data, error } = await sb
       .from('fields')
-      .select('id, name, type, price_per_hour, image_url, amenities, description, facilities!inner(name, city, district, region, lat, lng, approved)')
+      .select('id, name, type, price_per_hour, image_url, amenities, facilities!inner(name, city, district, region, lat, lng, approved)')
       .eq('status', 'available')
       .eq('is_deleted', false)
       .eq('facilities.approved', true);
@@ -2070,7 +2066,6 @@ function initBackend() {
         icon: '🏟️',
         image: f.image_url || null,
         images: (imagesByField[f.id] && imagesByField[f.id].length) ? imagesByField[f.id] : (f.image_url ? [f.image_url] : []),
-        description: f.description || null,
         amenities: f.amenities || []
       };
     });
@@ -3852,7 +3847,7 @@ async function editStadiumForm(fieldId) {
 const _lt = delayedLoading(bodyEl.id);
 
   const { data: fd, error } = await sb.from('fields')
-    .select('id, name, type, price_per_hour, image_url, amenities, description, facilities(id, name, city, district, region, lat, lng)')
+    .select('id, name, type, price_per_hour, image_url, amenities, facilities(id, name, city, district, region, lat, lng)')
     .eq('id', fieldId).single();
   if (error || !fd) { clearTimeout(_lt); showToast('تعذّر تحميل بيانات الملعب', 'error'); ownerGoTab('fields'); return; }
 
@@ -3882,15 +3877,6 @@ const _lt = delayedLoading(bodyEl.id);
       ${amenitiesCheckboxesHtml(fd.amenities)}
     </div>
     <div class="field">
-      <label>وصف إضافي <span style="color:var(--ink-dim);font-weight:400">(اختياري — أي تفاصيل خاصة لا تغطيها القائمة أعلاه)</span></label>
-      <textarea id="st-description" placeholder="مثال: تكييف مركزي، مواقف تتسع لـ 30 سيارة، غرفة تبديل ملابس مخصصة..." style="width:100%;min-height:80px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;resize:vertical">${escapeHtml(fd.description)||''}</textarea>
-    </div>
-    <div class="field">
-      <label>صورة الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — ارفع صورة جديدة لتغيير الحالية)</span></label>
-      <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
-      <div id="st-image-preview" style="margin-top:8px">${fd.image_url ? `<img src="${fd.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">` : ''}</div>
-    </div>
-    <div class="field">
       <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(اضغط لتحديث الموقع)</span></label>
       <div id="pickerMap" style="height:220px;border-radius:12px;overflow:hidden;border:1px solid var(--line)"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
@@ -3916,22 +3902,11 @@ async function updateStadium(facilityId) {
   const price    = parseFloat(document.getElementById('st-price').value);
   const latVal   = parseFloat(document.getElementById('st-lat')?.value);
   const lngVal   = parseFloat(document.getElementById('st-lng')?.value);
-  const imgFile  = document.getElementById('st-image')?.files?.[0];
 
   if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
 
   showToast('جارٍ الحفظ...');
-
-  let imageUrl = null;
-  if (imgFile) {
-    try {
-      const base64 = await fileToBase64(imgFile);
-      const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
-      if (!upErr && uploadRes?.url) imageUrl = uploadRes.url;
-      else if (uploadRes?.error) { showToast('تعذّر رفع الصورة: ' + uploadRes.error, 'error'); return; }
-    } catch(e){ console.log('تعذّر رفع الصورة:', e); }
-  }
 
   const facUpdate = { city, district, region };
   if (!isNaN(latVal)) facUpdate.lat = latVal;
@@ -3939,8 +3914,7 @@ async function updateStadium(facilityId) {
   const { error: facErr } = await sb.from('facilities').update(facUpdate).eq('id', facilityId);
   if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
 
-  const fldUpdate = { name, type: newFieldType, price_per_hour: price, amenities: collectCheckedAmenities(), description: document.getElementById('st-description')?.value.trim() || null };
-  if (imageUrl) fldUpdate.image_url = imageUrl;
+  const fldUpdate = { name, type: newFieldType, price_per_hour: price, amenities: collectCheckedAmenities() };
   const { error: fldErr } = await sb.from('fields')
     .update(fldUpdate)
     .eq('id', editingFieldId);
@@ -5839,15 +5813,7 @@ const _lt = delayedLoading(bodyEl.id);
       <label>مميزات الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — تظهر للاعب وقت الحجز)</span></label>
       ${amenitiesCheckboxesHtml([])}
     </div>
-    <div class="field">
-      <label>وصف إضافي <span style="color:var(--ink-dim);font-weight:400">(اختياري — أي تفاصيل خاصة لا تغطيها القائمة أعلاه)</span></label>
-      <textarea id="st-description" placeholder="مثال: تكييف مركزي، مواقف تتسع لـ 30 سيارة، غرفة تبديل ملابس مخصصة..." style="width:100%;min-height:80px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;resize:vertical"></textarea>
-    </div>
-    <div class="field">
-      <label>صورة الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
-      <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
-      <div id="st-image-preview" style="margin-top:8px"></div>
-    </div>
+    <div class="legal-note">🖼️ يمكنك إضافة صور الملعب من "معرض الصور" بعد حفظه من لوحة "ملاعبي"</div>
     <div style="display:flex;gap:10px;margin-top:20px">
       <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('fields')">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveStadium()">💾 حفظ الملعب</button>
@@ -5921,7 +5887,6 @@ async function saveStadium() {
   const existingFacilityId = document.getElementById('st-existing-facility').value;
   const isNewFacility = existingFacilityId === 'new';
   const price = parseFloat(document.getElementById('st-price').value);
-  const imgFile = document.getElementById('st-image')?.files?.[0];
 
   if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
 
@@ -5929,16 +5894,6 @@ async function saveStadium() {
   if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); return; }
 
   showToast('جارٍ الحفظ...');
-
-  let imageUrl = null;
-  if (imgFile) {
-    try {
-      const base64 = await fileToBase64(imgFile);
-      const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
-      if (!upErr && uploadRes?.url) imageUrl = uploadRes.url;
-      else if (uploadRes?.error) showToast('تعذّر رفع الصورة: ' + uploadRes.error, 'error');
-    } catch(e){ console.log('تعذّر رفع الصورة:', e); }
-  }
 
   let facilityId = existingFacilityId;
   let name;
@@ -5955,7 +5910,6 @@ async function saveStadium() {
     const lngVal = parseFloat(document.getElementById('st-lng')?.value);
     if (!isNaN(latVal)) facPayload.lat = latVal;
     if (!isNaN(lngVal)) facPayload.lng = lngVal;
-    if (imageUrl) facPayload.images = [imageUrl];
     const { data: facility, error: facErr } = await sb.from('facilities').insert(facPayload).select().single();
     if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
     facilityId = facility.id;
@@ -5964,8 +5918,7 @@ async function saveStadium() {
     if (!name) { showToast('أدخل اسم الملعب','error'); return; }
   }
 
-  const fldPayload = { facility_id: facilityId, name, type: newFieldType, price_per_hour: price, status: 'available', amenities: collectCheckedAmenities(), description: document.getElementById('st-description')?.value.trim() || null };
-  if (imageUrl) fldPayload.image_url = imageUrl;
+  const fldPayload = { facility_id: facilityId, name, type: newFieldType, price_per_hour: price, status: 'available', amenities: collectCheckedAmenities() };
   const { error: fldErr } = await sb.from('fields').insert(fldPayload);
 
   if (fldErr) { showToast((isNewFacility?'حُفظت المنشأة لكن تعذّر حفظ الملعب: ':'تعذّر حفظ الملعب: ') + fldErr.message,'error'); return; }
