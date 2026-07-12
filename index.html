@@ -809,8 +809,10 @@ function bookingStatusLabel(b, statusMap){
   if (b.status === 'cancelled') {
     const refunded = Number(b.refunded_amount||0);
     const total = Number(b.total_price||0);
-    if (refunded > 0 && refunded < total) return 'ملغي (مسترجع جزئيًا)';
-    if (refunded > 0 && refunded >= total - 0.01) return 'ملغي (مسترجع بالكامل)';
+    const wasEverPaid = b.payment_status === 'paid' || b.payment_status === 'partial' || b.payment_status === 'refunded' || b.payment_status === 'partially_refunded';
+    if (refunded > 0 && refunded < total) return 'ملغي (استرجاع جزئي)';
+    if (refunded > 0 && refunded >= total - 0.01) return 'ملغي (استرجاع كامل)';
+    if (!wasEverPaid) return 'ملغي (لم يتم الدفع)';
     return 'ملغي';
   }
   return statusMap[b.status] || b.status;
@@ -1893,9 +1895,9 @@ function initBackend() {
           .select('name, facilities(owner_id)').eq('id', active.id).single();
         const ownerId = fieldInfo?.facilities?.owner_id;
         if (ownerId) {
-          await sb.from('notifications').insert({
-            user_id: ownerId, title: 'حجز جديد (بانتظار الدفع) 📅',
-            body: `حجز جديد في ${escapeHtml(fieldInfo.name)} بتاريخ ${dateStr} الساعة ${selSlot}`
+          await sb.rpc('send_notification', {
+            p_user_id: ownerId, p_title: 'حجز جديد (بانتظار الدفع) 📅',
+            p_body: `حجز جديد في ${escapeHtml(fieldInfo.name)} بتاريخ ${dateStr} الساعة ${selSlot}`
           });
         }
       } catch(e){}
@@ -2440,9 +2442,9 @@ async function submitReview(bookingId, fieldId) {
     const { data: fieldInfo } = await sb.from('fields').select('name, facilities(owner_id)').eq('id', fieldId).single();
     const ownerId = fieldInfo?.facilities?.owner_id;
     if (ownerId) {
-      await sb.from('notifications').insert({
-        user_id: ownerId, title: 'تقييم جديد ⭐',
-        body: `حصل ${escapeHtml(fieldInfo.name)} على تقييم ${window._rateStars || 5} نجوم من لاعب`
+      await sb.rpc('send_notification', {
+        p_user_id: ownerId, p_title: 'تقييم جديد ⭐',
+        p_body: `حصل ${escapeHtml(fieldInfo.name)} على تقييم ${window._rateStars || 5} نجوم من لاعب`
       });
     }
   } catch(e){}
@@ -2509,9 +2511,9 @@ async function cancelMyBooking(bookingId) {
       .select('fields(name, facilities(owner_id))').eq('id', bookingId).single();
     const ownerId = booking?.fields?.facilities?.owner_id;
     if (ownerId) {
-      await sb.from('notifications').insert({
-        user_id: ownerId, title: 'إلغاء حجز ❌',
-        body: `تم إلغاء حجز في ${escapeHtml(booking.fields.name)}`
+      await sb.rpc('send_notification', {
+        p_user_id: ownerId, p_title: 'إلغاء حجز ❌',
+        p_body: `تم إلغاء حجز في ${escapeHtml(booking.fields.name)}`
       });
     }
   } catch(e){}
@@ -2527,7 +2529,7 @@ async function doLookup() {
   if (!id) { showToast('أدخل رقم الحجز','error'); return; }
   const { data, error } = await sb
     .from('bookings')
-    .select('id, booking_date, start_time, end_time, status, total_price, fields(name, facilities(city))')
+    .select('id, booking_date, start_time, end_time, status, total_price, payment_status, refunded_amount, fields(name, facilities(city))')
     .eq('id', id).single();
   const box = document.getElementById('lookupResult');
   if (error || !data) { box.innerHTML = '<div style="color:var(--danger);text-align:center;padding:14px">لم يُعثر على حجز بهذا الرقم</div>'; return; }
@@ -2538,7 +2540,7 @@ async function doLookup() {
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${escapeHtml(data.fields?.name)||'—'}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ</span><b>${data.booking_date}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الوقت</span><b>${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</b></div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${statusMap[data.status]||data.status}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${bookingStatusLabel(data, statusMap)}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">المبلغ</span><b style="color:var(--flood)">${data.total_price} ريال</b></div>
     </div>`;
 }
@@ -3477,7 +3479,7 @@ async function addStaffMember(){
     showToast('تعذّرت الإضافة: ' + error.message,'error'); return;
   }
   try {
-    await sb.from('notifications').insert({ user_id: prof.id, title:'تمت إضافتك كموظف 👥', body:'أصبح بإمكانك إدارة منشأة عبر لوحة ملاعبي' });
+    await sb.rpc('send_notification', { p_user_id: prof.id, p_title:'تمت إضافتك كموظف 👥', p_body:'أصبح بإمكانك إدارة منشأة عبر لوحة ملاعبي' });
   } catch(e){}
   showToast(`تمت إضافة ${escapeHtml(prof.name)||'الموظف'} ✓`);
   showStaffManagement();
@@ -3847,9 +3849,9 @@ async function ownerSetBookingStatus(bookingId, newStatus) {
     const { data: booking } = await sb.from('bookings').select('user_id, fields(name)').eq('id', bookingId).single();
     if (booking?.user_id) {
       const titles = { confirmed:'تم تأكيد حجزك ✅', cancelled:'تم إلغاء حجزك ❌', completed:'انتهت مباراتك 🏁' };
-      await sb.from('notifications').insert({
-        user_id: booking.user_id, title: titles[newStatus] || 'تحديث على حجزك',
-        body: `تحديث بخصوص حجزك في ${escapeHtml(booking.fields?.name) || 'الملعب'}`
+      await sb.rpc('send_notification', {
+        p_user_id: booking.user_id, p_title: titles[newStatus] || 'تحديث على حجزك',
+        p_body: `تحديث بخصوص حجزك في ${escapeHtml(booking.fields?.name) || 'الملعب'}`
       });
     }
   } catch(e){}
@@ -5740,9 +5742,9 @@ async function confirmPayout(){
   if (error) { showToast('تعذّر حفظ سجل التحويل: '+error.message,'error'); return; }
 
   try {
-    await sb.from('notifications').insert({
-      user_id: r.ownerId, title: 'تم تحويل مستحقاتك 💸',
-      body: `تم تحويل ${r.netOwed} ريال إلى حسابك — راجع لوحتك لعرض الإيصال`
+    await sb.rpc('send_notification', {
+      p_user_id: r.ownerId, p_title: 'تم تحويل مستحقاتك 💸',
+      p_body: `تم تحويل ${r.netOwed} ريال إلى حسابك — راجع لوحتك لعرض الإيصال`
     });
   } catch(e){}
 
@@ -5755,7 +5757,7 @@ async function approveFacility(facilityId){
   const { error } = await sb.from('facilities').update({ approved:true }).eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   if (fac?.owner_id) {
-    try { await sb.from('notifications').insert({ user_id: fac.owner_id, title: 'تمت الموافقة على منشأتك ✅', body: `منشأة "${escapeHtml(fac.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
+    try { await sb.rpc('send_notification', { p_user_id: fac.owner_id, p_title: 'تمت الموافقة على منشأتك ✅', p_body: `منشأة "${escapeHtml(fac.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
   }
   showToast('تمت الموافقة ونُشرت المنشأة وكل ملاعبها ✓');
   loadRealFields();
@@ -5766,7 +5768,7 @@ async function approveAcademy(id){
   const { error } = await sb.from('academies').update({ approved:true }).eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   if (acad?.owner_id) {
-    try { await sb.from('notifications').insert({ user_id: acad.owner_id, title: 'تمت الموافقة على أكاديميتك ✅', body: `أكاديمية "${escapeHtml(acad.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
+    try { await sb.rpc('send_notification', { p_user_id: acad.owner_id, p_title: 'تمت الموافقة على أكاديميتك ✅', p_body: `أكاديمية "${escapeHtml(acad.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
   }
   showToast('تمت الموافقة ونُشرت الأكاديمية ✓');
   loadRealAcademies();
@@ -5778,7 +5780,7 @@ async function rejectAcademy(id){
   const { error } = await sb.from('academies').delete().eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   if (acad?.owner_id) {
-    try { await sb.from('notifications').insert({ user_id: acad.owner_id, title: 'تم رفض أكاديميتك ❌', body: `أكاديمية "${escapeHtml(acad.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
+    try { await sb.rpc('send_notification', { p_user_id: acad.owner_id, p_title: 'تم رفض أكاديميتك ❌', p_body: `أكاديمية "${escapeHtml(acad.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
   }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
@@ -5788,7 +5790,7 @@ async function approveTournament(id){
   const { error } = await sb.from('tournaments').update({ approved:true }).eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   if (t?.owner_id) {
-    try { await sb.from('notifications').insert({ user_id: t.owner_id, title: 'تمت الموافقة على بطولتك ✅', body: `بطولة "${escapeHtml(t.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
+    try { await sb.rpc('send_notification', { p_user_id: t.owner_id, p_title: 'تمت الموافقة على بطولتك ✅', p_body: `بطولة "${escapeHtml(t.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
   }
   showToast('تمت الموافقة ونُشرت البطولة ✓');
   loadRealTournaments();
@@ -5800,7 +5802,7 @@ async function rejectTournament(id){
   const { error } = await sb.from('tournaments').delete().eq('id', id);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   if (t?.owner_id) {
-    try { await sb.from('notifications').insert({ user_id: t.owner_id, title: 'تم رفض بطولتك ❌', body: `بطولة "${escapeHtml(t.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
+    try { await sb.rpc('send_notification', { p_user_id: t.owner_id, p_title: 'تم رفض بطولتك ❌', p_body: `بطولة "${escapeHtml(t.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
   }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
@@ -5811,7 +5813,7 @@ async function rejectFacility(facilityId){
   const { error } = await sb.from('facilities').delete().eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   if (fac?.owner_id) {
-    try { await sb.from('notifications').insert({ user_id: fac.owner_id, title: 'تم رفض منشأتك ❌', body: `منشأة "${escapeHtml(fac.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
+    try { await sb.rpc('send_notification', { p_user_id: fac.owner_id, p_title: 'تم رفض منشأتك ❌', p_body: `منشأة "${escapeHtml(fac.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
   }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
@@ -5845,15 +5847,9 @@ async function sendBroadcast(){
   const body = document.getElementById('bc-body').value.trim();
   if (!title) { showToast('أدخل عنوان الإشعار','error'); return; }
   showToast('جارٍ الإرسال...');
-  let q = sb.from('profiles').select('id');
-  if (target !== 'all') q = q.eq('role', target);
-  const { data: targets, error } = await q;
-  if (error || !targets) { showToast('تعذّر جلب المستخدمين','error'); return; }
-  const rows = targets.map(t => ({ user_id: t.id, title, body: body||null }));
-  if (!rows.length) { showToast('لا يوجد مستخدمون مطابقون','error'); return; }
-  const { error: insErr } = await sb.from('notifications').insert(rows);
-  if (insErr) { showToast('تعذّر الإرسال: '+insErr.message,'error'); return; }
-  showToast(`تم إرسال الإشعار إلى ${rows.length} مستخدم ✓`);
+  const { data: count, error } = await sb.rpc('send_broadcast_notification', { p_role: target, p_title: title, p_body: body || null });
+  if (error) { showToast('تعذّر الإرسال: ' + error.message, 'error'); return; }
+  showToast(`تم إرسال الإشعار إلى ${count} مستخدم ✓`);
   closeAll();
 }
 
@@ -5919,10 +5915,10 @@ async function ownerControl(userId, newRole) {
   const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', userId);
   if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
   try {
-    await sb.from('notifications').insert({
-      user_id: userId,
-      title: newRole==='owner' ? 'تمت ترقيتك 🏟️' : 'تحديث في حسابك',
-      body: newRole==='owner' ? 'أصبح بإمكانك الآن إضافة ملاعبك من لوحة صاحب الملعب' : 'تم إلغاء صفة صاحب الملعب عن حسابك'
+    await sb.rpc('send_notification', {
+      p_user_id: userId,
+      p_title: newRole==='owner' ? 'تمت ترقيتك 🏟️' : 'تحديث في حسابك',
+      p_body: newRole==='owner' ? 'أصبح بإمكانك الآن إضافة ملاعبك من لوحة صاحب الملعب' : 'تم إلغاء صفة صاحب الملعب عن حسابك'
     });
   } catch(e){}
   showToast('تم التحديث ✓');
@@ -5935,7 +5931,7 @@ async function adminSearchBookingById(){
   const listEl = document.getElementById('admin-bookings-list');
   if (!id) { adminView('bookings'); return; }
   const { data, error } = await sb.from('bookings')
-    .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, profiles(name, phone), fields(name, facilities(name, city))')
+    .select('id, booking_date, start_time, end_time, status, total_price, payment_status, refunded_amount, players_count, profiles(name, phone), fields(name, facilities(name, city))')
     .eq('id', id).maybeSingle();
   if (error || !data) { listEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">لم يُعثر على حجز برقم #${escapeHtml(id)}</div>`; return; }
   const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
@@ -5950,7 +5946,7 @@ async function adminSearchBookingById(){
         </span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ والوقت</span><b>${data.booking_date} · ${formatTime12(data.start_time)}</b></div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${statusMap[data.status]||data.status}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${bookingStatusLabel(data, statusMap)}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">المبلغ</span><b style="color:var(--flood)">${data.total_price} ريال</b></div>
     </div>
     <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" onclick="adminView('bookings')">← عرض كل الحجوزات</button>
