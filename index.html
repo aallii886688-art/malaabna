@@ -1617,12 +1617,32 @@ async function submitJoinPayment(token, remaining){
     const { data: info, error: infoErr } = await sb.functions.invoke('share-link-info', { body: { token } });
     if (infoErr || info?.error) { showToast(info?.error || 'الرابط لم يعد صالحًا','error'); return; }
 
-    showToast('جارٍ تجهيز صفحة الدفع...');
+    showToast('جارٍ تجهيز نموذج الدفع...');
     const { data, error } = await sb.functions.invoke('create-payment', {
       body: { booking_id: info.booking_id, amount, payer_name: name, is_organizer: false }
     });
     if (error || data?.error) { showToast(data?.error || 'تعذّر تجهيز الدفع','error'); return; }
-    window.location.href = data.payment_url;
+
+    openInfoModal('💳 إتمام الدفع', `
+      <div id="mysrPayWrap">
+        <div class="mysr-form"></div>
+        <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
+      </div>
+    `);
+
+    Moyasar.init({
+      element: '.mysr-form',
+      amount: data.amount_halalas,
+      currency: 'SAR',
+      description: data.description,
+      publishable_api_key: data.publishable_key,
+      callback_url: window.location.origin + '?payment_confirm=' + data.payment_row_id,
+      methods: ['creditcard'],
+      supported_networks: ['mada', 'visa', 'mastercard'],
+      on_completed: async function (payment) {
+        await confirmFormPayment(data.payment_row_id, payment.id, info.booking_id);
+      }
+    });
   } catch(e) {
     showToast('تعذّر الاتصال ببوابة الدفع','error');
   }
@@ -1991,9 +2011,9 @@ function initBackend() {
   }
   window.confirmFormPayment = confirmFormPayment;
 
-  // ── دفع تسجيل أكاديمية/بطولة (رسم كامل، بدون قطة) ──
+  // ── دفع تسجيل أكاديمية/بطولة (رسم كامل، بدون قطة) — مضمّن داخل الموقع بالكامل، بدون أي تحويل خارجي ──
   async function startRegistrationPayment(entityType, entityId, amount){
-    showToast('جارٍ تجهيز صفحة الدفع...');
+    showToast('جارٍ تجهيز نموذج الدفع...');
     try {
       const { data, error } = await sb.functions.invoke('create-registration-payment', {
         body: { entity_type: entityType, entity_id: entityId, amount }
@@ -2003,7 +2023,44 @@ function initBackend() {
         closeAll();
         return;
       }
-      window.location.href = data.payment_url;
+
+      openInfoModal('💳 إتمام الدفع', `
+        <div id="mysrPayWrap">
+          <div class="mysr-form"></div>
+          <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
+        </div>
+      `);
+
+      Moyasar.init({
+        element: '.mysr-form',
+        amount: data.amount_halalas,
+        currency: 'SAR',
+        description: data.description,
+        publishable_api_key: data.publishable_key,
+        methods: ['creditcard'],
+        supported_networks: ['mada', 'visa', 'mastercard'],
+        on_completed: async function (payment) {
+          document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع...</div>';
+          try {
+            const { data: confirmData, error: confirmErr } = await sb.functions.invoke('confirm-registration-payment', {
+              body: { entity_type: entityType, entity_id: entityId, payment_id: payment.id }
+            });
+            if (confirmErr || confirmData?.error) {
+              document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">⚠️ تعذّر تأكيد الدفع — تواصل مع الدعم</div>`;
+              return;
+            }
+            document.getElementById('ownerBody').innerHTML = `
+              <div style="text-align:center;padding:20px">
+                <div style="font-size:44px">✅</div>
+                <div style="font-weight:800;font-size:16px;margin-top:8px">تم تأكيد تسجيلك بنجاح!</div>
+              </div>
+              <button class="btn btn-brand btn-block" onclick="closeAll(); showMyRegistrations();">عرض تسجيلاتي</button>
+            `;
+          } catch(e) {
+            document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">⚠️ تعذّر الاتصال — تواصل مع الدعم</div>';
+          }
+        }
+      });
     } catch(e) {
       showToast('تعذّر الاتصال ببوابة الدفع','error');
       closeAll();
@@ -3259,16 +3316,17 @@ async function createManualBooking(){
   const { data: { user: currentOwner } } = await sb.auth.getUser();
 
   showToast(isRecurring ? `جارٍ حجز ${weeks} أسابيع...` : 'جارٍ قفل الخانة...');
-  const results = []; // { date, ok, payment_url?, reason? }
+  const results = []; // { date, ok, join_url?, reason? }
   for (let w = 0; w < weeks; w++) {
     const d = new Date(date + 'T00:00:00');
     d.setDate(d.getDate() + (w * 7));
     const weekDate = d.toISOString().split('T')[0];
 
+    const shareToken = crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2));
     const payload = {
       field_id: fieldId, booking_date: weekDate, start_time: start, end_time: end,
       players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid',
-      created_by: currentOwner?.id || null,
+      created_by: currentOwner?.id || null, share_link_token: shareToken,
     };
     if (prof) { payload.user_id = prof.id; } else { payload.guest_name = name; payload.guest_phone = phone; }
 
@@ -3277,19 +3335,14 @@ async function createManualBooking(){
       results.push({ date: weekDate, ok: false, reason: (error.code === '23514' || error.message?.includes('conflict')) ? 'الوقت متعارض مع حجز آخر' : error.message });
       continue;
     }
-    try {
-      const { data: pay, error: payErr } = await sb.functions.invoke('create-payment', {
-        body: { booking_id: booking.id, amount: price, payer_name: prof?.name || name, is_organizer: true }
-      });
-      if (payErr || pay?.error) { results.push({ date: weekDate, ok: false, reason: pay?.error || 'تعذّر تجهيز رابط الدفع (الخانة محجوزة)' }); }
-      else { results.push({ date: weekDate, ok: true, payment_url: pay.payment_url }); }
-    } catch(e) { results.push({ date: weekDate, ok: false, reason: 'تعذّر الاتصال ببوابة الدفع (الخانة محجوزة)' }); }
+    // رابط داخلي بالكامل — يفتح نموذج الدفع المضمّن بنفس الموقع (بدون أي تحويل خارجي)
+    results.push({ date: weekDate, ok: true, join_url: window.location.origin + '?join=' + shareToken });
   }
 
   const successCount = results.filter(r=>r.ok).length;
   document.getElementById('ownerTitle').textContent = isRecurring ? '✅ نتيجة الحجز المتكرر' : '✅ الخانة محجوزة';
   document.getElementById('ownerBody').innerHTML = `
-    <div class="legal-note" style="margin-bottom:14px">✅ تم حجز ${successCount} من ${weeks} — أرسل رابط كل أسبوع للاعب. الحجز ما يتأكد نهائيًا إلا بعد الدفع منه.</div>
+    <div class="legal-note" style="margin-bottom:14px">✅ تم حجز ${successCount} من ${weeks} — أرسل رابط كل أسبوع للاعب. الحجز ما يتأكد نهائيًا إلا بعد الدفع منه، والدفع يتم بالكامل داخل الموقع.</div>
     ${results.map(r => `
       <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -3297,8 +3350,8 @@ async function createManualBooking(){
           <span class="badge ${r.ok?'available':'closed'}" style="font-size:10px">${r.ok?'جاهز':'فشل'}</span>
         </div>
         ${r.ok ? `
-          <div style="word-break:break-all;font-size:11.5px;direction:ltr;text-align:left;color:var(--ink-dim);margin-bottom:6px">${r.payment_url}</div>
-          <button class="btn btn-soft btn-sm btn-block" onclick="navigator.clipboard.writeText('${r.payment_url}');showToast('تم نسخ رابط ${r.date} ✓')">📋 نسخ الرابط</button>
+          <div style="word-break:break-all;font-size:11.5px;direction:ltr;text-align:left;color:var(--ink-dim);margin-bottom:6px">${r.join_url}</div>
+          <button class="btn btn-soft btn-sm btn-block" onclick="navigator.clipboard.writeText('${r.join_url}');showToast('تم نسخ رابط ${r.date} ✓')">📋 نسخ الرابط</button>
         ` : `<div style="font-size:11.5px;color:var(--danger)">⚠️ ${escapeHtml(r.reason)}</div>`}
       </div>`).join('')}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="ownerGoTab('bookings')">رجوع لقائمة الحجوزات</button>
