@@ -2110,7 +2110,8 @@ function initBackend() {
   }
   window.startRealPayment = startRealPayment;
 
-  async function confirmFormPayment(paymentRowId, paymentId, bookingId) {
+  async function confirmFormPayment(paymentRowId, paymentId, bookingId, attempt) {
+    attempt = attempt || 1;
     // ننظّف رابط المتصفح فورًا من معاملات الدفع المؤقتة — ما نخلي شريط العنوان عالق على رابط معاملة
     const params = new URLSearchParams(window.location.search);
     if (params.has('payment_confirm') || params.has('id')) {
@@ -2121,6 +2122,13 @@ function initBackend() {
       const { data, error } = await sb.functions.invoke('confirm-form-payment', {
         body: { payment_row_id: paymentRowId, payment_id: paymentId }
       });
+      // حالة "قيد المعالجة" (لسا initiated/authorized عند ميسر): نعيد المحاولة بصمت، بدون أي رسالة فشل مؤقتة مضلّلة
+      const isPending = data?.pending === true;
+      if ((error || data?.error) && (isPending || attempt < 4)) {
+        document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع... (قد يستغرق بضع ثوانٍ)</div>';
+        setTimeout(() => confirmFormPayment(paymentRowId, paymentId, bookingId, attempt + 1), 2000);
+        return;
+      }
       if (error || data?.error) {
         document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('رقم الحجز', '#' + bookingId);
         return;
@@ -2133,6 +2141,10 @@ function initBackend() {
         <button class="btn btn-brand btn-block" onclick="closeAll(); showMyBookings(${data.booking_id || bookingId || ''});">عرض حجوزاتي</button>
       `;
     } catch(e) {
+      if (attempt < 4) {
+        setTimeout(() => confirmFormPayment(paymentRowId, paymentId, bookingId, attempt + 1), 2000);
+        return;
+      }
       document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('رقم الحجز', '#' + bookingId);
     }
   }
@@ -2167,25 +2179,7 @@ function initBackend() {
         methods: ['creditcard'],
         supported_networks: ['mada', 'visa', 'mastercard'],
         on_completed: async function (payment) {
-          document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع...</div>';
-          try {
-            const { data: confirmData, error: confirmErr } = await sb.functions.invoke('confirm-registration-payment', {
-              body: { entity_type: entityType, entity_id: entityId, payment_id: payment.id }
-            });
-            if (confirmErr || confirmData?.error) {
-              document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('مرجع الدفعة', payment.id);
-              return;
-            }
-            document.getElementById('ownerBody').innerHTML = `
-              <div style="text-align:center;padding:20px">
-                <div style="font-size:44px">✅</div>
-                <div style="font-weight:800;font-size:16px;margin-top:8px">تم تأكيد تسجيلك بنجاح!</div>
-              </div>
-              <button class="btn btn-brand btn-block" onclick="closeAll(); showMyRegistrations();">عرض تسجيلاتي</button>
-            `;
-          } catch(e) {
-            document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('نوع التسجيل', entityType === 'enrollment' ? 'أكاديمية' : 'بطولة');
-          }
+          await confirmRegistrationPaymentWithRetry(entityType, entityId, payment.id);
         }
       });
     } catch(e) {
@@ -2194,6 +2188,40 @@ function initBackend() {
     }
   }
   window.startRegistrationPayment = startRegistrationPayment;
+
+  // ── يتحقق من دفعة تسجيل أكاديمية/بطولة مع إعادة محاولة تلقائية — يعالج حالة "الدفعة قيد المعالجة عند ميسر" مؤقتًا بعد رجوع 3D Secure ──
+  async function confirmRegistrationPaymentWithRetry(entityType, entityId, paymentId, attempt) {
+    attempt = attempt || 1;
+    document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع...</div>';
+    try {
+      const { data: confirmData, error: confirmErr } = await sb.functions.invoke('confirm-registration-payment', {
+        body: { entity_type: entityType, entity_id: entityId, payment_id: paymentId }
+      });
+      const isPending = confirmData?.pending === true;
+      if ((confirmErr || confirmData?.error) && (isPending || attempt < 4)) {
+        document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع... (قد يستغرق بضع ثوانٍ)</div>';
+        setTimeout(() => confirmRegistrationPaymentWithRetry(entityType, entityId, paymentId, attempt + 1), 2000);
+        return;
+      }
+      if (confirmErr || confirmData?.error) {
+        document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('مرجع الدفعة', paymentId);
+        return;
+      }
+      document.getElementById('ownerBody').innerHTML = `
+        <div style="text-align:center;padding:20px">
+          <div style="font-size:44px">✅</div>
+          <div style="font-weight:800;font-size:16px;margin-top:8px">تم تأكيد تسجيلك بنجاح!</div>
+        </div>
+        <button class="btn btn-brand btn-block" onclick="closeAll(); showMyRegistrations();">عرض تسجيلاتي</button>
+      `;
+    } catch(e) {
+      if (attempt < 4) {
+        setTimeout(() => confirmRegistrationPaymentWithRetry(entityType, entityId, paymentId, attempt + 1), 2000);
+        return;
+      }
+      document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('نوع التسجيل', entityType === 'enrollment' ? 'أكاديمية' : 'بطولة');
+    }
+  }
 
   loadRealFields();
   loadRealAcademies();
