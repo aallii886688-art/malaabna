@@ -3027,7 +3027,7 @@ async function renderOwnerOverviewTab(){
       </div>
       <div class="stat-click" onclick="ownerGoTab('finance')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
         <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
-        <div style="font-size:12px;color:var(--ink-dim)">إجمالي الإيرادات (ريال)</div>
+        <div style="font-size:12px;color:var(--ink-dim)">إجمالي الحجوزات <span style="opacity:.75">(قبل العمولة)</span></div>
       </div>
     </div>
     <div class="legal-note">استخدم التبويبات فوق للتنقّل: ملاعبك، حجوزاتك، أكاديمياتك، بطولاتك، ماليتك، وفريقك — كل قسم مستقل بذاته.</div>
@@ -3339,14 +3339,29 @@ async function renderOwnerTeamTab(){
 async function renderOwnerBookingsTab(){
   const myFieldIds = await getMyFieldIds();
   if (!myFieldIds.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
+  window._ownerBookingsPageSize = 100;
+  await loadOwnerBookingsPage();
+}
+
+// ── يحمّل حجوزات صاحب الملعب بحد أقصى معقول لكل دفعة، بدل جلب آلاف الحجوزات دفعة واحدة على منشأة نشطة منذ فترة طويلة ──
+async function loadOwnerBookingsPage(){
+  const myFieldIds = await getMyFieldIds();
+  const pageSize = window._ownerBookingsPageSize || 100;
   const { data, error } = await sb.from('bookings')
     .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, guest_name, guest_phone, payment_status, amount_paid, verify_token, checked_in, checked_in_at, created_at, profiles(name, phone), fields(name, price_per_hour, facilities(name, city, district))')
-    .in('field_id', myFieldIds).order('booking_date', { ascending: false });
+    .in('field_id', myFieldIds).order('booking_date', { ascending: false }).limit(pageSize);
   if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
   clearTimeout(window._tabLoadTimer);
   window._ownerBookingsCache = data || [];
+  window._ownerBookingsHasMore = (data || []).length === pageSize; // لو رجعت الدفعة كاملة، غالبًا فيه المزيد
   window._ownerBookingsView = window._ownerBookingsView || 'list';
   renderOwnerBookingsView();
+}
+
+function loadMoreOwnerBookings(){
+  window._ownerBookingsPageSize = (window._ownerBookingsPageSize || 100) + 100;
+  const _lt = delayedLoading('ownerTabInner');
+  loadOwnerBookingsPage().then(() => clearTimeout(_lt));
 }
 
 function ownerBookingsToggleHtml(){
@@ -3367,7 +3382,8 @@ function renderOwnerBookingsView(){
   const view = window._ownerBookingsView || 'list';
   ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>`
     + ownerBookingsToggleHtml()
-    + (view === 'calendar' ? ownerBookingsCalendarHtml(data) : data.map(ownerBookingCardHtml).join(''));
+    + (view === 'calendar' ? ownerBookingsCalendarHtml(data) : data.map(ownerBookingCardHtml).join(''))
+    + (view === 'list' && window._ownerBookingsHasMore ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="loadMoreOwnerBookings()">تحميل المزيد من الحجوزات</button>` : '');
 }
 
 function ownerBookingCardHtml(b){
@@ -3375,7 +3391,7 @@ function ownerBookingCardHtml(b){
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
   const paymentStatusMap = { unpaid:'غير مدفوع', partial:'مدفوع جزئيًا', paid:'مدفوع بالكامل', refunded:'مسترجع' };
   return `
-    <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+    <div id="owner-booking-card-${b.id}" style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="toggleBookingDetails(${b.id})">
         <div><b>${escapeHtml(b.fields?.name)||'—'}</b> <span class="mono" style="font-size:12px;color:var(--ink-dim)">#${b.id}</span><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -3439,7 +3455,7 @@ function ownerBookingsCalendarHtml(data){
           <div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-top:1px solid var(--line-soft);cursor:pointer" onclick="ownerBookingsJumpToCard(${b.id})">
             <span style="width:8px;height:8px;border-radius:50%;background:${statusDot[b.status]||'var(--ink-dim)'};flex-shrink:0"></span>
             <span style="font-size:11.5px;color:var(--ink-soft);flex-shrink:0">${formatTime12(b.start_time)}</span>
-            <span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(b.fields?.name)||''}</span>
+            <span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(b.fields?.name)||''} <span style="font-weight:400;color:var(--ink-dim)">· ${escapeHtml(b.profiles?.name || b.guest_name)||''}</span></span>
           </div>`).join('') : '<div style="font-size:11.5px;color:var(--ink-dim);padding:4px 0">لا حجوزات</div>'}
       </div>`;
   }
@@ -3458,6 +3474,17 @@ function shiftOwnerCalendarWeek(delta){
 }
 function ownerBookingsJumpToCard(bookingId){
   setOwnerBookingsView('list');
+  // ننتظر لحظة قصيرة حتى ينتهي renderOwnerBookingsView من رسم القائمة، ثم نمرّر للبطاقة المطلوبة ونفتح تفاصيلها ونبرزها مؤقتًا
+  setTimeout(() => {
+    const card = document.getElementById('owner-booking-card-' + bookingId);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const details = document.getElementById('details-' + bookingId);
+    if (details && details.style.display === 'none') toggleBookingDetails(bookingId);
+    card.style.transition = 'box-shadow .3s';
+    card.style.boxShadow = '0 0 0 2px var(--brand)';
+    setTimeout(() => { card.style.boxShadow = ''; }, 2000);
+  }, 150);
 }
 
 // ── حجز يدوي (هاتفي/حضوري) — يحجز الخانة فورًا، لكن ما يتأكد إلا بدفع إلكتروني حقيقي عبر المنصة ──
@@ -3672,7 +3699,10 @@ async function addStaffMember(){
   if (!phone || !facilityId) { showToast('أدخل رقم الجوال واختر المنشأة','error'); return; }
 
   const { data: prof, error: findErr } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
-  if (findErr || !prof) { showToast('لا يوجد حساب مسجّل بهذا الرقم — اطلب منه إنشاء حساب أولاً','error'); return; }
+  if (findErr || !prof) {
+    showStaffInviteHelp(phone);
+    return;
+  }
 
   const { error } = await sb.from('facility_staff').insert({ facility_id: facilityId, user_id: prof.id, added_by: (await sb.auth.getUser()).data.user.id, permissions });
   if (error) {
@@ -3686,8 +3716,23 @@ async function addStaffMember(){
   showStaffManagement();
 }
 
-async function removeStaffMember(staffRowId){
-  if (!confirm('إزالة هذا الموظف من المنشأة؟')) return;
+// ── يظهر مساعدة سريعة لدعوة موظف غير مسجّل بعد، مع زر واتساب جاهز برسالة دعوة مباشرة ──
+function showStaffInviteHelp(phone){
+  const inviteMessage = encodeURIComponent(`مرحبًا، أبي أضيفك كموظف بمنصة ملاعبنا لإدارة الحجوزات معي. سجّل حساب جديد من هذا الرابط أول: ${window.location.origin}`);
+  const waLink = whatsappLink(phone);
+  openInfoModal('👥 دعوة موظف', `
+    <div style="text-align:center;padding:10px">
+      <div style="font-size:36px;margin-bottom:10px">📱</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px">هذا الرقم ما عنده حساب بالمنصة بعد. أرسل له دعوة تسجيل مباشرة عبر واتساب، وبعد ما يسجّل ارجع أضِفه من نفس الشاشة.</div>
+      ${waLink ? `<a href="${waLink}?text=${inviteMessage}" target="_blank" class="btn btn-brand btn-block" style="text-decoration:none">💬 أرسل دعوة عبر واتساب</a>` : ''}
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="showStaffManagement()">رجوع</button>
+    </div>`);
+}
+
+function removeStaffMember(staffRowId){
+  showConfirmDialog('إزالة هذا الموظف من المنشأة؟', 'نعم، أزِله', () => _executeRemoveStaffMember(staffRowId));
+}
+async function _executeRemoveStaffMember(staffRowId){
   const { error } = await sb.from('facility_staff').delete().eq('id', staffRowId);
   if (error) { showToast('تعذّرت الإزالة: ' + error.message,'error'); return; }
   showToast('تمت الإزالة ✓');
@@ -4062,9 +4107,17 @@ async function ownerSetBookingStatus(bookingId, newStatus) {
 }
 
 // ── فتح/إغلاق ملعب فورياً ──
-async function toggleFieldStatus(fieldId, currentStatus) {
+function toggleFieldStatus(fieldId, currentStatus) {
   if (!hasStaffPermission('schedule')) { showToast('ما عندك صلاحية لهذا الإجراء — تواصل مع صاحب الملعب', 'error'); return; }
   const newStatus = currentStatus === 'available' ? 'closed' : 'available';
+  // فتح ملعب مغلق إجراء آمن ومرغوب فورًا — بدون تأكيد. إغلاق ملعب متاح يوقف حجوزات محتملة، فيحتاج تأكيد صريح لمنع ضغطة خاطئة
+  if (newStatus === 'closed') {
+    showConfirmDialog('هل تريد إغلاق هذا الملعب؟ لن يظهر للاعبين ولن يقدروا يحجزونه حتى تفتحه مرة أخرى.', 'نعم، أغلق الملعب', () => _executeToggleFieldStatus(fieldId, newStatus));
+  } else {
+    _executeToggleFieldStatus(fieldId, newStatus);
+  }
+}
+async function _executeToggleFieldStatus(fieldId, newStatus) {
   const { error } = await sb.from('fields').update({ status: newStatus }).eq('id', fieldId);
   if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
   showToast(newStatus === 'available' ? 'تم فتح الملعب ✓' : 'تم إغلاق الملعب ✓');
@@ -4073,10 +4126,11 @@ async function toggleFieldStatus(fieldId, currentStatus) {
 }
 
 // ── حذف ملعب — حصري للمالك الحقيقي دائمًا (عملية لا رجعة فيها) ──
-async function deleteField(fieldId) {
+function deleteField(fieldId) {
   if (!window._isTrueOwner) { showToast('حذف الملاعب متاح لصاحب الملعب فقط', 'error'); return; }
-  if (!confirm('حذف هذا الملعب؟ لو كان له حجوزات سابقة، سيُحفظ سجله (باسم مُعلَّم "محذوف") للحماية القانونية والمالية، ويختفي فورًا من لوحتك ومن الموقع.')) return;
-
+  showConfirmDialog('حذف هذا الملعب؟ لو كان له حجوزات سابقة، سيُحفظ سجله (باسم مُعلَّم "محذوف") للحماية القانونية والمالية، ويختفي فورًا من لوحتك ومن الموقع.', 'نعم، احذف الملعب', () => _executeDeleteField(fieldId));
+}
+async function _executeDeleteField(fieldId) {
   const { error } = await sb.from('fields').delete().eq('id', fieldId);
   if (!error) {
     showToast('تم حذف الملعب نهائيًا ✓ (لا سجلات سابقة عليه)');
@@ -5600,7 +5654,7 @@ async function showFacilityExpenses(){
         ${facOptions}
       </select>
     </div>
-    <div class="field"><label>التاريخ</label><input id="exp-date" type="date" value="${riyadhTodayStr()}"></div>
+    <div class="field"><label>التاريخ</label><input id="exp-date" type="date" value="${riyadhTodayStr()}" max="${riyadhTodayStr()}"></div>
     <div class="field"><label>ملاحظة (اختياري)</label><input id="exp-note" type="text" placeholder="مثال: فاتورة كهرباء شهر يوليو"></div>
     <button class="btn btn-brand btn-block" style="margin-bottom:20px" onclick="addFacilityExpense()">💾 حفظ المصروف</button>
 
@@ -5622,6 +5676,7 @@ async function addFacilityExpense(){
   const expenseDate = document.getElementById('exp-date').value;
   const note = document.getElementById('exp-note').value.trim();
   if (!amount || amount <= 0) { showToast('أدخل مبلغاً صحيحاً','error'); return; }
+  if (expenseDate > riyadhTodayStr()) { showToast('لا يمكن تسجيل مصروف بتاريخ مستقبلي','error'); return; }
   const { data: { user } } = await sb.auth.getUser();
   const { error } = await sb.from('facility_expenses').insert({ owner_id: user.id, facility_id: facilityId, category, amount, expense_date: expenseDate, note: note||null });
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
