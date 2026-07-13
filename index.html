@@ -3806,7 +3806,7 @@ async function showAcademyStudents(academyId){
   const _lt = delayedLoading(bodyEl.id);
 
   const [{ data: academy }, { data: students }] = await Promise.all([
-    sb.from('academies').select('name').eq('id', academyId).single(),
+    sb.from('academies').select('name, max_pauses_per_enrollment').eq('id', academyId).single(),
     sb.from('academy_enrollments').select('id, player_name, player_age, status, payment_status, amount, created_at, starts_on, ends_on, profiles(name, phone), academy_plans(name, duration_months, features)').eq('academy_id', academyId).order('created_at', { ascending: false })
   ]);
   clearTimeout(_lt);
@@ -3819,6 +3819,12 @@ async function showAcademyStudents(academyId){
     return sum + (Number(s.amount||0) / months);
   }, 0));
 
+  let pauseCountMap = {};
+  if (academy?.max_pauses_per_enrollment > 0 && students?.length) {
+    const { data: pauseRows } = await sb.from('academy_enrollment_pauses').select('enrollment_id').eq('status','approved').in('enrollment_id', students.map(s=>s.id));
+    (pauseRows||[]).forEach(p => { pauseCountMap[p.enrollment_id] = (pauseCountMap[p.enrollment_id]||0) + 1; });
+  }
+
   const statusMap = { pending:'بانتظار الدفع', confirmed:'نشط', cancelled:'ملغي' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed' };
   const today = riyadhTodayStr();
@@ -3826,6 +3832,7 @@ async function showAcademyStudents(academyId){
   const studentRow = (s) => {
     const phone = s.profiles?.phone;
     const isExpired = s.ends_on && s.ends_on < today && s.status === 'confirmed';
+    const pausesUsed = pauseCountMap[s.id] || 0;
     return `
     <div style="padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -3836,6 +3843,7 @@ async function showAcademyStudents(academyId){
         <span class="badge ${isExpired?'closed':statusCls[s.status]||'pending'}" style="font-size:10.5px">${isExpired?'منتهي':statusMap[s.status]||s.status}</span>
       </div>
       <div style="font-size:11.5px;color:var(--ink-dim);margin-top:6px">${escapeHtml(s.academy_plans?.name)||'—'} · <b style="color:var(--flood)">${s.amount} ريال</b>${s.ends_on ? ` · حتى ${new Date(s.ends_on).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}` : ''}</div>
+      ${pausesUsed > 0 ? `<div style="font-size:11px;color:var(--ink-dim);margin-top:3px">⏸️ استخدم الإيقاف المؤقت ${pausesUsed} ${pausesUsed===1?'مرة':'مرات'}</div>` : ''}
       ${(s.academy_plans?.features&&s.academy_plans.features.length) ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${s.academy_plans.features.map(f=>`<span style="background:var(--bg-elev);border:1px solid var(--line);border-radius:20px;padding:2px 8px;font-size:10.5px">✓ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
         <span style="font-size:11.5px;color:var(--ink-dim)">${s.payment_status==='paid'?'✅ مدفوع':'⏳ غير مدفوع'}</span>
@@ -4197,6 +4205,13 @@ async function showAddAcademyForm(editId){
     <div class="field"><label>الاشتراك الشهري (ريال) *</label><input id="ac-price" type="number" value="${a.monthly_price||''}" placeholder="300"></div>
     <div class="field"><label>الفئات العمرية</label><input id="ac-ages" type="text" value="${escapeHtml(a.age_groups)||''}" placeholder="تحت 12، تحت 16"></div>
     <div class="field"><label>وصف مختصر</label><input id="ac-desc" type="text" value="${escapeHtml(a.description)||''}" placeholder="برنامج تدريبي احترافي"></div>
+
+    <div class="dlabel" style="margin-top:16px">⏸️ سياسة إيقاف الاشتراك المؤقت</div>
+    <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:10px">حدّد كم مرة يقدر الطالب يوقف اشتراكه مؤقتًا، وكم أقصى مدة لكل إيقاف — النظام يطبّقها تلقائيًا بدون أي تدخل منك لاحقًا. اترك "عدد المرات" = 0 لتعطيل الميزة كليًا.</div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>عدد مرات الإيقاف المسموحة</label><input id="ac-max-pauses" type="number" min="0" value="${a.max_pauses_per_enrollment??0}"></div>
+      <div class="field" style="flex:1"><label>أقصى مدة (يوم) لكل مرة</label><input id="ac-max-pause-days" type="number" min="0" value="${a.max_pause_days??0}"></div>
+    </div>
     <div class="field">
       <label>صورة الأكاديمية <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
       <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
@@ -4226,11 +4241,15 @@ async function saveAcademy(editId){
   const price = parseFloat(document.getElementById('ac-price').value);
   const ages = document.getElementById('ac-ages').value.trim();
   const desc = document.getElementById('ac-desc').value.trim();
+  const maxPauses = parseInt(document.getElementById('ac-max-pauses').value) || 0;
+  const maxPauseDays = parseInt(document.getElementById('ac-max-pause-days').value) || 0;
   const latVal = parseFloat(document.getElementById('st-lat')?.value);
   const lngVal = parseFloat(document.getElementById('st-lng')?.value);
   const imgFile = document.getElementById('st-image')?.files?.[0];
   if (!name || !city) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!price || price<=0) { showToast('أدخل اشتراكاً شهرياً صحيحاً','error'); return; }
+  if (maxPauses < 0 || maxPauseDays < 0) { showToast('لا يمكن أن تكون قيم سياسة الإيقاف سالبة','error'); return; }
+  if (maxPauses > 0 && maxPauseDays <= 0) { showToast('حدّد أقصى مدة إيقاف بالأيام لتفعيل الميزة','error'); return; }
 
   showToast('جارٍ الحفظ...');
   let imageUrl = null;
@@ -4244,7 +4263,7 @@ async function saveAcademy(editId){
   }
 
   const { data: { user } } = await sb.auth.getUser();
-  const payload = { name, city, district, region, monthly_price:price, age_groups:ages||null, description:desc||null };
+  const payload = { name, city, district, region, monthly_price:price, age_groups:ages||null, description:desc||null, max_pauses_per_enrollment: maxPauses, max_pause_days: maxPauseDays };
   if (imageUrl) payload.image_url = imageUrl;
   if (!isNaN(latVal)) payload.lat = latVal;
   if (!isNaN(lngVal)) payload.lng = lngVal;
@@ -4881,7 +4900,7 @@ async function renderPlayerBookingsTab(highlightBookingId){
 async function renderPlayerRegistrationsTab(){
   const { data: { user } } = await sb.auth.getUser();
   const [{ data: enrollments }, { data: teams }, { data: myReviews }] = await Promise.all([
-    sb.from('academy_enrollments').select('id, player_name, status, payment_status, amount, ends_on, academies(id, name), academy_plans(name)').eq('user_id', user.id),
+    sb.from('academy_enrollments').select('id, player_name, status, payment_status, amount, ends_on, academies(id, name, max_pauses_per_enrollment, max_pause_days), academy_plans(name)').eq('user_id', user.id),
     sb.from('tournament_teams').select('id, team_name, status, payment_status, amount, tournaments(id, name)').eq('user_id', user.id),
     sb.from('reviews').select('enrollment_id, team_id').eq('user_id', user.id)
   ]);
@@ -4891,17 +4910,31 @@ async function renderPlayerRegistrationsTab(){
   const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي' };
   const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed' };
 
-  const enrollHtml = (enrollments||[]).map(e=>`
+  // نجيب عدد مرات الإيقاف المستخدمة فعليًا لكل اشتراك نشط (لعرض "متبقٍ لك X من Y" بدقة قبل ما يطلب)
+  const activeEnrollIds = (enrollments||[]).filter(e => e.status==='confirmed' && (e.academies?.max_pauses_per_enrollment||0) > 0).map(e=>e.id);
+  let usedPausesMap = {};
+  if (activeEnrollIds.length) {
+    const { data: pauseRows } = await sb.from('academy_enrollment_pauses').select('enrollment_id').eq('status','approved').in('enrollment_id', activeEnrollIds);
+    (pauseRows||[]).forEach(p => { usedPausesMap[p.enrollment_id] = (usedPausesMap[p.enrollment_id]||0) + 1; });
+  }
+
+  const enrollHtml = (enrollments||[]).map(e=>{
+    const maxPauses = e.academies?.max_pauses_per_enrollment || 0;
+    const used = usedPausesMap[e.id] || 0;
+    const canPause = e.status === 'confirmed' && maxPauses > 0 && used < maxPauses;
+    return `
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div><b>🎓 ${escapeHtml(e.academies?.name)||'أكاديمية'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(e.player_name)}${e.academy_plans?.name ? ' · ' + escapeHtml(e.academy_plans.name) : ''}</div>${e.ends_on ? `<div style="font-size:11px;color:var(--ink-dim)">ساري حتى ${new Date(e.ends_on).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}</div>` : ''}</div>
         <span class="badge ${statusCls[e.status]||'pending'}" style="font-size:11px">${statusMap[e.status]||e.status}</span>
       </div>
       ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="startRegistrationPayment('enrollment',${e.id},${e.amount})">💳 أكمل الدفع</button>` : ''}
+      ${canPause ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showRequestPauseForm(${e.id},${e.academies.max_pause_days},${maxPauses - used})">⏸️ طلب إيقاف مؤقت (متبقٍ ${maxPauses-used} من ${maxPauses})</button>` : ''}
       ${(e.status==='pending'||e.status==='confirmed') ? `<button class="btn btn-danger btn-sm btn-block" style="margin-top:6px" onclick="cancelMyRegistration('enrollment',${e.id})">إلغاء التسجيل</button>` : ''}
       ${(e.status==='confirmed' && !reviewedEnroll.has(e.id)) ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="openRateRegistration('enrollment',${e.id},${e.academies?.id})">⭐ قيّم تجربتك</button>` : ''}
       ${reviewedEnroll.has(e.id) ? `<div style="font-size:12px;color:var(--ink-dim);margin-top:6px">✓ تم تقييمه</div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const teamHtml = (teams||[]).map(t=>`
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
@@ -4921,6 +4954,33 @@ async function renderPlayerRegistrationsTab(){
 }
 
 // ── يلغي تسجيل اللاعب بأكاديمية أو فريق بطولة — الاسترجاع (لو دُفع مسبقًا) يحتاج مراجعة يدوية من صاحب الأكاديمية/البطولة ──
+// ── يعرض نموذج طلب إيقاف مؤقت للاشتراك — التحقق والتنفيذ يتمّان تلقائيًا بالكامل بدون أي وسيط بشري ──
+function showRequestPauseForm(enrollmentId, maxDays, remainingCount){
+  openInfoModal('⏸️ طلب إيقاف مؤقت', `
+    <div style="font-size:12.5px;color:var(--ink-dim);margin-bottom:14px">أقصى مدة مسموحة لهذا الطلب: <b>${maxDays} يوم</b>. سيُمدَّد تاريخ انتهاء اشتراكك تلقائيًا بنفس عدد أيام الإيقاف بمجرد التأكيد.</div>
+    <div class="field"><label>من تاريخ</label><input id="pause-start" type="date" min="${riyadhTodayStr()}" value="${riyadhTodayStr()}"></div>
+    <div class="field"><label>إلى تاريخ</label><input id="pause-end" type="date" min="${riyadhTodayStr()}"></div>
+    <button class="btn btn-brand btn-block" onclick="submitPauseRequest(${enrollmentId})">تأكيد الإيقاف</button>
+  `);
+}
+
+async function submitPauseRequest(enrollmentId){
+  const start = document.getElementById('pause-start').value;
+  const end = document.getElementById('pause-end').value;
+  if (!start || !end) { showToast('أدخل تاريخ البداية والنهاية','error'); return; }
+  if (end < start) { showToast('تاريخ النهاية يجب أن يكون بعد البداية','error'); return; }
+
+  showToast('جارٍ التحقق...');
+  const { data, error } = await sb.rpc('request_enrollment_pause', {
+    p_enrollment_id: enrollmentId, p_pause_start: start, p_pause_end: end
+  });
+  if (error || !data?.ok) { showToast(data?.error || error?.message || 'تعذّر تنفيذ الإيقاف','error'); return; }
+
+  showToast(`تم إيقاف اشتراكك ✓ — الاشتراك ساري الآن حتى ${new Date(data.new_ends_on).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}`);
+  closeAll();
+  renderPlayerRegistrationsTab();
+}
+
 function cancelMyRegistration(entityType, entityId){
   showConfirmDialog('هل تريد إلغاء هذا التسجيل؟ لو كنت دفعت مسبقًا، تواصل مع صاحب الأكاديمية/البطولة لمتابعة الاسترجاع.', 'نعم، ألغِ التسجيل', () => _executeCancelRegistration(entityType, entityId));
 }
