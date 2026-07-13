@@ -4893,7 +4893,7 @@ async function renderAdminOverviewTab(){
   const weekAgoIso = weekAgo.toISOString();
   const twoWeeksAgoIso = twoWeeksAgo.toISOString();
 
-  const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFacCount }, { count: pendingAcadCount }, { count: pendingTournCount }, { data: earnRows }, { data: paidRows }, { data: smsRows }, { count: usersThisWeek }, { count: usersPrevWeek }, { count: bookingsThisWeek }, { count: bookingsPrevWeek }, { data: oldestPendingFac }] = await Promise.all([
+  const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFacCount }, { count: pendingAcadCount }, { count: pendingTournCount }, { data: earnRows }, { data: pubKeySetting }, { data: latestSmsLog }, { count: usersThisWeek }, { count: usersPrevWeek }, { count: bookingsThisWeek }, { count: bookingsPrevWeek }, { data: oldestPendingFac }] = await Promise.all([
     sb.from('profiles').select('*', { count: 'exact', head: true }),
     sb.from('facilities').select('*', { count: 'exact', head: true }),
     sb.from('bookings').select('*', { count: 'exact', head: true }),
@@ -4901,8 +4901,8 @@ async function renderAdminOverviewTab(){
     sb.from('academies').select('*', { count: 'exact', head: true }).eq('approved', false).eq('is_deleted', false),
     sb.from('tournaments').select('*', { count: 'exact', head: true }).eq('approved', false).eq('is_deleted', false),
     sb.from('bookings').select('total_price, refunded_amount').in('status', ['confirmed','completed','cancelled']).neq('payment_status','unpaid'),
-    sb.from('booking_payments').select('id').eq('status','paid').limit(1),
-    sb.from('sms_logs').select('id').eq('status','sent').limit(1),
+    sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
+    sb.from('sms_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
     sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', twoWeeksAgoIso).lt('created_at', weekAgoIso),
     sb.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
@@ -4912,8 +4912,9 @@ async function renderAdminOverviewTab(){
   const totalPending = (pendingFacCount||0) + (pendingAcadCount||0) + (pendingTournCount||0);
   const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + (Number(b.total_price||0) - Number(b.refunded_amount||0)), 0);
   const commissionEarned = Math.round(totalRevenue * (commissionPct/100) * 100) / 100;
-  const paymentActive = (paidRows||[]).length > 0;
-  const smsActive = (smsRows||[]).length > 0;
+  // "مفعّلة" تعني الإعداد موجود فعليًا — لا نعتمد على وجود استخدام ناجح سابق، لأن منصة جديدة كليًا تكون بلا أي استخدام بعد رغم إعدادها الصحيح
+  const paymentActive = !!pubKeySetting?.value;
+  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key';
 
   const growthPct = (curr, prev) => prev>0 ? Math.round(((curr-prev)/prev)*100) : (curr>0 ? 100 : 0);
   const usersGrowth = growthPct(usersThisWeek||0, usersPrevWeek||0);
@@ -5209,27 +5210,53 @@ async function showSeoHealth(){
 }
 
 async function renderAdminIntegrationsTab(){
-  const [{ data: paidRows }, { data: smsRows }] = await Promise.all([
-    sb.from('booking_payments').select('id').eq('status','paid').limit(1),
-    sb.from('sms_logs').select('id').eq('status','sent').limit(1),
+  const [{ data: pubKeySetting }, { data: latestSmsLog }] = await Promise.all([
+    sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
+    sb.from('sms_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ]);
-  const paymentActive = (paidRows||[]).length > 0;
-  const smsActive = (smsRows||[]).length > 0;
+  const paymentActive = !!pubKeySetting?.value;
+  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key';
 
   clearTimeout(window._tabLoadTimer);
   document.getElementById('adminTabInner').innerHTML = `
     <div class="dlabel">💳 الدفع الإلكتروني</div>
     <div class="stat-click" onclick="adminView('payment')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px">${paymentActive?'✅ متصلة وتعمل':'⚠️ غير مفعّلة بعد'}</span>
+      <span style="font-size:13px">${paymentActive?'✅ مفعّلة':'⚠️ غير مفعّلة بعد'}</span>
       <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
     </div>
 
     <div class="dlabel">📱 الرسائل النصية</div>
     <div class="stat-click" onclick="adminView('sms')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px">${smsActive?'✅ متصلة وتعمل':'⚠️ غير مفعّلة بعد'}</span>
+      <span style="font-size:13px">${smsActive?'✅ مفعّلة':'⚠️ غير مفعّلة بعد'}</span>
       <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
     </div>
   `;
+}
+
+// ── يفلتر قائمة المستخدمين المخزّنة بالذاكرة حسب الاسم أو رقم الجوال، بدون إعادة استعلام قاعدة البيانات لكل حرف يُكتب ──
+function renderAdminUsersList(){
+  const listEl = document.getElementById('admin-users-list');
+  if (!listEl) return;
+  const q = normalizeArabicText((document.getElementById('admin-users-search')?.value || '').trim());
+  const all = window._adminUsersCache || [];
+  const filtered = q ? all.filter(u =>
+    normalizeArabicText(u.name || '').includes(q) || String(u.phone || '').includes(q)
+  ) : all;
+  const roleLabel = { customer:'⚽ لاعب', owner:'🏟️ صاحب ملعب', staff:'🏟️ موظف', super_admin:'🛡️ مالك' };
+
+  if (!filtered.length) { listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا يوجد مستخدمون مطابقون</div>'; return; }
+
+  listEl.innerHTML = filtered.map(u => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;gap:8px">
+      <div style="flex:1;min-width:0">
+        <b>${escapeHtml(u.name)||'—'}</b>
+        <div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(u.phone)||''} · ${roleLabel[u.role]||u.role}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${u.role==='customer' ? `<button class="btn btn-soft btn-sm" onclick="ownerControl('${u.id}','owner')">ترقية لصاحب ملعب</button>` : ''}
+        ${u.role==='owner' ? `<button class="btn btn-danger btn-sm" onclick="ownerControl('${u.id}','customer')">إلغاء صفة صاحب ملعب</button>` : ''}
+      </div>
+    </div>`).join('');
 }
 
 async function adminView(kind) {
@@ -5245,19 +5272,13 @@ async function adminView(kind) {
     titleEl.textContent = '👥 المستخدمون';
     const { data, error } = await sb.from('profiles').select('id, name, phone, role').order('name');
     if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
-    const roleLabel = { customer:'⚽ لاعب', owner:'🏟️ صاحب ملعب', staff:'🏟️ موظف', super_admin:'🛡️ مالك' };
     clearTimeout(_lt);
-    bodyEl.innerHTML = backBtn + data.map(u => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;gap:8px">
-        <div style="flex:1;min-width:0">
-          <b>${escapeHtml(u.name)||'—'}</b>
-          <div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(u.phone)||''} · ${roleLabel[u.role]||u.role}</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          ${u.role==='customer' ? `<button class="btn btn-soft btn-sm" onclick="ownerControl('${u.id}','owner')">ترقية لصاحب ملعب</button>` : ''}
-          ${u.role==='owner' ? `<button class="btn btn-danger btn-sm" onclick="ownerControl('${u.id}','customer')">إلغاء صفة صاحب ملعب</button>` : ''}
-        </div>
-      </div>`).join('');
+    window._adminUsersCache = data;
+    bodyEl.innerHTML = backBtn + `
+      <div class="field" style="margin-bottom:14px"><input id="admin-users-search" type="text" placeholder="ابحث بالاسم أو رقم الجوال..." oninput="renderAdminUsersList()" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px"></div>
+      <div id="admin-users-list"></div>
+    `;
+    renderAdminUsersList();
   }
 
   else if (kind === 'facilities') {
@@ -5368,11 +5389,16 @@ async function adminView(kind) {
   else if (kind === 'sms') {
     titleEl.textContent = '📱 بوابة الرسائل النصية';
     const { data: logs } = await sb.from('sms_logs').select('*').order('created_at',{ascending:false}).limit(30);
-    const activated = (logs||[]).some(l=>l.status==='sent');
+    // نفحص أحدث سجل فقط لتحديد الحالة الحقيقية الحالية، بدل "هل صار إرسال ناجح أي وقت بالماضي" —
+    // هذا يفرّق بوضوح بين "غير مفعّلة أصلًا" (no_api_key) و"مفعّلة وتعمل" و"مفعّلة لكن تواجه خطأ حاليًا"
+    const latestLog = (logs||[])[0];
+    const neverConfigured = !latestLog || latestLog.status === 'no_api_key';
+    const activated = !neverConfigured;
+    const workingNow = latestLog?.status === 'sent';
     clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + `
       <div class="legal-note">
-        ${activated ? '✅ البوابة تعمل فعليًا (تقنيات Taqnyat).' : '⚠️ الدالة الخلفية منشورة وجاهزة — بس تحتاج تضيف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions (سجّل حساب أول في <b>taqnyat.sa</b>).'}
+        ${neverConfigured ? '⚠️ الدالة الخلفية منشورة وجاهزة — بس تحتاج تضيف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions (سجّل حساب أول في <b>taqnyat.sa</b>).' : workingNow ? '✅ البوابة مفعّلة وتعمل فعليًا (تقنيات Taqnyat).' : '⚠️ البوابة مفعّلة (المفتاح مضاف) لكن آخر محاولة إرسال فشلت — تحقق من صلاحية المفتاح أو رصيدك عند تقنيات.'}
       </div>
       <div class="dlabel">🧪 اختبار الإرسال</div>
       <div class="field"><label>رقم الجوال</label><input id="sms-test-phone" type="tel" placeholder="05xxxxxxxx"></div>
@@ -5390,12 +5416,17 @@ async function adminView(kind) {
 
   else if (kind === 'payment') {
     titleEl.textContent = '💳 بوابة الدفع الإلكتروني';
-    const { data: payRows } = await sb.from('booking_payments').select('*').order('created_at',{ascending:false}).limit(30);
-    const activated = (payRows||[]).some(p=>p.status==='paid');
+    const [{ data: payRows }, { data: pubKeySetting }] = await Promise.all([
+      sb.from('booking_payments').select('*').order('created_at',{ascending:false}).limit(30),
+      sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle()
+    ]);
+    // نتحقق من وجود المفتاح القابل للنشر فعليًا بالإعدادات — هذا يعكس "هل البوابة مفعّلة" بدقة، بغض النظر هل صار دفع ناجح سابقًا أو لا (منصة جديدة كليًا تبقى بدون أي دفع لفترة، وهذا طبيعي)
+    const isConfigured = !!pubKeySetting?.value;
+    const recentFailure = isConfigured && payRows && payRows.length > 0 && payRows[0].status !== 'paid';
     clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + `
       <div class="legal-note">
-        ${activated ? '✅ البوابة متصلة وتعمل فعليًا (Moyasar).' : '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب تاجر في <b>moyasar.com</b>، وأضف مفتاحك كـ Secret باسم <code>MOYASAR_SECRET_KEY</code> في Project Settings → Edge Functions.'}
+        ${!isConfigured ? '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب تاجر في <b>moyasar.com</b>، وأضف مفتاحك كـ Secret باسم <code>MOYASAR_SECRET_KEY</code> في Project Settings → Edge Functions.' : recentFailure ? '⚠️ البوابة مفعّلة (المفتاح مضاف) لكن آخر عملية دفع لم تكتمل بنجاح — تحقق من إعدادات حسابك عند ميسر.' : '✅ البوابة مفعّلة وجاهزة لاستقبال المدفوعات (Moyasar).'}
       </div>
       <div class="dlabel">📋 آخر عمليات الدفع</div>
       ${(payRows&&payRows.length)? payRows.map(p=>`
@@ -5498,22 +5529,40 @@ async function adminView(kind) {
     clearTimeout(_lt);
     bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ حساب المستحقات...</div>';
 
-    const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+    // نجيب كل البيانات اللازمة بضربات موازية قليلة، ونجمّعها بالذاكرة بدل استعلام منفصل متسلسل لكل صاحب ملعب —
+    // هذا يقلّل عدد استعلامات قاعدة البيانات من (owners × 3) إلى 4 فقط، بغض النظر عن عدد أصحاب الملاعب
+    const [{ data: commSetting }, { data: owners }, { data: allFacilities }, { data: allFields }, { data: allPaidBookings }, { data: allPayouts }] = await Promise.all([
+      sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
+      sb.from('profiles').select('id, name, phone, iban, bank_account_name').eq('role','owner'),
+      sb.from('facilities').select('id, owner_id'),
+      sb.from('fields').select('id, facility_id'),
+      sb.from('bookings').select('field_id, total_price, refunded_amount').in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid'),
+      sb.from('payouts').select('owner_id, net_amount'),
+    ]);
     const commissionPct = commSetting ? Number(commSetting.value) : 20;
 
-    const { data: owners } = await sb.from('profiles').select('id, name, phone, iban, bank_account_name').eq('role','owner');
+    // خرائط سريعة بالذاكرة بدل استعلامات متكررة: منشأة → مالك، ملعب → منشأة
+    const facilityOwnerMap = {};
+    (allFacilities||[]).forEach(f => { facilityOwnerMap[f.id] = f.owner_id; });
+    const fieldFacilityMap = {};
+    (allFields||[]).forEach(f => { fieldFacilityMap[f.id] = f.facility_id; });
+
+    // إجمالي الإيرادات الفعلي لكل مالك (بربط الحجز → الملعب → المنشأة → المالك)
+    const grossByOwner = {};
+    (allPaidBookings||[]).forEach(b => {
+      const facilityId = fieldFacilityMap[b.field_id];
+      const ownerId = facilityId ? facilityOwnerMap[facilityId] : null;
+      if (!ownerId) return;
+      grossByOwner[ownerId] = (grossByOwner[ownerId] || 0) + (Number(b.total_price||0) - Number(b.refunded_amount||0));
+    });
+    const paidOutByOwner = {};
+    (allPayouts||[]).forEach(p => { paidOutByOwner[p.owner_id] = (paidOutByOwner[p.owner_id] || 0) + Number(p.net_amount||0); });
+
     const rows = [];
     for (const o of (owners||[])) {
-      const { data: facs } = await sb.from('facilities').select('id').eq('owner_id', o.id);
-      const facIds = (facs||[]).map(f=>f.id);
-      if (!facIds.length) continue;
-      const { data: fields } = await sb.from('fields').select('id').in('facility_id', facIds);
-      const fieldIds = (fields||[]).map(f=>f.id);
-      if (!fieldIds.length) continue;
-      const { data: earnRows } = await sb.from('bookings').select('total_price, refunded_amount').in('field_id', fieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid');
-      const gross = (earnRows||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
-      const { data: paidOutRows } = await sb.from('payouts').select('net_amount').eq('owner_id', o.id);
-      const alreadyPaidOut = (paidOutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0),0);
+      const gross = grossByOwner[o.id] || 0;
+      if (gross <= 0) continue;
+      const alreadyPaidOut = paidOutByOwner[o.id] || 0;
       const grossNet = gross * (1 - commissionPct/100);
       const netOwed = Math.round((grossNet - alreadyPaidOut) * 100) / 100;
       if (netOwed > 0) rows.push({ owner: o, gross, commissionPct, netOwed });
@@ -6084,13 +6133,25 @@ async function rejectTournament(id){
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
 }
-async function rejectFacility(facilityId){
-  if (!confirm('رفض هذه المنشأة وحذفها نهائياً مع كل ملاعبها؟')) return;
+function rejectFacility(facilityId){
+  openInfoModal('❌ رفض المنشأة', `
+    <div class="field"><label>سبب الرفض <span style="color:var(--ink-dim);font-weight:400">(سيُرسل لصاحب المنشأة مباشرة)</span></label>
+      <textarea id="reject-reason" placeholder="مثال: الصور غير واضحة، بيانات الموقع ناقصة..." style="width:100%;min-height:80px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;resize:vertical"></textarea>
+    </div>
+    <div class="legal-note" style="margin-bottom:10px">⚠️ هذا يحذف المنشأة نهائيًا مع كل ملاعبها. لا يمكن التراجع بعد التأكيد.</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="adminView('approvals')">إلغاء</button>
+      <button class="btn btn-danger" style="flex:1" onclick="_executeRejectFacility(${facilityId})">تأكيد الرفض والحذف</button>
+    </div>
+  `);
+}
+async function _executeRejectFacility(facilityId){
+  const reason = document.getElementById('reject-reason')?.value.trim();
   const { data: fac } = await sb.from('facilities').select('owner_id, name').eq('id', facilityId).single();
   const { error } = await sb.from('facilities').delete().eq('id', facilityId);
   if (error) { showToast('تعذّر: '+error.message,'error'); return; }
   if (fac?.owner_id) {
-    try { await sb.rpc('send_notification', { p_user_id: fac.owner_id, p_title: 'تم رفض منشأتك ❌', p_body: `منشأة "${escapeHtml(fac.name)}" لم تُقبل — تواصل مع الدعم لمعرفة السبب` }); } catch(e){}
+    try { await sb.rpc('send_notification', { p_user_id: fac.owner_id, p_title: 'تم رفض منشأتك ❌', p_body: `منشأة "${escapeHtml(fac.name)}" لم تُقبل${reason ? ': ' + reason : ' — تواصل مع الدعم لمعرفة السبب'}` }); } catch(e){}
   }
   showToast('تم الرفض والحذف ✓');
   adminView('approvals');
@@ -6123,6 +6184,20 @@ async function sendBroadcast(){
   const title = document.getElementById('bc-title').value.trim();
   const body = document.getElementById('bc-body').value.trim();
   if (!title) { showToast('أدخل عنوان الإشعار','error'); return; }
+
+  // نحسب العدد الفعلي للمستلمين المستهدفين قبل الإرسال، ونعرضه بنص التأكيد — يمنع إرسال جماعي بضغطة خاطئة بدون معرفة الأثر الحقيقي
+  let targetCountQuery = sb.from('profiles').select('*', { count: 'exact', head: true });
+  if (target !== 'all') targetCountQuery = targetCountQuery.eq('role', target);
+  const { count: targetCount } = await targetCountQuery;
+  const targetLabel = target === 'all' ? 'جميع المستخدمين' : target === 'owner' ? 'أصحاب الملاعب فقط' : 'اللاعبين فقط';
+
+  showConfirmDialog(
+    `هل تريد إرسال هذا الإشعار إلى ${targetCount||0} مستخدم (${targetLabel})؟ سيصلهم داخل التطبيق وعبر واتساب، ولا يمكن التراجع بعد الإرسال.`,
+    'نعم، أرسل الآن',
+    () => _executeSendBroadcast(target, title, body)
+  );
+}
+async function _executeSendBroadcast(target, title, body){
   showToast('جارٍ الإرسال...');
   const { data: count, error } = await sb.rpc('send_broadcast_notification', { p_role: target, p_title: title, p_body: body || null });
   if (error) { showToast('تعذّر الإرسال: ' + error.message, 'error'); return; }
@@ -6159,9 +6234,10 @@ async function adminSetBookingStatus(bookingId, newStatus) {
   adminView('bookings');
 }
 
-async function adminDeleteFacility(facilityId) {
-  if (!confirm('حذف هذه المنشأة؟ لو كان لملاعبها حجوزات سابقة، سيُحفظ سجلها (معلَّمة "محذوف") للحماية القانونية والمالية، وتختفي فورًا من الموقع.')) return;
-
+function adminDeleteFacility(facilityId) {
+  showConfirmDialog('حذف هذه المنشأة؟ لو كان لملاعبها حجوزات سابقة، سيُحفظ سجلها (معلَّمة "محذوف") للحماية القانونية والمالية، وتختفي فورًا من الموقع.', 'نعم، احذف المنشأة', () => _executeAdminDeleteFacility(facilityId));
+}
+async function _executeAdminDeleteFacility(facilityId) {
   const { error } = await sb.from('facilities').delete().eq('id', facilityId);
   if (!error) {
     showToast('تم حذف المنشأة نهائيًا ✓ (لا سجلات سابقة عليها)');
