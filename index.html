@@ -1343,13 +1343,28 @@ async function renderSimpleDrawer(){
   const priceLbl = isTourney ? 'رسوم الفريق' : 'الاشتراك';
 
   let plans = [];
+  let academyPolicy = null;
   if (!isTourney) {
-    const { data } = await sb.from('academy_plans').select('*').eq('academy_id', it.id).eq('is_active', true).order('sort_order').order('duration_months');
-    plans = data || [];
+    const [{ data: planData }, { data: acadData }] = await Promise.all([
+      sb.from('academy_plans').select('*').eq('academy_id', it.id).eq('is_active', true).order('sort_order').order('duration_months'),
+      sb.from('academies').select('pause_policy_type, max_pauses_per_enrollment, max_pause_days, max_pause_percent').eq('id', it.id).single()
+    ]);
+    plans = planData || [];
+    academyPolicy = acadData;
   }
   window._selectedAcademyPlanId = (plans.length ? plans[0].id : null);
   const selectedPlan = plans.find(p => p.id === window._selectedAcademyPlanId);
   const currentPrice = isTourney ? it.price : (selectedPlan ? selectedPlan.price : it.price);
+
+  // نص واضح بلغة بسيطة يشرح سياسة الإيقاف اللي حددها صاحب الأكاديمية تحديدًا — يظهر قبل التسجيل حتى يقرر ولي الأمر وهو على بيّنة
+  let pausePolicyText = 'لا تسمح هذه الأكاديمية بإيقاف الاشتراك مؤقتًا.';
+  if (academyPolicy) {
+    if (academyPolicy.pause_policy_type === 'count_days' && (academyPolicy.max_pauses_per_enrollment||0) > 0) {
+      pausePolicyText = `يمكنك إيقاف الاشتراك مؤقتًا حتى ${academyPolicy.max_pauses_per_enrollment} ${academyPolicy.max_pauses_per_enrollment===1?'مرة':'مرات'}، بحد أقصى ${academyPolicy.max_pause_days} يوم لكل مرة.`;
+    } else if (academyPolicy.pause_policy_type === 'percent_duration' && (academyPolicy.max_pause_percent||0) > 0) {
+      pausePolicyText = `يمكنك إيقاف الاشتراك مؤقتًا برصيد إجمالي يعادل ${academyPolicy.max_pause_percent}% من مدة باقتك، تستخدمه دفعة واحدة أو على عدة مرات.`;
+    }
+  }
 
   document.getElementById('drawerBody').innerHTML = `
     <div class="dmedia">${it.image?`<img src="${it.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:it.icon}</div>
@@ -1372,6 +1387,13 @@ async function renderSimpleDrawer(){
         </div>`).join('')}
     ` : ''}
     ${(!isTourney && !plans.length) ? `<div class="legal-note" style="margin:14px 0">⚠️ هذه الأكاديمية لم تضِف باقات اشتراك بعد — تواصل معها مباشرة</div>` : ''}
+
+    ${!isTourney ? `
+      <div class="legal-note" style="margin:12px 0">
+        ⏸️ <b>سياسة الإيقاف المؤقت:</b> ${pausePolicyText}<br>
+        💳 <b>الإلغاء:</b> لا يمكن استرداد مبلغ الاشتراك بعد تأكيده وتفعيله — الخيار المتاح فقط هو الإيقاف المؤقت أعلاه.
+      </div>
+    ` : ''}
 
     ${isTourney? `
       <div class="dlabel">📝 بيانات الفريق</div>
@@ -2710,6 +2732,28 @@ async function submitRegistrationReview(kind, refId, targetId){
   else { payload.team_id = refId; payload.tournament_id = targetId; }
   const { error } = await sb.from('reviews').insert(payload);
   if (error) { showToast('تعذّر إرسال التقييم: ' + error.message, 'error'); return; }
+
+  // نُعلم صاحب الأكاديمية/البطولة بالتقييم الجديد — بنفس نمط تنبيه تقييمات الملاعب
+  try {
+    if (kind === 'enrollment') {
+      const { data: acad } = await sb.from('academies').select('name, owner_id').eq('id', targetId).single();
+      if (acad?.owner_id) {
+        await sb.rpc('send_notification', {
+          p_user_id: acad.owner_id, p_title: 'تقييم جديد ⭐',
+          p_body: `حصلت ${escapeHtml(acad.name)} على تقييم ${window._rateStars || 5} نجوم من طالب`
+        });
+      }
+    } else {
+      const { data: tourn } = await sb.from('tournaments').select('name, owner_id').eq('id', targetId).single();
+      if (tourn?.owner_id) {
+        await sb.rpc('send_notification', {
+          p_user_id: tourn.owner_id, p_title: 'تقييم جديد ⭐',
+          p_body: `حصلت ${escapeHtml(tourn.name)} على تقييم ${window._rateStars || 5} نجوم من فريق`
+        });
+      }
+    }
+  } catch(e){}
+
   showToast('شكراً على تقييمك ✓ ⭐');
   closeAll();
 }
@@ -5007,7 +5051,7 @@ async function renderPlayerRegistrationsTab(){
       </div>
       ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="startRegistrationPayment('enrollment',${e.id},${e.amount})">💳 أكمل الدفع</button>` : ''}
       ${pauseBtnHtml}
-      ${(e.status==='pending'||e.status==='confirmed') ? `<button class="btn btn-danger btn-sm btn-block" style="margin-top:6px" onclick="cancelMyRegistration('enrollment',${e.id})">إلغاء التسجيل</button>` : ''}
+      ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-danger btn-sm btn-block" style="margin-top:6px" onclick="cancelMyRegistration('enrollment',${e.id})">إلغاء التسجيل</button>` : ''}
       ${(e.status==='confirmed' && !reviewedEnroll.has(e.id)) ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="openRateRegistration('enrollment',${e.id},${e.academies?.id})">⭐ قيّم تجربتك</button>` : ''}
       ${reviewedEnroll.has(e.id) ? `<div style="font-size:12px;color:var(--ink-dim);margin-top:6px">✓ تم تقييمه</div>` : ''}
     </div>`;
@@ -5054,18 +5098,58 @@ async function submitPauseRequest(enrollmentId){
   if (error || !data?.ok) { showToast(data?.error || error?.message || 'تعذّر تنفيذ الإيقاف','error'); return; }
 
   showToast(`تم إيقاف اشتراكك ✓ — الاشتراك ساري الآن حتى ${new Date(data.new_ends_on).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}`);
+
+  // نُعلم صاحب الأكاديمية بإيقاف الطالب مؤقتًا — حتى لا يحسب حضوره لحصص خلال فترة الإيقاف بدون علمه
+  try {
+    const { data: enroll } = await sb.from('academy_enrollments').select('player_name, academies(owner_id, name)').eq('id', enrollmentId).single();
+    if (enroll?.academies?.owner_id) {
+      await sb.rpc('send_notification', {
+        p_user_id: enroll.academies.owner_id,
+        p_title: 'إيقاف مؤقت لاشتراك طالب ⏸️',
+        p_body: `${enroll.player_name} أوقف اشتراكه مؤقتًا حتى ${new Date(end).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')} — ${enroll.academies.name}`
+      });
+    }
+  } catch(e){}
+
   closeAll();
   renderPlayerRegistrationsTab();
 }
 
 function cancelMyRegistration(entityType, entityId){
-  showConfirmDialog('هل تريد إلغاء هذا التسجيل؟ لو كنت دفعت مسبقًا، تواصل مع صاحب الأكاديمية/البطولة لمتابعة الاسترجاع.', 'نعم، ألغِ التسجيل', () => _executeCancelRegistration(entityType, entityId));
+  const message = entityType === 'enrollment'
+    ? 'هل تريد إلغاء هذا التسجيل؟ لم يتم خصم أي مبلغ منك بعد.'
+    : 'هل تريد إلغاء هذا التسجيل؟ لو كنت دفعت مسبقًا، تواصل مع صاحب البطولة لمتابعة الاسترجاع.';
+  showConfirmDialog(message, 'نعم، ألغِ التسجيل', () => _executeCancelRegistration(entityType, entityId));
 }
 async function _executeCancelRegistration(entityType, entityId){
   const table = entityType === 'enrollment' ? 'academy_enrollments' : 'tournament_teams';
   const { error } = await sb.from(table).update({ status: 'cancelled' }).eq('id', entityId);
   if (error) { showToast('تعذّر الإلغاء: ' + error.message, 'error'); return; }
   showToast('تم إلغاء التسجيل ✓');
+
+  // نُعلم صاحب الأكاديمية/البطولة بإلغاء اللاعب لتسجيله، حتى لا يستمر بحساب مكانه دون علمه
+  try {
+    if (entityType === 'enrollment') {
+      const { data: enroll } = await sb.from('academy_enrollments').select('player_name, academies(owner_id, name)').eq('id', entityId).single();
+      if (enroll?.academies?.owner_id) {
+        await sb.rpc('send_notification', {
+          p_user_id: enroll.academies.owner_id,
+          p_title: 'إلغاء تسجيل طالب ❌',
+          p_body: `${enroll.player_name} ألغى تسجيله في ${enroll.academies.name}`
+        });
+      }
+    } else {
+      const { data: team } = await sb.from('tournament_teams').select('team_name, tournaments(owner_id, name)').eq('id', entityId).single();
+      if (team?.tournaments?.owner_id) {
+        await sb.rpc('send_notification', {
+          p_user_id: team.tournaments.owner_id,
+          p_title: 'إلغاء تسجيل فريق ❌',
+          p_body: `${team.team_name} ألغى تسجيله في ${team.tournaments.name}`
+        });
+      }
+    }
+  } catch(e){}
+
   renderPlayerRegistrationsTab();
 }
 
