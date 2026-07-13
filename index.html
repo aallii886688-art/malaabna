@@ -1086,7 +1086,7 @@ async function openItem(type, id, presetPlayerCount){
   if (!active) { showToast('عذرًا، هذا العنصر لم يعد متاحًا','error'); return; }
 
   if(type==='stadiums') await renderStadiumDrawer();
-  else renderSimpleDrawer();
+  else await renderSimpleDrawer();
   document.getElementById('ov').classList.add('open');
   document.getElementById('drawer').classList.add('open');
 }
@@ -1332,11 +1332,21 @@ async function renderStadiumDrawer(skipFetch){
   }
 }
 
-function renderSimpleDrawer(){
+async function renderSimpleDrawer(){
   const it = active;
   const isTourney = activeType==='tournaments';
   document.getElementById('drawerTitle').textContent = isTourney ? 'تسجيل في بطولة' : 'تسجيل في أكاديمية';
-  const priceLbl = isTourney ? 'رسوم الفريق' : 'الاشتراك الشهري';
+  const priceLbl = isTourney ? 'رسوم الفريق' : 'الاشتراك';
+
+  let plans = [];
+  if (!isTourney) {
+    const { data } = await sb.from('academy_plans').select('*').eq('academy_id', it.id).eq('is_active', true).order('sort_order').order('duration_months');
+    plans = data || [];
+  }
+  window._selectedAcademyPlanId = (plans.length ? plans[0].id : null);
+  const selectedPlan = plans.find(p => p.id === window._selectedAcademyPlanId);
+  const currentPrice = isTourney ? it.price : (selectedPlan ? selectedPlan.price : it.price);
+
   document.getElementById('drawerBody').innerHTML = `
     <div class="dmedia">${it.image?`<img src="${it.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`:it.icon}</div>
     <div style="font-size:20px;font-weight:900;margin-bottom:8px">${escapeHtml(it.name)}</div>
@@ -1344,6 +1354,20 @@ function renderSimpleDrawer(){
     <div class="irow">📋 <b>${escapeHtml(it.desc)}</b></div>
     ${isTourney? `<div class="irow">👥 الفرق المسجلة: <b>${it.teams}</b></div>` : `<div class="irow">⭐ <b>${it.rating}</b></div>`}
     <div class="irow">🏷️ ${it.tags.join(' · ')}</div>
+
+    ${(!isTourney && plans.length) ? `
+      <div class="dlabel">📦 اختر باقة الاشتراك</div>
+      ${plans.map(p => `
+        <div onclick="selectAcademyPlan(${p.id})" id="plan-opt-${p.id}" style="padding:12px;border:2px solid ${p.id===window._selectedAcademyPlanId?'var(--brand)':'var(--line)'};background:var(--bg-soft);border-radius:12px;margin-bottom:8px;cursor:pointer">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b style="font-size:13.5px">${escapeHtml(p.name)}</b>
+            <b style="color:var(--flood);font-size:14px">${p.price} ريال</b>
+          </div>
+          <div style="font-size:11.5px;color:var(--ink-dim);margin-top:2px">${p.duration_months} ${p.duration_months===1?'شهر':'أشهر'}</div>
+          ${(p.features&&p.features.length) ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${p.features.map(f=>`<span style="background:var(--bg-elev);border:1px solid var(--line);border-radius:20px;padding:2px 8px;font-size:10.5px">✓ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+        </div>`).join('')}
+    ` : ''}
+    ${(!isTourney && !plans.length) ? `<div class="legal-note" style="margin:14px 0">⚠️ هذه الأكاديمية لم تضِف باقات اشتراك بعد — تواصل معها مباشرة</div>` : ''}
 
     ${isTourney? `
       <div class="dlabel">📝 بيانات الفريق</div>
@@ -1356,10 +1380,15 @@ function renderSimpleDrawer(){
     `}
 
     <div class="summary">
-      <div class="srow"><span>${priceLbl}</span><span>${it.price} ريال</span></div>
-      <div class="srow tot"><span>الإجمالي</span><span class="amt">${it.price} ريال</span></div>
+      <div class="srow"><span>${priceLbl}</span><span id="reg-price-label">${currentPrice} ريال</span></div>
+      <div class="srow tot"><span>الإجمالي</span><span class="amt" id="reg-total-label">${currentPrice} ريال</span></div>
     </div>
-    <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()">💳 متابعة الدفع</button>`;
+    <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()" ${(!isTourney && !plans.length) ? 'disabled' : ''}>💳 متابعة الدفع</button>`;
+}
+
+async function selectAcademyPlan(planId){
+  window._selectedAcademyPlanId = planId;
+  await renderSimpleDrawer();
 }
 
 async function setDate(i){ selDate=i; selSlot=null; appliedCoupon=null; finalBookingPrice=null; await renderStadiumDrawer(); }
@@ -2037,14 +2066,26 @@ function initBackend() {
       const playerAge  = parseInt(document.getElementById('reg-player-age')?.value);
       if (!playerName) { showToast('أدخل اسم اللاعب','error'); return; }
       if (isNaN(playerAge) || playerAge < 3 || playerAge > 80) { showToast('أدخل عمرًا صحيحًا (من 3 إلى 80 سنة)','error'); return; }
+
+      const planId = window._selectedAcademyPlanId;
+      if (!planId) { showToast('اختر باقة اشتراك أولاً','error'); return; }
+      const { data: plan, error: planErr } = await sb.from('academy_plans').select('*').eq('id', planId).eq('is_active', true).single();
+      if (planErr || !plan) { showToast('الباقة المختارة لم تعد متاحة — اختر باقة أخرى','error'); return; }
+
+      const startsOn = riyadhTodayStr();
+      const endDate = new Date(startsOn);
+      endDate.setMonth(endDate.getMonth() + plan.duration_months);
+      const endsOn = endDate.toISOString().slice(0,10);
+
       const { data: enroll, error } = await sb.from('academy_enrollments').insert({
-        academy_id: active.id, user_id: user.id, player_name: playerName, player_age: playerAge, status:'pending'
+        academy_id: active.id, user_id: user.id, player_name: playerName, player_age: playerAge, status:'pending',
+        plan_id: plan.id, amount: plan.price, starts_on: startsOn, ends_on: endsOn
       }).select().single();
       if (error) {
         if (error.code === '23503') { showToast('هذي أكاديمية تجريبية غير موجودة فعليًا بعد','error'); return; }
         showToast('تعذّر التسجيل: ' + error.message,'error'); return;
       }
-      await startRegistrationPayment('enrollment', enroll.id, active.price);
+      await startRegistrationPayment('enrollment', enroll.id, plan.price);
       return;
     }
 
@@ -3101,7 +3142,14 @@ async function renderOwnerAcademiesTab(){
             ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteAcademy(${a.id})">حذف</button>` : ''}
           </div>
         </div>
-        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleAcademySession(${a.id})">⏱️ جدولة موعد تدريب</button>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn btn-brand btn-sm" style="flex:1" onclick="showAcademyStudents(${a.id})">👥 الطلاب</button>
+          <button class="btn btn-soft btn-sm" style="flex:1" onclick="showScheduleAcademySession(${a.id})">⏱️ المواعيد</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAcademyPlans(${a.id})">📦 باقات الاشتراك</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAcademyFinance(${a.id})">💰 المالية</button>
+        </div>
       </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد أكاديميات بعد</div>'}
     ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="showAddAcademyForm()">+ إضافة أكاديمية</button>` : ''}
   `;
@@ -3750,6 +3798,247 @@ async function myFieldsOptionsHtml(){
 }
 
 const WD_NAMES = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+
+// ── شاشة إدارة طلاب الأكاديمية — عرض المسجّلين، تأكيد/رفض، تواصل واتساب مباشر، وإحصائيات سريعة ──
+async function showAcademyStudents(academyId){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '👥 طلاب الأكاديمية';
+  const _lt = delayedLoading(bodyEl.id);
+
+  const [{ data: academy }, { data: students }] = await Promise.all([
+    sb.from('academies').select('name').eq('id', academyId).single(),
+    sb.from('academy_enrollments').select('id, player_name, player_age, status, payment_status, amount, created_at, starts_on, ends_on, profiles(name, phone), academy_plans(name, duration_months, features)').eq('academy_id', academyId).order('created_at', { ascending: false })
+  ]);
+  clearTimeout(_lt);
+
+  const active = (students||[]).filter(s => s.status === 'confirmed');
+  const pending = (students||[]).filter(s => s.status === 'pending');
+  // نحسب الإيراد الشهري الفعلي بتوزيع كل اشتراك على مدته (مثال: باقة 900 ريال لـ3 أشهر = 300 ريال/شهر فعليًا)
+  const monthlyRevenue = Math.round(active.reduce((sum, s) => {
+    const months = s.academy_plans?.duration_months || 1;
+    return sum + (Number(s.amount||0) / months);
+  }, 0));
+
+  const statusMap = { pending:'بانتظار الدفع', confirmed:'نشط', cancelled:'ملغي' };
+  const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed' };
+  const today = riyadhTodayStr();
+
+  const studentRow = (s) => {
+    const phone = s.profiles?.phone;
+    const isExpired = s.ends_on && s.ends_on < today && s.status === 'confirmed';
+    return `
+    <div style="padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <b style="font-size:13px">${escapeHtml(s.player_name)||'—'}</b>
+          <div style="font-size:11.5px;color:var(--ink-dim)">${s.player_age?`${s.player_age} سنة · `:''}${escapeHtml(s.profiles?.name)||''}</div>
+        </div>
+        <span class="badge ${isExpired?'closed':statusCls[s.status]||'pending'}" style="font-size:10.5px">${isExpired?'منتهي':statusMap[s.status]||s.status}</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-top:6px">${escapeHtml(s.academy_plans?.name)||'—'} · <b style="color:var(--flood)">${s.amount} ريال</b>${s.ends_on ? ` · حتى ${new Date(s.ends_on).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}` : ''}</div>
+      ${(s.academy_plans?.features&&s.academy_plans.features.length) ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${s.academy_plans.features.map(f=>`<span style="background:var(--bg-elev);border:1px solid var(--line);border-radius:20px;padding:2px 8px;font-size:10.5px">✓ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <span style="font-size:11.5px;color:var(--ink-dim)">${s.payment_status==='paid'?'✅ مدفوع':'⏳ غير مدفوع'}</span>
+        ${phone ? `<a href="${whatsappLink(phone)}" target="_blank" class="btn btn-soft btn-sm" style="padding:4px 10px;font-size:11px;text-decoration:none">💬 تواصل</a>` : ''}
+      </div>
+      ${s.status==='pending' ? `
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn btn-brand btn-sm" style="flex:1" onclick="setEnrollmentStatus(${s.id},'confirmed',${academyId})">✅ تأكيد القبول</button>
+          <button class="btn btn-danger btn-sm" style="flex:1" onclick="setEnrollmentStatus(${s.id},'cancelled',${academyId})">رفض</button>
+        </div>` : ''}
+    </div>`;
+  };
+
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
+    <div class="dlabel" style="justify-content:center;margin-bottom:0">${escapeHtml(academy?.name)||''}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 18px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:900;color:var(--flood)">${active.length}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">طالب نشط</div>
+      </div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:900;color:var(--flood)">${monthlyRevenue}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">إيراد شهري متوقع (ريال)</div>
+      </div>
+    </div>
+
+    ${pending.length ? `<div class="dlabel">⏳ بانتظار التأكيد (${pending.length})</div>${pending.map(studentRow).join('')}` : ''}
+    <div class="dlabel" style="margin-top:${pending.length?'16px':'0'}">👥 كل الطلاب</div>
+    ${(students&&students.length) ? students.map(studentRow).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا يوجد طلاب مسجّلون بعد</div>'}
+  `;
+}
+
+async function setEnrollmentStatus(enrollmentId, newStatus, academyId){
+  const { error } = await sb.from('academy_enrollments').update({ status: newStatus }).eq('id', enrollmentId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  try {
+    const { data: enroll } = await sb.from('academy_enrollments').select('user_id, player_name, academies(name)').eq('id', enrollmentId).single();
+    if (enroll?.user_id) {
+      await sb.rpc('send_notification', {
+        p_user_id: enroll.user_id,
+        p_title: newStatus === 'confirmed' ? 'تم تأكيد تسجيلك ✅' : 'تم رفض تسجيلك ❌',
+        p_body: `${enroll.player_name} — ${escapeHtml(enroll.academies?.name)||'الأكاديمية'}`
+      });
+    }
+  } catch(e){}
+  showToast(newStatus === 'confirmed' ? 'تم تأكيد الطالب ✓' : 'تم رفض التسجيل ✓');
+  showAcademyStudents(academyId);
+}
+
+// ── مالية الأكاديمية — منفصلة تمامًا عن مالية الملاعب، تعتمد على الاشتراكات المدفوعة فعليًا لهذي الأكاديمية بالذات ──
+// ── إدارة باقات اشتراك الأكاديمية — كل باقة لها مدة وسعر ومميزات خاصة، بدل سعر شهري ثابت وحيد ──
+async function showAcademyPlans(academyId){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📦 باقات الاشتراك';
+  const _lt = delayedLoading(bodyEl.id);
+  const { data: plans } = await sb.from('academy_plans').select('*').eq('academy_id', academyId).order('sort_order').order('duration_months');
+  clearTimeout(_lt);
+
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
+
+    ${(plans&&plans.length) ? plans.map(p => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;${!p.is_active?'opacity:.55':''}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <b style="font-size:14px">${escapeHtml(p.name)}</b>
+            <div style="font-size:12px;color:var(--ink-dim)">${p.duration_months} ${p.duration_months===1?'شهر':p.duration_months<=10?'أشهر':'شهر'} · <b style="color:var(--flood)">${p.price} ريال</b></div>
+          </div>
+          <span class="badge ${p.is_active?'available':'closed'}" style="font-size:10px">${p.is_active?'مفعّلة':'معطّلة'}</span>
+        </div>
+        ${(p.features&&p.features.length) ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px">${p.features.map(f=>`<span style="background:var(--bg-elev);border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:11px">✓ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button class="btn btn-soft btn-sm" style="flex:1" onclick="showAddAcademyPlanForm(${academyId},${p.id})">✏️ تعديل</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="toggleAcademyPlanActive(${p.id},${!p.is_active},${academyId})">${p.is_active?'⏸️ تعطيل':'▶️ تفعيل'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAcademyPlan(${p.id},${academyId})">🗑️</button>
+        </div>
+      </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد باقات بعد — أضف باقة ليقدر اللاعبون التسجيل</div>'}
+
+    <button class="btn btn-brand btn-block" style="margin-top:8px" onclick="showAddAcademyPlanForm(${academyId})">+ إضافة باقة جديدة</button>
+  `;
+}
+
+async function showAddAcademyPlanForm(academyId, editId){
+  const bodyEl = document.getElementById('ownerBody');
+  let p = {};
+  if (editId) {
+    const { data } = await sb.from('academy_plans').select('*').eq('id', editId).single();
+    p = data || {};
+  }
+  document.getElementById('ownerTitle').textContent = editId ? '✏️ تعديل باقة' : '➕ باقة جديدة';
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="showAcademyPlans(${academyId})" style="margin-bottom:14px">→ رجوع</button>
+    <div class="field"><label>اسم الباقة *</label><input id="plan-name" type="text" value="${escapeHtml(p.name)||''}" placeholder="باقة 3 أشهر"></div>
+    <div class="field"><label>المدة (بالأشهر) *</label><input id="plan-duration" type="number" min="1" value="${p.duration_months||1}"></div>
+    <div class="field"><label>السعر الإجمالي للباقة (ريال) *</label><input id="plan-price" type="number" min="1" value="${p.price||''}" placeholder="900"></div>
+    <div class="field">
+      <label>المميزات <span style="color:var(--ink-dim);font-weight:400">(افصل كل ميزة بفاصلة ,)</span></label>
+      <textarea id="plan-features" placeholder="طقم رياضي مشمول, تحليل أداء شهري, حصة تجريبية مجانية" style="width:100%;min-height:70px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;resize:vertical">${(p.features||[]).join(', ')}</textarea>
+    </div>
+    <button class="btn btn-brand btn-block" onclick="saveAcademyPlan(${academyId},${editId||'null'})">💾 حفظ الباقة</button>
+  `;
+}
+
+async function saveAcademyPlan(academyId, editId){
+  const name = document.getElementById('plan-name').value.trim();
+  const duration = parseInt(document.getElementById('plan-duration').value);
+  const price = parseFloat(document.getElementById('plan-price').value);
+  const featuresRaw = document.getElementById('plan-features').value.trim();
+  const features = featuresRaw ? featuresRaw.split(',').map(f=>f.trim()).filter(Boolean) : [];
+
+  if (!name) { showToast('أدخل اسم الباقة','error'); return; }
+  if (!duration || duration <= 0) { showToast('أدخل مدة صحيحة بالأشهر','error'); return; }
+  if (!price || price <= 0) { showToast('أدخل سعرًا صحيحًا','error'); return; }
+
+  const payload = { academy_id: academyId, name, duration_months: duration, price, features };
+  let error;
+  if (editId) ({ error } = await sb.from('academy_plans').update(payload).eq('id', editId));
+  else ({ error } = await sb.from('academy_plans').insert(payload));
+
+  if (error) { showToast('تعذّر الحفظ: ' + error.message, 'error'); return; }
+  showToast('تم حفظ الباقة ✓');
+  showAcademyPlans(academyId);
+}
+
+async function toggleAcademyPlanActive(planId, newState, academyId){
+  const { error } = await sb.from('academy_plans').update({ is_active: newState }).eq('id', planId);
+  if (error) { showToast('تعذّر التحديث','error'); return; }
+  showToast(newState ? 'تم تفعيل الباقة ✓' : 'تم تعطيل الباقة ✓');
+  showAcademyPlans(academyId);
+}
+
+function deleteAcademyPlan(planId, academyId){
+  showConfirmDialog('حذف هذه الباقة؟ لن تؤثر على الطلاب المسجّلين فيها مسبقًا.', 'نعم، احذف', () => _executeDeleteAcademyPlan(planId, academyId));
+}
+async function _executeDeleteAcademyPlan(planId, academyId){
+  const { error } = await sb.from('academy_plans').update({ is_active: false }).eq('id', planId);
+  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  showToast('تم حذف الباقة ✓');
+  showAcademyPlans(academyId);
+}
+
+async function showAcademyFinance(academyId){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '💰 مالية الأكاديمية';
+  const _lt = delayedLoading(bodyEl.id);
+
+  const [{ data: academy }, { data: paidEnrollments }] = await Promise.all([
+    sb.from('academies').select('name, monthly_price').eq('id', academyId).single(),
+    sb.from('academy_enrollments').select('player_name, amount, created_at').eq('academy_id', academyId).eq('payment_status', 'paid').order('created_at', { ascending: false })
+  ]);
+  clearTimeout(_lt);
+
+  const totalCollected = (paidEnrollments||[]).reduce((s,e) => s + Number(e.amount||0), 0);
+  const activeCount = (paidEnrollments||[]).length;
+
+  // نجمّع المبالغ المحصّلة فعليًا حسب الشهر — يعكس التدفق النقدي الحقيقي، لا الإيراد المتوقع فقط
+  const byMonth = {};
+  (paidEnrollments||[]).forEach(e => {
+    const monthKey = String(e.created_at).slice(0,7); // YYYY-MM
+    byMonth[monthKey] = (byMonth[monthKey]||0) + Number(e.amount||0);
+  });
+  const monthLabels = { '01':'يناير','02':'فبراير','03':'مارس','04':'أبريل','05':'مايو','06':'يونيو','07':'يوليو','08':'أغسطس','09':'سبتمبر','10':'أكتوبر','11':'نوفمبر','12':'ديسمبر' };
+  const monthRows = Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0]));
+
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
+    <div class="dlabel" style="justify-content:center;margin-bottom:0">${escapeHtml(academy?.name)||''}</div>
+
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;margin:14px 0">
+      <div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">إجمالي المحصّل فعليًا</div>
+      <div style="font-size:28px;font-weight:900;color:var(--flood)">${totalCollected} <span style="font-size:14px">ريال</span></div>
+      <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">من ${activeCount} اشتراك مدفوع</div>
+    </div>
+
+    <div class="dlabel">📅 التحصيل حسب الشهر</div>
+    ${monthRows.length ? monthRows.map(([month, amount]) => {
+      const [y, m] = month.split('-');
+      return `<div style="display:flex;justify-content:space-between;padding:10px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
+        <span style="font-size:12.5px">${monthLabels[m]||m} ${y}</span>
+        <b style="font-size:12.5px;color:var(--flood)">${amount} ريال</b>
+      </div>`;
+    }).join('') : '<div style="text-align:center;padding:20px;color:var(--ink-dim);font-size:12.5px">لا توجد مدفوعات بعد</div>'}
+
+    ${(paidEnrollments&&paidEnrollments.length) ? `<button class="btn btn-soft btn-block" style="margin-top:14px" onclick="exportAcademyFinanceCsv(${academyId})">⬇️ تصدير سجل هذه الأكاديمية (CSV)</button>` : ''}
+  `;
+}
+
+async function exportAcademyFinanceCsv(academyId){
+  const { data: academy } = await sb.from('academies').select('name').eq('id', academyId).single();
+  const { data: rows } = await sb.from('academy_enrollments').select('player_name, amount, payment_status, created_at').eq('academy_id', academyId).order('created_at', { ascending: false });
+  if (!rows || !rows.length) { showToast('لا توجد بيانات للتصدير','error'); return; }
+  let csv = '\uFEFF' + 'اسم اللاعب,المبلغ,حالة الدفع,تاريخ التسجيل\n';
+  rows.forEach(r => {
+    csv += `"${(r.player_name||'').replace(/"/g,'""')}",${r.amount||0},${r.payment_status==='paid'?'مدفوع':'غير مدفوع'},${new Date(r.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `مالية-${(academy?.name||'اكاديمية').replace(/[^\p{L}\p{N}]/gu,'-')}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 
 async function showScheduleAcademySession(academyId){
   const bodyEl = document.getElementById('ownerBody');
@@ -4592,7 +4881,7 @@ async function renderPlayerBookingsTab(highlightBookingId){
 async function renderPlayerRegistrationsTab(){
   const { data: { user } } = await sb.auth.getUser();
   const [{ data: enrollments }, { data: teams }, { data: myReviews }] = await Promise.all([
-    sb.from('academy_enrollments').select('id, player_name, status, payment_status, amount, academies(id, name)').eq('user_id', user.id),
+    sb.from('academy_enrollments').select('id, player_name, status, payment_status, amount, ends_on, academies(id, name), academy_plans(name)').eq('user_id', user.id),
     sb.from('tournament_teams').select('id, team_name, status, payment_status, amount, tournaments(id, name)').eq('user_id', user.id),
     sb.from('reviews').select('enrollment_id, team_id').eq('user_id', user.id)
   ]);
@@ -4605,7 +4894,7 @@ async function renderPlayerRegistrationsTab(){
   const enrollHtml = (enrollments||[]).map(e=>`
     <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><b>🎓 ${escapeHtml(e.academies?.name)||'أكاديمية'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(e.player_name)}</div></div>
+        <div><b>🎓 ${escapeHtml(e.academies?.name)||'أكاديمية'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(e.player_name)}${e.academy_plans?.name ? ' · ' + escapeHtml(e.academy_plans.name) : ''}</div>${e.ends_on ? `<div style="font-size:11px;color:var(--ink-dim)">ساري حتى ${new Date(e.ends_on).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}</div>` : ''}</div>
         <span class="badge ${statusCls[e.status]||'pending'}" style="font-size:11px">${statusMap[e.status]||e.status}</span>
       </div>
       ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="startRegistrationPayment('enrollment',${e.id},${e.amount})">💳 أكمل الدفع</button>` : ''}
