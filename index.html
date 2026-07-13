@@ -1682,6 +1682,26 @@ setTimeout(()=>{ if (typeof initRealMap==='function') initRealMap(); }, 0);
   if (token) setTimeout(()=>openJoinPage(token), 300);
 })();
 
+// ── رابط مشاركة مباشر لصفحة أكاديمية معيّنة (?academy=<id>) — يفتحها تلقائيًا داخل التطبيق فور تحميل بيانات الأكاديميات ──
+(function checkAcademyLink(){
+  const params = new URLSearchParams(window.location.search);
+  const academyId = parseInt(params.get('academy'));
+  if (!academyId) return;
+  let attempts = 0;
+  const tryOpen = setInterval(() => {
+    attempts++;
+    const found = (DATA.academies || []).some(a => a.id === academyId);
+    if (found) {
+      clearInterval(tryOpen);
+      currentMod = 'academies';
+      openItem('academies', academyId);
+    } else if (attempts > 20) { // حوالي 10 ثوانٍ كحد أقصى انتظار قبل الاستسلام
+      clearInterval(tryOpen);
+      showToast('تعذّر العثور على هذه الأكاديمية — تأكد من صحة الرابط','error');
+    }
+  }, 500);
+})();
+
 // ── رابط التحقق من رمز QR للحجز ──
 (function checkVerifyLinkOnLoad(){
   const params = new URLSearchParams(window.location.search);
@@ -3222,6 +3242,7 @@ async function renderOwnerAcademiesTab(){
           <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAcademyPlans(${a.id})">📦 باقات الاشتراك</button>
           <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAcademyFinance(${a.id})">💰 المالية</button>
         </div>
+        <button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="showAcademyShareLink(${a.id}, '${escapeHtml(a.name).replace(/'/g,"\\'")}')">🔗 رابط الأكاديمية</button>
       </div>`;
     }).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد أكاديميات بعد</div>'}
     ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="showAddAcademyForm()">+ إضافة أكاديمية</button>` : ''}
@@ -4262,6 +4283,31 @@ async function deleteTournament(id){
     return;
   }
   showToast('تعذّر الحذف: ' + error.message, 'error');
+}
+
+// ── يعرض رابط مشاركة مباشر لصفحة الأكاديمية — يفتحها أي شخص مباشرة داخل التطبيق، وصالح للاستخدام في قوقل مابس أو أي مكان آخر ──
+async function showAcademyShareLink(academyId, academyName){
+  const { data: acad } = await sb.from('academies').select('lat, lng').eq('id', academyId).single();
+  const appLink = `${window.location.origin}${window.location.pathname}?academy=${academyId}`;
+  const mapsLink = (acad?.lat != null && acad?.lng != null) ? `https://www.google.com/maps/search/?api=1&query=${acad.lat},${acad.lng}` : null;
+  const shareMsg = encodeURIComponent(`تعرّف على ${academyName} وسجّل ابنك الآن: ${appLink}`);
+
+  openInfoModal('🔗 رابط الأكاديمية', `
+    <div style="font-size:12.5px;color:var(--ink-dim);margin-bottom:14px">شارك هذا الرابط مع أولياء الأمور، أو أضفه في ملف نشاطك على قوقل مابس ليتوجه الزوار مباشرة لصفحة التسجيل.</div>
+
+    <div class="dlabel">رابط صفحة التسجيل</div>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <input id="academy-share-link-input" type="text" value="${appLink}" readonly style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:12px;direction:ltr">
+      <button class="btn btn-brand btn-sm" onclick="copyAcademyShareLink()">📋 نسخ</button>
+    </div>
+    <a href="https://wa.me/?text=${shareMsg}" target="_blank" class="btn btn-soft btn-block" style="text-decoration:none;margin-bottom:8px">💬 شارك عبر واتساب</a>
+    ${mapsLink ? `<a href="${mapsLink}" target="_blank" class="btn btn-ghost btn-block" style="text-decoration:none">🗺️ افتح موقع الأكاديمية في قوقل مابس</a>` : `<div class="legal-note">⚠️ لم يُحدَّد موقع الأكاديمية على الخريطة بعد — أضفه من شاشة تعديل الأكاديمية ليظهر رابط قوقل مابس هنا</div>`}
+  `);
+}
+
+function copyAcademyShareLink(){
+  const input = document.getElementById('academy-share-link-input');
+  navigator.clipboard.writeText(input.value).then(() => showToast('تم نسخ الرابط ✓')).catch(() => showToast('تعذّر النسخ — انسخه يدويًا', 'error'));
 }
 
 async function showAddAcademyForm(editId){
