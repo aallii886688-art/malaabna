@@ -2623,8 +2623,8 @@ function openSidebar() {
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('admin-panel')"><span class="si">🛡️</span> لوحة التحكم</a>` : ''}
       ${isOwnerOrAdmin && u.role!=='super_admin' ? `
         <a class="side-link" onclick="sideGo('owner-fields')"><span class="si">🏟️</span> الملاعب</a>
-        ${(window._isTrueOwner || (u.staffPermissions||[]).includes('academies_tournaments')) ? `<a class="side-link" onclick="sideGo('owner-academies')"><span class="si">🎓</span> الأكاديميات</a>` : ''}
-        ${(window._isTrueOwner || (u.staffPermissions||[]).includes('academies_tournaments')) ? `<a class="side-link" onclick="sideGo('owner-tournaments')"><span class="si">🏆</span> البطولات</a>` : ''}
+        ${(u.role === 'owner' || (u.staffPermissions||[]).includes('academies_tournaments')) ? `<a class="side-link" onclick="sideGo('owner-academies')"><span class="si">🎓</span> الأكاديميات</a>` : ''}
+        ${(u.role === 'owner' || (u.staffPermissions||[]).includes('academies_tournaments')) ? `<a class="side-link" onclick="sideGo('owner-tournaments')"><span class="si">🏆</span> البطولات</a>` : ''}
       ` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('seo')"><span class="si">📈</span> صحة السيو</a>` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('analytics')"><span class="si">📊</span> إحصائيات الموقع</a>` : ''}
@@ -3586,6 +3586,7 @@ async function respondToPartnershipRequest(requestId, newStatus){
 
 async function renderOwnerAcademiesTab(){
   const { data: { user } } = await sb.auth.getUser();
+  window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
   let ownerIds = [user.id];
   if (!window._isTrueOwner) {
     const { data: staffFac } = await sb.from('facility_staff').select('facility_id').eq('user_id', user.id);
@@ -3639,6 +3640,7 @@ async function renderOwnerAcademiesTab(){
 
 async function renderOwnerTournamentsTab(){
   const { data: { user } } = await sb.auth.getUser();
+  window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
   let ownerIds = [user.id];
   if (!window._isTrueOwner) {
     const { data: staffFac } = await sb.from('facility_staff').select('facility_id').eq('user_id', user.id);
@@ -3860,6 +3862,7 @@ async function showFieldsComparison(){
 }
 
 async function renderOwnerTeamTab(){
+  window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
   clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
     ${window._isTrueOwner ? `<button class="btn btn-soft btn-block" onclick="pushOwnerPage('showStaffManagement',)">🧑‍💼 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف — إدارة الموظفين تخص المالك الحقيقي فقط.</div>`}
