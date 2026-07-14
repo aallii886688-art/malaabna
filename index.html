@@ -674,15 +674,45 @@ html[data-theme="dark"] .badge.pending{color:var(--flood)}
   </div>
 </div>
 
-<div class="modal" id="mOwner">
-  <div class="mcard" style="width:560px;max-height:88vh;overflow-y:auto">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-      <h3 id="ownerTitle" style="flex:1;text-align:right;margin:0">لوحة التحكم</h3>
-      <div class="dclose" role="button" aria-label="إغلاق" onclick="closeAll()">✕</div>
-    </div>
-    <div id="ownerBody"></div>
+<div class="full-page" id="mOwner">
+  <div class="full-page-topbar">
+    <button class="full-page-back" id="ownerBackBtn" onclick="ownerPageGoBack()" aria-label="رجوع">→</button>
+    <h3 id="ownerTitle">لوحة التحكم</h3>
+    <div class="dclose" role="button" aria-label="إغلاق" onclick="closeAll()">✕</div>
   </div>
+  <div class="full-page-body" id="ownerBody"></div>
 </div>
+
+<style>
+.full-page{
+  position:fixed; inset:0; z-index:950;
+  background:var(--bg); display:flex; flex-direction:column;
+  transform:translateY(100%); transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  visibility:hidden;
+}
+.full-page.open{ transform:translateY(0); visibility:visible; }
+.full-page-topbar{
+  display:flex; align-items:center; gap:12px; padding:14px 16px;
+  background:var(--bg-elev); border-bottom:1px solid var(--line);
+  flex-shrink:0; position:sticky; top:0; z-index:5;
+}
+.full-page-topbar h3{ flex:1; text-align:right; margin:0; font-size:16px; }
+.full-page-back{
+  background:var(--bg-soft); border:1px solid var(--line); border-radius:10px;
+  width:38px; height:38px; font-size:18px; color:var(--ink); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.full-page-back.hidden{ visibility:hidden; }
+.full-page-body{
+  flex:1; overflow-y:auto; padding:20px 16px 40px;
+  max-width:720px; width:100%; margin:0 auto;
+}
+@media (min-width:900px){
+  .full-page-body{ padding:32px 40px 60px; max-width:860px; }
+  .full-page-topbar{ padding:18px 32px; }
+  .full-page-topbar h3{ font-size:18px; }
+}
+</style>
 
 <div class="sidebar" id="sidebar">
   <div class="side-top">
@@ -1266,7 +1296,7 @@ async function renderStadiumDrawer(skipFetch){
       <span>📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.region)}</b></span>
       ${(s.lat!=null && s.lng!=null) ? `<a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}" target="_blank" style="font-size:12px;color:var(--brand);font-weight:700;text-decoration:none;white-space:nowrap">🗺️ افتح الموقع</a>` : ''}
     </div>
-    <div class="irow" ${s.reviewCount ? `onclick="showItemReviews('stadiums',${s.id})" style="cursor:pointer"` : ''}>⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
+    <div class="irow" ${s.reviewCount ? `onclick="pushOwnerPage('showItemReviews','stadiums',${s.id})" style="cursor:pointer"` : ''}>⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
     <div class="irow">💰 <b>${window.effectivePrice} ريال</b> / الساعة${priceNote}</div>
     ${(s.amenities && s.amenities.length) ? `
     <div class="dlabel" style="margin:16px 0 10px">✨ مميزات الملعب</div>
@@ -1677,7 +1707,50 @@ function closeAll(){
   if (params.has('payment_confirm') || params.has('id') || params.has('verify') || params.has('join')) {
     history.replaceState(null, '', window.location.origin + window.location.pathname);
   }
+  // نفرّغ مكدس تنقل لوحة التحكم عند الإغلاق الكامل، ونزيل أي إدخالات history خاصة بها
+  if (window._ownerNavStack && window._ownerNavStack.length) {
+    window._ownerNavStack = [];
+    if (history.state && history.state._ownerPage) history.replaceState(null, '', window.location.origin + window.location.pathname);
+  }
 }
+
+// ══════════════════ نظام التنقل داخل لوحة التحكم — يدعم زر رجوع حقيقي (داخل الصفحة وزر رجوع المتصفح) ══════════════════
+window._ownerNavStack = []; // كل عنصر: { fn: اسم الدالة كنص, args: مصفوفة المعاملات }
+
+// يُستدعى بدل الاستدعاء المباشر لأي دالة تعرض شاشة داخل لوحة التحكم — يسجّلها بالمكدس ويدفعها لتاريخ المتصفح
+function pushOwnerPage(fnName, ...args){
+  window._ownerNavStack.push({ fn: fnName, args });
+  history.pushState({ _ownerPage: true, stackDepth: window._ownerNavStack.length }, '', window.location.href);
+  updateOwnerBackButton();
+  window[fnName](...args);
+}
+
+// يعيد الفتح من نقطة معيّنة بالمكدس بدون إضافة إدخال history جديد (يُستخدم عند زر رجوع فعليًا)
+function replayOwnerPage(entry){
+  if (!entry) return;
+  window[entry.fn](...entry.args);
+}
+
+function updateOwnerBackButton(){
+  const btn = document.getElementById('ownerBackBtn');
+  if (!btn) return;
+  btn.classList.toggle('hidden', window._ownerNavStack.length <= 1);
+}
+
+// زر الرجوع داخل الصفحة نفسها — يتصرف زي زر رجوع المتصفح تمامًا (بدون فرق بينهم)
+function ownerPageGoBack(){
+  if (window._ownerNavStack.length <= 1) { closeAll(); return; }
+  history.back();
+}
+
+// يتعامل مع زر رجوع المتصفح الفعلي — يزامن مكدسنا الداخلي مع تاريخ المتصفح
+window.addEventListener('popstate', (e) => {
+  if (!document.getElementById('mOwner')?.classList.contains('open')) return; // لا نتدخل لو لوحة التحكم أصلًا مقفلة
+  if (window._ownerNavStack.length <= 1) { closeAll(); window._ownerNavStack = []; return; }
+  window._ownerNavStack.pop();
+  updateOwnerBackButton();
+  replayOwnerPage(window._ownerNavStack[window._ownerNavStack.length - 1]);
+});
 
 // ── نافذة تأكيد مخصّصة بنفس تصميم التطبيق — بديل لنافذة confirm() الافتراضية بالمتصفح ──
 window._pendingConfirmCallback = null;
@@ -2568,7 +2641,12 @@ function openSidebar() {
     </div>
     <div class="side-links">
       <a class="side-link" onclick="sideGo('profile')"><span class="si">👤</span> الملف الشخصي</a>
-      ${isOwnerOrAdmin ? `<a class="side-link" onclick="sideGo('panel')"><span class="si">${u.role==='super_admin'?'🛡️':'🏟️'}</span> ${u.role==='super_admin'?'لوحة التحكم':'لوحة ملاعبي'}</a>` : ''}
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('admin-panel')"><span class="si">🛡️</span> لوحة التحكم</a>` : ''}
+      ${isOwnerOrAdmin && u.role!=='super_admin' ? `
+        <a class="side-link" onclick="sideGo('owner-fields')"><span class="si">🏟️</span> ملاعبي</a>
+        ${(window._isTrueOwner || (u.staffPermissions||[]).includes('academies_tournaments')) ? `<a class="side-link" onclick="sideGo('owner-academies')"><span class="si">🎓</span> الأكاديميات</a>` : ''}
+        ${(window._isTrueOwner || (u.staffPermissions||[]).includes('academies_tournaments')) ? `<a class="side-link" onclick="sideGo('owner-tournaments')"><span class="si">🏆</span> البطولات</a>` : ''}
+      ` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('seo')"><span class="si">📈</span> صحة السيو</a>` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('analytics')"><span class="si">📊</span> إحصائيات الموقع</a>` : ''}
       <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
@@ -2601,7 +2679,10 @@ async function sideGo(where) {
     case 'favorites':     playerGoTab('favorites'); break;
     case 'lookup':        playerGoTab('lookup'); break;
     case 'notifications': showNotifications(); break;
-    case 'panel':         openOwnerPanel(window.currentUser.role==='super_admin'?'admin':'owner'); break;
+    case 'admin-panel':   openOwnerPanel('admin'); break;
+    case 'owner-fields':      ownerGoTab('fields', true); break;
+    case 'owner-academies':   showOwnerAcademiesSection(true); break;
+    case 'owner-tournaments': showOwnerTournamentsSection(true); break;
     case 'share':         shareSite(); break;
     case 'help':           showHelpCenter(); break;
     case 'seo':             showSeoHealth(); break;
@@ -3110,51 +3191,84 @@ async function doLogout() {
 
 async function openOwnerPanel(kind) {
   if (!window.sb) { showToast('يتطلب اتصال قاعدة البيانات','error'); return; }
-  if (kind === 'admin') { await adminGoTab('overview'); }
-  else { await ownerGoTab('overview'); }
+  await adminGoTab('overview', true);
 }
 
 // ════════════════ لوحة صاحب الملعب — نظام تبويبات منظّم ════════════════
-const OWNER_TABS = [
+// ── تبويبات قسم "ملاعبي" فقط — نظرة عامة، الملاعب نفسها، الحجوزات، التقييمات، المالية، الفريق ──
+const OWNER_FIELDS_TABS = [
   {key:'overview', label:'🏠 نظرة عامة'},
   {key:'fields', label:'🏟️ ملاعبي'},
   {key:'bookings', label:'📅 الحجوزات', perm:'bookings'},
-  {key:'academies', label:'🎓 الأكاديميات', perm:'academies_tournaments'},
-  {key:'tournaments', label:'🏆 البطولات', perm:'academies_tournaments'},
   {key:'reviews', label:'⭐ التقييمات'},
   {key:'finance', label:'💰 المالية', perm:'finance'},
   {key:'team', label:'👥 الفريق'},
 ];
-function visibleOwnerTabs(){
+function visibleOwnerFieldsTabs(){
   const u = window.currentUser;
   const isTrueOwner = u && (u.role === 'owner' || u.role === 'super_admin');
-  if (isTrueOwner) return OWNER_TABS;
+  if (isTrueOwner) return OWNER_FIELDS_TABS;
   const perms = (u && u.staffPermissions) || [];
-  return OWNER_TABS.filter(t => t.key==='overview' || t.key==='fields' || (t.perm && perms.includes(t.perm)));
+  return OWNER_FIELDS_TABS.filter(t => t.key==='overview' || t.key==='fields' || (t.perm && perms.includes(t.perm)));
 }
-function ownerTabsHtml(active){
+function ownerFieldsTabsHtml(active){
   return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
-    ${visibleOwnerTabs().map(t=>`<button onclick="ownerGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
+    ${visibleOwnerFieldsTabs().map(t=>`<button onclick="ownerGoTab('${t.key}', true)" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
   </div>`;
 }
-async function ownerGoTab(tab){
+// يبقى بنفس الاسم القديم للتوافق مع أي استدعاء قديم متبقٍ بالكود
+function visibleOwnerTabs(){ return visibleOwnerFieldsTabs(); }
+
+async function ownerGoTab(tab, isRoot){
   // يمنع الموظف من فتح تبويب ما عنده صلاحية له (حتى لو حاول يستدعيه مباشرة)
-  if (!visibleOwnerTabs().some(t => t.key === tab)) { tab = 'overview'; showToast('ما عندك صلاحية لهذا القسم — تواصل مع صاحب الملعب','error'); }
+  if (!visibleOwnerFieldsTabs().some(t => t.key === tab)) { tab = 'overview'; showToast('ما عندك صلاحية لهذا القسم — تواصل مع صاحب الملعب','error'); }
   window._ownerActiveTab = tab;
-  document.getElementById('ownerTitle').textContent = '🏟️ لوحة ملاعبي';
+  // لو فُتحت لأول مرة (من القائمة الجانبية، مو من زر تبويب داخلي)، نبدأ مكدس تنقل جديد من الصفر
+  if (isRoot || !window._ownerNavStack.length) {
+    window._ownerNavStack = [{ fn: 'ownerGoTab', args: [tab, true] }];
+    history.pushState({ _ownerPage: true, stackDepth: 1 }, '', window.location.href);
+  }
+  updateOwnerBackButton();
+  document.getElementById('ownerTitle').textContent = '🏟️ ملاعبي';
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
-  document.getElementById('ownerBody').innerHTML = ownerTabsHtml(tab) + '<div id="ownerTabInner"></div>';
+  document.getElementById('ownerBody').innerHTML = ownerFieldsTabsHtml(tab) + '<div id="ownerTabInner"></div>';
   window._tabLoadTimer = delayedLoading('ownerTabInner');
   switch(tab){
     case 'overview':    await renderOwnerOverviewTab(); break;
     case 'fields':      await renderOwnerFieldsTab(); break;
     case 'bookings':    await renderOwnerBookingsTab(); break;
-    case 'academies':   await renderOwnerAcademiesTab(); break;
-    case 'tournaments': await renderOwnerTournamentsTab(); break;
     case 'reviews':     await renderOwnerReviewsTab(); break;
     case 'finance':     await renderOwnerFinanceTab(); break;
     case 'team':        await renderOwnerTeamTab(); break;
   }
+}
+
+// ── قسم "الأكاديميات" — صفحة مستقلة تمامًا، بدون علاقة بالملاعب أو البطولات ──
+async function showOwnerAcademiesSection(isRoot){
+  if (isRoot || !window._ownerNavStack.length) {
+    window._ownerNavStack = [{ fn: 'showOwnerAcademiesSection', args: [true] }];
+    history.pushState({ _ownerPage: true, stackDepth: 1 }, '', window.location.href);
+  }
+  updateOwnerBackButton();
+  document.getElementById('ownerTitle').textContent = '🎓 الأكاديميات';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+  document.getElementById('ownerBody').innerHTML = '<div id="ownerTabInner"></div>';
+  window._tabLoadTimer = delayedLoading('ownerTabInner');
+  await renderOwnerAcademiesTab();
+}
+
+// ── قسم "البطولات" — صفحة مستقلة تمامًا، بدون علاقة بالملاعب أو الأكاديميات ──
+async function showOwnerTournamentsSection(isRoot){
+  if (isRoot || !window._ownerNavStack.length) {
+    window._ownerNavStack = [{ fn: 'showOwnerTournamentsSection', args: [true] }];
+    history.pushState({ _ownerPage: true, stackDepth: 1 }, '', window.location.href);
+  }
+  updateOwnerBackButton();
+  document.getElementById('ownerTitle').textContent = '🏆 البطولات';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+  document.getElementById('ownerBody').innerHTML = '<div id="ownerTabInner"></div>';
+  window._tabLoadTimer = delayedLoading('ownerTabInner');
+  await renderOwnerTournamentsTab();
 }
 
 // كل تبويب يكتب محتواه هنا فقط، وشريط التبويبات يبقى ثابتًا فوقه
@@ -3272,6 +3386,15 @@ async function renderOwnerFieldsTab(){
   const visibleFacilities = myFacilities.map(f => ({ ...f, fields: (f.fields||[]).filter(fd => !fd.is_deleted) }));
   const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
   const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
+
+  // نحسب عدد طلبات الشراكة المعلّقة مسبقًا (قبل بناء الـHTML) لعرضها كعداد بجانب الزر مباشرة، بدون أي إعادة رسم لاحقة
+  let pendingPartnershipCount = 0;
+  if (myFacilities?.length) {
+    const facIds = myFacilities.map(f=>f.id);
+    const { count } = await sb.from('field_partnerships').select('*', { count:'exact', head:true }).in('facility_id', facIds).eq('status','pending');
+    pendingPartnershipCount = count || 0;
+  }
+
   clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
     ${(visibleFacilities&&visibleFacilities.length)? visibleFacilities.map(f=>`
@@ -3305,8 +3428,73 @@ async function renderOwnerFieldsTab(){
         <div style="font-size:14px;font-weight:600;margin-bottom:4px">لا توجد ملاعب بعد</div>
         <div style="font-size:12px;color:var(--ink-dim)">أضف أول ملعب لك لتبدأ استقبال الحجوزات</div>
       </div>`}
-    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:16px" onclick="showAddStadiumForm()">+ إضافة ملعب جديد</button>` : ''}
+    ${(myFacilities&&myFacilities.length) ? `<button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="pushOwnerPage('showFieldPartnershipRequests',)">🤝 طلبات الشراكة الواردة${pendingPartnershipCount ? ` (${pendingPartnershipCount})` : ''}</button>` : ''}
+    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:8px" onclick="pushOwnerPage('showAddStadiumForm',)">+ إضافة ملعب جديد</button>` : ''}
   `;
+}
+
+// ── شاشة صاحب الملعب لمراجعة طلبات الشراكة الواردة من أصحاب أكاديميات/بطولات لا يملكون ملاعبهم الخاصة ──
+async function showFieldPartnershipRequests(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🤝 طلبات الشراكة';
+  const _lt = delayedLoading(bodyEl.id);
+
+  const { myFacilities } = await getMyFacilitiesData();
+  const facIds = myFacilities.map(f=>f.id);
+  const { data: requests } = facIds.length ? await sb.from('field_partnerships').select('id, facility_id, requester_type, requester_entity_id, status, created_at, facilities(name)').in('facility_id', facIds).order('created_at', { ascending: false }) : { data: [] };
+  clearTimeout(_lt);
+
+  // نجيب اسم الكيان الطالب (أكاديمية أو بطولة) لكل طلب — استعلامان منفصلان بدل استعلام لكل صف على حدة
+  const academyIds = (requests||[]).filter(r=>r.requester_type==='academy').map(r=>r.requester_entity_id);
+  const tournamentIds = (requests||[]).filter(r=>r.requester_type==='tournament').map(r=>r.requester_entity_id);
+  const [{ data: academies }, { data: tournaments }] = await Promise.all([
+    academyIds.length ? sb.from('academies').select('id, name, owner_id, profiles(name, phone)').in('id', academyIds) : { data: [] },
+    tournamentIds.length ? sb.from('tournaments').select('id, name, owner_id, profiles(name, phone)').in('id', tournamentIds) : { data: [] }
+  ]);
+  const academyMap = Object.fromEntries((academies||[]).map(a=>[a.id, a]));
+  const tournamentMap = Object.fromEntries((tournaments||[]).map(t=>[t.id, t]));
+
+  const statusMap = { pending:'⏳ بانتظار ردك', approved:'✅ تمت الموافقة', rejected:'❌ مرفوض' };
+  const statusCls = { pending:'pending', approved:'available', rejected:'closed' };
+
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('fields')" style="margin-bottom:14px">→ رجوع</button>
+    ${(requests&&requests.length) ? requests.map(r => {
+      const entity = r.requester_type === 'academy' ? academyMap[r.requester_entity_id] : tournamentMap[r.requester_entity_id];
+      const typeLabel = r.requester_type === 'academy' ? '🎓 أكاديمية' : '🏆 بطولة';
+      return `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><b style="font-size:13.5px">${typeLabel}: ${escapeHtml(entity?.name)||'—'}</b><div style="font-size:11.5px;color:var(--ink-dim)">لملعب: ${escapeHtml(r.facilities?.name)||''}</div><div style="font-size:11px;color:var(--ink-dim)">👤 ${escapeHtml(entity?.profiles?.name)||'—'} · ${escapeHtml(entity?.profiles?.phone)||''}</div></div>
+          <span class="badge ${statusCls[r.status]}" style="font-size:10.5px">${statusMap[r.status]}</span>
+        </div>
+        ${r.status === 'pending' ? `
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-brand btn-sm" style="flex:1" onclick="respondToPartnershipRequest(${r.id},'approved')">✅ موافقة</button>
+            <button class="btn btn-danger btn-sm" style="flex:1" onclick="respondToPartnershipRequest(${r.id},'rejected')">رفض</button>
+          </div>` : ''}
+      </div>`;
+    }).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد طلبات شراكة بعد</div>'}
+  `;
+}
+
+async function respondToPartnershipRequest(requestId, newStatus){
+  const { data: request } = await sb.from('field_partnerships').select('requester_id, requester_type, requester_entity_id, facilities(name)').eq('id', requestId).single();
+  const { error } = await sb.from('field_partnerships').update({ status: newStatus, decided_at: new Date().toISOString() }).eq('id', requestId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+
+  try {
+    if (request?.requester_id) {
+      await sb.rpc('send_notification', {
+        p_user_id: request.requester_id,
+        p_title: newStatus === 'approved' ? 'تمت الموافقة على طلب الشراكة ✅' : 'تم رفض طلب الشراكة ❌',
+        p_body: `طلبك لاستخدام ملعب "${request.facilities?.name}" ${newStatus === 'approved' ? 'تمت الموافقة عليه — يمكنك الآن اختياره بالجدولة' : 'تم رفضه'}`
+      });
+    }
+  } catch(e){}
+
+  showToast(newStatus === 'approved' ? 'تمت الموافقة ✓' : 'تم الرفض ✓');
+  showFieldPartnershipRequests();
 }
 
 async function renderOwnerAcademiesTab(){
@@ -3343,22 +3531,22 @@ async function renderOwnerAcademiesTab(){
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div><b style="font-size:13px">${escapeHtml(a.name)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(a.city)} · ${priceLabel} ${!a.approved?' · <span style="color:var(--danger)">بانتظار الموافقة</span>':''}</div></div>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-soft btn-sm" onclick="showAddAcademyForm(${a.id})">✏️</button>
+            <button class="btn btn-soft btn-sm" onclick="pushOwnerPage('showAddAcademyForm',${a.id})">✏️</button>
             ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteAcademy(${a.id})">حذف</button>` : ''}
           </div>
         </div>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <button class="btn btn-brand btn-sm" style="flex:1" onclick="showAcademyStudents(${a.id})">👥 الطلاب</button>
-          <button class="btn btn-soft btn-sm" style="flex:1" onclick="showScheduleAcademySession(${a.id})">⏱️ المواعيد</button>
+          <button class="btn btn-brand btn-sm" style="flex:1" onclick="pushOwnerPage('showAcademyStudents',${a.id})">👥 الطلاب</button>
+          <button class="btn btn-soft btn-sm" style="flex:1" onclick="pushOwnerPage('showScheduleAcademySession',${a.id})">⏱️ المواعيد</button>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAcademyPlans(${a.id})">📦 باقات الاشتراك</button>
-          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showAcademyFinance(${a.id})">💰 المالية</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="pushOwnerPage('showAcademyPlans',${a.id})">📦 باقات الاشتراك</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="pushOwnerPage('showAcademyFinance',${a.id})">💰 المالية</button>
         </div>
-        <button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="showAcademyShareLink(${a.id}, '${escapeHtml(a.name).replace(/'/g,"\\'")}')">🔗 رابط الأكاديمية</button>
+        <button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="pushOwnerPage('showAcademyShareLink',${a.id}, '${escapeHtml(a.name).replace(/'/g,"\\'")}')">🔗 رابط الأكاديمية</button>
       </div>`;
     }).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد أكاديميات بعد</div>'}
-    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="showAddAcademyForm()">+ إضافة أكاديمية</button>` : ''}
+    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="pushOwnerPage('showAddAcademyForm',)">+ إضافة أكاديمية</button>` : ''}
   `;
 }
 
@@ -3387,15 +3575,15 @@ async function renderOwnerTournamentsTab(){
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div><b style="font-size:13px">${escapeHtml(t.name)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(t.city)} · ${confirmed}/${t.max_teams} فريق · ${t.team_fee} ر/فريق ${!t.approved?' · <span style=\"color:var(--danger)\">بانتظار الموافقة</span>':''}</div></div>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-soft btn-sm" onclick="showAddTournamentForm(${t.id})">✏️</button>
+            <button class="btn btn-soft btn-sm" onclick="pushOwnerPage('showAddTournamentForm',${t.id})">✏️</button>
             ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteTournament(${t.id})">حذف</button>` : ''}
           </div>
         </div>
         ${capacityAlert}
-        <button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="showTournamentManage(${t.id})">🏆 إدارة البطولة</button>
+        <button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="pushOwnerPage('showTournamentManage',${t.id})">🏆 إدارة البطولة</button>
       </div>`;
     }).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد بطولات بعد</div>'}
-    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="showAddTournamentForm()">+ إضافة بطولة</button>` : ''}
+    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="pushOwnerPage('showAddTournamentForm',)">+ إضافة بطولة</button>` : ''}
   `;
 }
 
@@ -3445,7 +3633,7 @@ async function renderOwnerReviewsTab(){
           </div>
         ` : `
           <div id="reply-form-${r.id}" style="margin-top:10px">
-            <button class="btn btn-soft btn-sm" onclick="showReplyForm(${r.id}, '')">💬 الرد على هذا التقييم</button>
+            <button class="btn btn-soft btn-sm" onclick="pushOwnerPage('showReplyForm',${r.id}, '')">💬 الرد على هذا التقييم</button>
           </div>
         `}
       </div>`).join('')}
@@ -3511,21 +3699,21 @@ async function renderOwnerFinanceTab(){
     </div>
 
     <div class="dlabel">📊 التحليلات والتوقعات</div>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerAnalytics()">📈 تحليلات الإيرادات</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showRevenueForecast()">🔮 توقّع إيرادات الشهر القادم</button>
-    ${myFieldIds.length > 1 ? `<button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showFieldsComparison()">⚖️ مقارنة أداء ملاعبي</button>` : '<div style="margin-bottom:12px"></div>'}
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showOwnerAnalytics',)">📈 تحليلات الإيرادات</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showRevenueForecast',)">🔮 توقّع إيرادات الشهر القادم</button>
+    ${myFieldIds.length > 1 ? `<button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="pushOwnerPage('showFieldsComparison',)">⚖️ مقارنة أداء ملاعبي</button>` : '<div style="margin-bottom:12px"></div>'}
 
     <div class="dlabel">💸 المصاريف والتقارير</div>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showFacilityExpenses()">📋 تسجيل ومتابعة المصاريف</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showFacilityExpenses',)">📋 تسجيل ومتابعة المصاريف</button>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="exportAccountingReport()">📄 تصدير تقرير محاسبي (CSV)</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showOwnerMonthlyReports()">🗓️ الأرشيف الشهري (يُنشأ تلقائيًا)</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="pushOwnerPage('showOwnerMonthlyReports',)">🗓️ الأرشيف الشهري (يُنشأ تلقائيًا)</button>
 
     <div class="dlabel">💰 التحويلات والحساب البنكي</div>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showOwnerPayouts()">📥 سجل التحويلات المستلمة</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showBankDetailsForm()">🏦 بيانات الحساب البنكي</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showOwnerPayouts',)">📥 سجل التحويلات المستلمة</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="pushOwnerPage('showBankDetailsForm',)">🏦 بيانات الحساب البنكي</button>
 
     <div class="dlabel">🎟️ العروض والخصومات</div>
-    <button class="btn btn-soft btn-block" onclick="showOwnerCoupons()">🎟️ كوبوناتي</button>
+    <button class="btn btn-soft btn-block" onclick="pushOwnerPage('showOwnerCoupons',)">🎟️ كوبوناتي</button>
   `;
 }
 
@@ -3587,7 +3775,7 @@ async function showFieldsComparison(){
 async function renderOwnerTeamTab(){
   clearTimeout(window._tabLoadTimer);
   ownerInner().innerHTML = `
-    ${window._isTrueOwner ? `<button class="btn btn-soft btn-block" onclick="showStaffManagement()">🧑‍💼 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف — إدارة الموظفين تخص المالك الحقيقي فقط.</div>`}
+    ${window._isTrueOwner ? `<button class="btn btn-soft btn-block" onclick="pushOwnerPage('showStaffManagement',)">🧑‍💼 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف — إدارة الموظفين تخص المالك الحقيقي فقط.</div>`}
   `;
 }
 
@@ -3631,11 +3819,11 @@ function setOwnerBookingsView(v){ window._ownerBookingsView = v; window._ownerCa
 function renderOwnerBookingsView(){
   const data = window._ownerBookingsCache || [];
   if (!data.length) {
-    ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`;
+    ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="pushOwnerPage('showManualBookingForm',)">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`;
     return;
   }
   const view = window._ownerBookingsView || 'list';
-  ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="showManualBookingForm()">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>`
+  ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="pushOwnerPage('showManualBookingForm',)">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>`
     + ownerBookingsToggleHtml()
     + (view === 'calendar' ? ownerBookingsCalendarHtml(data) : data.map(ownerBookingCardHtml).join(''))
     + (view === 'list' && window._ownerBookingsHasMore ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="loadMoreOwnerBookings()">تحميل المزيد من الحجوزات</button>` : '');
@@ -3850,7 +4038,7 @@ async function showStaffActivityLog(){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '📜 سجل نشاط الموظفين';
   const _lt = delayedLoading(bodyEl.id);
-  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="showStaffManagement()" style="margin-bottom:14px">→ رجوع</button>`;
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="pushOwnerPage('showStaffManagement',)" style="margin-bottom:14px">→ رجوع</button>`;
 
   const { data: { user } } = await sb.auth.getUser();
   const { data: ownFac } = await sb.from('facilities').select('id').eq('owner_id', user.id);
@@ -3890,7 +4078,7 @@ const _lt = delayedLoading(bodyEl.id);
   clearTimeout(_lt);
 
   bodyEl.innerHTML = backBtn + `
-    ${facIds.length ? `<button class="btn btn-soft btn-block" style="margin-bottom:16px" onclick="showStaffActivityLog()">📜 سجل نشاط الموظفين</button>` : ''}
+    ${facIds.length ? `<button class="btn btn-soft btn-block" style="margin-bottom:16px" onclick="pushOwnerPage('showStaffActivityLog',)">📜 سجل نشاط الموظفين</button>` : ''}
     <div class="dlabel">➕ إضافة موظف</div>
     <div class="field"><label>رقم جوال الموظف *</label><input id="staff-phone" type="tel" placeholder="05xxxxxxxx"></div>
     <div class="field">
@@ -3980,7 +4168,7 @@ function showStaffInviteHelp(phone){
       <div style="font-size:36px;margin-bottom:10px">📱</div>
       <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px">هذا الرقم ما عنده حساب بالمنصة بعد. أرسل له دعوة تسجيل مباشرة عبر واتساب، وبعد ما يسجّل ارجع أضِفه من نفس الشاشة.</div>
       ${waLink ? `<a href="${waLink}?text=${inviteMessage}" target="_blank" class="btn btn-brand btn-block" style="text-decoration:none">💬 أرسل دعوة عبر واتساب</a>` : ''}
-      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="showStaffManagement()">رجوع</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="pushOwnerPage('showStaffManagement',)">رجوع</button>
     </div>`);
 }
 
@@ -3996,12 +4184,87 @@ async function _executeRemoveStaffMember(staffRowId){
 
 // ── إدارة أكاديميات وبطولات صاحب الملعب ──
 // ── قائمة ملاعب المالك (لاختيارها عند الجدولة) ──
-async function myFieldsOptionsHtml(){
+async function myFieldsOptionsHtml(requesterType, requesterEntityId){
   const { data: { user } } = await sb.auth.getUser();
-  const { data } = await sb.from('facilities').select('name, fields(id,name)').eq('owner_id', user.id);
+  const { data: ownData } = await sb.from('facilities').select('name, fields(id,name)').eq('owner_id', user.id);
   const opts = [];
-  (data||[]).forEach(f => (f.fields||[]).forEach(fd => opts.push(`<option value="${fd.id}">${escapeHtml(f.name)} — ${escapeHtml(fd.name)}</option>`)));
-  return opts.join('') || '<option value="">لا توجد ملاعب مسجّلة</option>';
+  (ownData||[]).forEach(f => (f.fields||[]).forEach(fd => opts.push(`<option value="${fd.id}">${escapeHtml(f.name)} — ${escapeHtml(fd.name)}</option>`)));
+
+  // لو الطلب من أكاديمية أو بطولة، نضيف أيضًا ملاعب الشراكات المعتمدة (لا تشترط ملكية الملعب، فقط موافقة صاحبه مسبقًا)
+  if (requesterType && requesterEntityId) {
+    const { data: partnerFacIds } = await sb.from('field_partnerships').select('facility_id').eq('requester_type', requesterType).eq('requester_entity_id', requesterEntityId).eq('status', 'approved');
+    const facIds = (partnerFacIds||[]).map(p=>p.facility_id);
+    if (facIds.length) {
+      const { data: partnerData } = await sb.from('facilities').select('name, fields(id,name)').in('id', facIds);
+      (partnerData||[]).forEach(f => (f.fields||[]).forEach(fd => opts.push(`<option value="${fd.id}">🤝 ${escapeHtml(f.name)} — ${escapeHtml(fd.name)} (شراكة)</option>`)));
+    }
+  }
+
+  return opts.join('') || '<option value="">لا توجد ملاعب متاحة</option>';
+}
+
+// ── طلب شراكة مع منشأة/ملعب لا يملكه صاحب الأكاديمية/البطولة — يحتاج موافقة صاحب الملعب أولاً قبل الظهور بقائمة اختياراته ──
+async function showRequestFieldPartnership(requesterType, requesterEntityId){
+  const { data: { user } } = await sb.auth.getUser();
+  const [{ data: allFacilities }, { data: existingRequests }] = await Promise.all([
+    sb.from('facilities').select('id, name, city, district').eq('approved', true).eq('is_deleted', false),
+    sb.from('field_partnerships').select('facility_id, status').eq('requester_type', requesterType).eq('requester_entity_id', requesterEntityId)
+  ]);
+  const requestedFacIds = new Set((existingRequests||[]).map(r=>r.facility_id));
+  const statusMap = { pending:'⏳ بانتظار الموافقة', approved:'✅ تمت الموافقة', rejected:'❌ مرفوض' };
+
+  openInfoModal('🤝 طلب شراكة ملعب', `
+    <div class="legal-note" style="margin-bottom:14px">اختر منشأة من القائمة لإرسال طلب شراكة لصاحبها — لن تظهر ملاعبها بقائمة اختياراتك إلا بعد موافقته.</div>
+    <div class="field"><input id="partnership-search" type="text" placeholder="ابحث باسم المنشأة أو المدينة..." oninput="renderPartnershipFacilityList()" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px"></div>
+    <div id="partnership-facility-list"></div>
+  `);
+  window._partnershipData = { allFacilities: allFacilities||[], requestedStatus: Object.fromEntries((existingRequests||[]).map(r=>[r.facility_id, r.status])), requesterType, requesterEntityId };
+  renderPartnershipFacilityList();
+}
+
+function renderPartnershipFacilityList(){
+  const data = window._partnershipData;
+  const listEl = document.getElementById('partnership-facility-list');
+  if (!data || !listEl) return;
+  const q = normalizeArabicText((document.getElementById('partnership-search')?.value || '').trim());
+  const statusMap = { pending:'⏳ بانتظار الموافقة', approved:'✅ تمت الموافقة', rejected:'❌ مرفوض سابقًا' };
+
+  const filtered = q ? data.allFacilities.filter(f => normalizeArabicText(f.name).includes(q) || normalizeArabicText(f.city||'').includes(q)) : data.allFacilities;
+  if (!filtered.length) { listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ink-dim);font-size:12.5px">لا توجد نتائج مطابقة</div>'; return; }
+
+  listEl.innerHTML = filtered.slice(0,30).map(f => {
+    const existingStatus = data.requestedStatus[f.id];
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+      <div><b style="font-size:13px">${escapeHtml(f.name)}</b><div style="font-size:11.5px;color:var(--ink-dim)">${escapeHtml(f.district)||''}، ${escapeHtml(f.city)||''}</div></div>
+      ${existingStatus ? `<span style="font-size:11.5px;color:var(--ink-dim)">${statusMap[existingStatus]}</span>` : `<button class="btn btn-brand btn-sm" onclick="sendFieldPartnershipRequest(${f.id})">إرسال طلب</button>`}
+    </div>`;
+  }).join('');
+}
+
+async function sendFieldPartnershipRequest(facilityId){
+  const data = window._partnershipData;
+  const { error } = await sb.from('field_partnerships').insert({
+    facility_id: facilityId, requester_id: (await sb.auth.getUser()).data.user.id,
+    requester_type: data.requesterType, requester_entity_id: data.requesterEntityId
+  });
+  if (error) { showToast('تعذّر إرسال الطلب: ' + error.message, 'error'); return; }
+
+  try {
+    const { data: fac } = await sb.from('facilities').select('owner_id').eq('id', facilityId).single();
+    const entityTable = data.requesterType === 'academy' ? 'academies' : 'tournaments';
+    const { data: entity } = await sb.from(entityTable).select('name').eq('id', data.requesterEntityId).single();
+    if (fac?.owner_id) {
+      await sb.rpc('send_notification', {
+        p_user_id: fac.owner_id, p_title: 'طلب شراكة ملعب جديد 🤝',
+        p_body: `${entity?.name || (data.requesterType==='academy'?'أكاديمية':'بطولة')} تطلب استخدام ملعبك — راجع طلبات الشراكة لديك`
+      });
+    }
+  } catch(e){}
+
+  showToast('تم إرسال الطلب ✓ — سيصلك إشعار عند رد صاحب الملعب');
+  data.requestedStatus[facilityId] = 'pending';
+  renderPartnershipFacilityList();
 }
 
 const WD_NAMES = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
@@ -4074,7 +4337,7 @@ async function showAcademyStudents(academyId){
   };
 
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="showOwnerAcademiesSection()" style="margin-bottom:14px">→ رجوع</button>
     <div class="dlabel" style="justify-content:center;margin-bottom:0">${escapeHtml(academy?.name)||''}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 18px">
       <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center">
@@ -4164,7 +4427,7 @@ async function showAcademyPlans(academyId){
   clearTimeout(_lt);
 
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="showOwnerAcademiesSection()" style="margin-bottom:14px">→ رجوع</button>
 
     ${(plans&&plans.length) ? plans.map(p => `
       <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;${!p.is_active?'opacity:.55':''}">
@@ -4177,13 +4440,13 @@ async function showAcademyPlans(academyId){
         </div>
         ${(p.features&&p.features.length) ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px">${p.features.map(f=>`<span style="background:var(--bg-elev);border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:11px">✓ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:10px">
-          <button class="btn btn-soft btn-sm" style="flex:1" onclick="showAddAcademyPlanForm(${academyId},${p.id})">✏️ تعديل</button>
+          <button class="btn btn-soft btn-sm" style="flex:1" onclick="pushOwnerPage('showAddAcademyPlanForm',${academyId},${p.id})">✏️ تعديل</button>
           <button class="btn btn-ghost btn-sm" style="flex:1" onclick="toggleAcademyPlanActive(${p.id},${!p.is_active},${academyId})">${p.is_active?'⏸️ تعطيل':'▶️ تفعيل'}</button>
           <button class="btn btn-danger btn-sm" onclick="deleteAcademyPlan(${p.id},${academyId})">🗑️</button>
         </div>
       </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد باقات بعد — أضف باقة ليقدر اللاعبون التسجيل</div>'}
 
-    <button class="btn btn-brand btn-block" style="margin-top:8px" onclick="showAddAcademyPlanForm(${academyId})">+ إضافة باقة جديدة</button>
+    <button class="btn btn-brand btn-block" style="margin-top:8px" onclick="pushOwnerPage('showAddAcademyPlanForm',${academyId})">+ إضافة باقة جديدة</button>
   `;
 }
 
@@ -4196,7 +4459,7 @@ async function showAddAcademyPlanForm(academyId, editId){
   }
   document.getElementById('ownerTitle').textContent = editId ? '✏️ تعديل باقة' : '➕ باقة جديدة';
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="showAcademyPlans(${academyId})" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="pushOwnerPage('showAcademyPlans',${academyId})" style="margin-bottom:14px">→ رجوع</button>
     <div class="field"><label>اسم الباقة *</label><input id="plan-name" type="text" value="${escapeHtml(p.name)||''}" placeholder="باقة 3 أشهر"></div>
     <div class="field"><label>المدة (بالأشهر) *</label><input id="plan-duration" type="number" min="1" value="${p.duration_months||1}"></div>
     <div class="field"><label>السعر الإجمالي للباقة (ريال) *</label><input id="plan-price" type="number" min="1" value="${p.price||''}" placeholder="900"></div>
@@ -4257,7 +4520,7 @@ function premiumFeatureWrapper(academyId, isPremiumActive, contentHtml){
         <div style="background:var(--bg-elev);border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center;max-width:260px">
           <div style="font-weight:800;font-size:13.5px;margin-bottom:6px">ميزة مدفوعة</div>
           <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:10px">فعّل الاشتراك المتقدم لفتح هذه الميزة وميزات أخرى</div>
-          <button class="btn btn-brand btn-sm btn-block" onclick="showPremiumActivation(${academyId})">🔓 فعّل الآن</button>
+          <button class="btn btn-brand btn-sm btn-block" onclick="pushOwnerPage('showPremiumActivation',${academyId})">🔓 فعّل الآن</button>
         </div>
       </div>
     </div>`;
@@ -4345,7 +4608,7 @@ async function showAcademyFinance(academyId){
   const monthRows = Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0]));
 
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="showOwnerAcademiesSection()" style="margin-bottom:14px">→ رجوع</button>
     <div class="dlabel" style="justify-content:center;margin-bottom:0">${escapeHtml(academy?.name)||''}</div>
 
     <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;margin:14px 0">
@@ -4387,12 +4650,13 @@ async function showScheduleAcademySession(academyId){
   const bodyEl = document.getElementById('ownerBody');
   document.getElementById('ownerTitle').textContent = '⏱️ جدولة موعد تدريب';
   const [fieldOpts, { data: sessions }] = await Promise.all([
-    myFieldsOptionsHtml(),
+    myFieldsOptionsHtml('academy', academyId),
     sb.from('academy_sessions').select('id, weekday, start_time, end_time, label, fields(name)').eq('academy_id', academyId)
   ]);
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('academies')" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="showOwnerAcademiesSection()" style="margin-bottom:14px">→ رجوع</button>
     <div class="field"><label>الملعب *</label><select id="acs-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
+    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:12px" onclick="pushOwnerPage('showRequestFieldPartnership','academy',${academyId})">🤝 ملعبك غير موجود؟ اطلب شراكة مع ملعب آخر</button>
     <div class="field"><label>يوم الأسبوع *</label><select id="acs-weekday" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${WD_NAMES.map((n,i)=>`<option value="${i}">${n}</option>`).join('')}</select></div>
     <div style="display:flex;gap:8px">
       <div class="field" style="flex:1"><label>من *</label><input id="acs-start" type="time" value="16:00"></div>
@@ -4408,7 +4672,7 @@ async function showScheduleAcademySession(academyId){
           <span style="font-size:12.5px"><b>${WD_NAMES[s.weekday]}</b> · ${formatTime12(s.start_time)}–${formatTime12(s.end_time)} · ${escapeHtml(s.fields?.name)||''}${s.label?' · '+escapeHtml(s.label):''}</span>
           <button class="btn btn-ghost btn-sm" onclick="deleteAcademySession(${s.id},${academyId})">حذف</button>
         </div>
-        <button class="btn btn-soft btn-sm btn-block" style="margin-top:7px" onclick="showAttendanceForm(${s.id},${academyId},'${WD_NAMES[s.weekday]} ${formatTime12(s.start_time)}')">✅ تسجيل الحضور</button>
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:7px" onclick="pushOwnerPage('showAttendanceForm',${s.id},${academyId},'${WD_NAMES[s.weekday]} ${formatTime12(s.start_time)}')">✅ تسجيل الحضور</button>
       </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مواعيد بعد</div>'}
   `;
 }
@@ -4453,7 +4717,7 @@ async function showAttendanceForm(sessionId, academyId, sessionLabel, dateStr){
   (existing||[]).forEach(e => { existingMap[e.enrollment_id] = e.status; });
 
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="showScheduleAcademySession(${academyId})" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="pushOwnerPage('showScheduleAcademySession',${academyId})" style="margin-bottom:14px">→ رجوع</button>
     <div class="dlabel" style="justify-content:center;margin-bottom:4px">${escapeHtml(sessionLabel)}</div>
     <div class="field"><label>تاريخ الحصة</label><input id="attendance-date" type="date" value="${dateStr}" max="${riyadhTodayStr()}" onchange="showAttendanceForm(${sessionId},${academyId},'${escapeHtml(sessionLabel).replace(/'/g,"\\'")}',this.value)"></div>
 
@@ -4496,7 +4760,7 @@ async function showTournamentManage(tournamentId){
     sb.from('tournaments').select('*').eq('id', tournamentId).single(),
     sb.from('tournament_teams').select('id, team_name').eq('tournament_id', tournamentId).eq('status', 'confirmed'),
     sb.from('tournament_matches').select('id, field_id, match_date, start_time, end_time, team_a_id, team_b_id, score_a, score_b, stage, group_number, fields(name)').eq('tournament_id', tournamentId).order('match_date').order('start_time'),
-    myFieldsOptionsHtml()
+    myFieldsOptionsHtml('tournament', tournamentId)
   ]);
   clearTimeout(_lt);
 
@@ -4525,19 +4789,20 @@ async function showTournamentManage(tournamentId){
   const isKnockoutFinished = tourn.format === 'knockout' && matches?.some(m => m.stage === 'final' && m.score_a != null);
 
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('tournaments')" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="showOwnerTournamentsSection()" style="margin-bottom:14px">→ رجوع</button>
     <div class="dlabel" style="justify-content:center;margin-bottom:4px">${escapeHtml(tourn.name)} <span style="font-size:11px;color:var(--ink-dim);font-weight:400">(${formatLabels[tourn.format]})</span></div>
 
     <div style="display:flex;gap:6px;margin:12px 0 16px">
       <a href="${window.location.origin}?tournament=${tourn.public_slug}" target="_blank" class="btn btn-soft btn-sm" style="flex:1;text-decoration:none">🔗 رابط المتابعة العام</a>
       <button class="btn btn-ghost btn-sm" style="flex:1" onclick="copyTournamentPublicLink('${tourn.public_slug}')">📋 نسخ الرابط</button>
     </div>
-    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:16px" onclick="showTournamentCoorganizers(${tournamentId})">👥 إدارة المشرفين المساعدين</button>
+    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:16px" onclick="pushOwnerPage('showTournamentCoorganizers',${tournamentId})">👥 إدارة المشرفين المساعدين</button>
 
     ${!hasMatches ? `
       <div class="dlabel">⚙️ توليد جدول المباريات</div>
       <div class="legal-note" style="margin-bottom:12px">عدد الفرق المؤكدة حاليًا: <b>${teams?.length||0}</b>. حدّد نقطة البداية فقط، والنظام يولّد كل المباريات تلقائيًا.</div>
       <div class="field"><label>الملعب *</label><select id="tg-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
+      <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:12px" onclick="pushOwnerPage('showRequestFieldPartnership','tournament',${tournamentId})">🤝 ملعبك غير موجود؟ اطلب شراكة مع ملعب آخر</button>
       <div class="field"><label>تاريخ أول مباراة *</label><input id="tg-date" type="date"></div>
       <div style="display:flex;gap:8px">
         <div class="field" style="flex:1"><label>وقت أول مباراة *</label><input id="tg-time" type="time" value="16:00"></div>
@@ -4652,7 +4917,7 @@ async function showTournamentCoorganizers(tournamentId){
   document.getElementById('ownerTitle').textContent = '👥 المشرفون المساعدون';
   const { data: coorgs } = await sb.from('tournament_coorganizers').select('id, profiles(name, phone)').eq('tournament_id', tournamentId);
   bodyEl.innerHTML = `
-    <button class="btn btn-ghost btn-sm" onclick="showTournamentManage(${tournamentId})" style="margin-bottom:14px">→ رجوع</button>
+    <button class="btn btn-ghost btn-sm" onclick="pushOwnerPage('showTournamentManage',${tournamentId})" style="margin-bottom:14px">→ رجوع</button>
     <div class="legal-note" style="margin-bottom:14px">المشرف المساعد يقدر يسجّل النتائج ويولّد الجدول، لكن لا يقدر يحذف البطولة أو يضيف/يحذف مشرفين آخرين.</div>
     <div class="field"><label>رقم جوال المشرف (يجب أن يكون مسجّلاً بالمنصة)</label><input id="coorg-phone" type="tel" placeholder="05xxxxxxxx"></div>
     <button class="btn btn-brand btn-block" onclick="addTournamentCoorganizer(${tournamentId})">+ إضافة مشرف</button>
@@ -4749,7 +5014,7 @@ async function showAddAcademyForm(editId){
   let a = {};
   if (editId) {
     const { data, error } = await sb.from('academies').select('*').eq('id', editId).single();
-    if (error || !data) { showToast('تعذّر تحميل بيانات الأكاديمية','error'); ownerGoTab('academies'); return; }
+    if (error || !data) { showToast('تعذّر تحميل بيانات الأكاديمية','error'); showOwnerAcademiesSection(); return; }
     a = data;
   }
   document.getElementById('ownerTitle').textContent = editId ? '✏️ تعديل أكاديمية' : '➕ إضافة أكاديمية';
@@ -4817,7 +5082,7 @@ async function showAddAcademyForm(editId){
       <input id="st-lng" type="hidden" value="${a.lng??''}">
     </div>
     <div style="display:flex;gap:10px;margin-top:16px">
-      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('academies')">إلغاء</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="showOwnerAcademiesSection()">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveAcademy(${editId||'null'})">💾 حفظ الأكاديمية</button>
     </div>`;
   initLocationPicker('pickerMap', a.lat??null, a.lng??null);
@@ -4889,7 +5154,7 @@ async function saveAcademy(editId){
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
   showToast(editId ? 'تم حفظ التعديلات ✓' : 'تمت الإضافة ✓ بانتظار موافقة المالك 🎓');
   loadRealAcademies();
-  ownerGoTab('academies');
+  showOwnerAcademiesSection();
 }
 
 async function showAddTournamentForm(editId){
@@ -4897,7 +5162,7 @@ async function showAddTournamentForm(editId){
   let t = {};
   if (editId) {
     const { data, error } = await sb.from('tournaments').select('*').eq('id', editId).single();
-    if (error || !data) { showToast('تعذّر تحميل بيانات البطولة','error'); ownerGoTab('tournaments'); return; }
+    if (error || !data) { showToast('تعذّر تحميل بيانات البطولة','error'); showOwnerTournamentsSection(); return; }
     t = data;
   }
   document.getElementById('ownerTitle').textContent = editId ? '✏️ تعديل بطولة' : '➕ إضافة بطولة';
@@ -4954,7 +5219,7 @@ async function showAddTournamentForm(editId){
       <input id="st-lng" type="hidden" value="${t.lng??''}">
     </div>
     <div style="display:flex;gap:10px;margin-top:16px">
-      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('tournaments')">إلغاء</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="showOwnerTournamentsSection()">إلغاء</button>
       <button class="btn btn-brand" style="flex:2" onclick="saveTournament(${editId||'null'})">💾 حفظ البطولة</button>
     </div>`;
   initLocationPicker('pickerMap', t.lat??null, t.lng??null);
@@ -5012,7 +5277,7 @@ async function saveTournament(editId){
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
   showToast(editId ? 'تم حفظ التعديلات ✓' : 'تمت الإضافة ✓ بانتظار موافقة المالك 🏆');
   loadRealTournaments();
-  ownerGoTab('tournaments');
+  showOwnerTournamentsSection();
 }
 // ── حجوزات ملاعب صاحب الملعب (يشوف حجوزات ملاعبه هو فقط، ويتحكم فيها) ──
 async function ownerSetBookingStatus(bookingId, newStatus) {
@@ -5499,7 +5764,7 @@ async function renderPlayerBookingsTab(highlightBookingId){
       </div>
 
       ${b.status==='confirmed' ? `
-        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showBookingQR(${b.id},'${b.verify_token}')">
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="pushOwnerPage('showBookingQR',${b.id},'${b.verify_token}')">
           ${b.checked_in ? '✅ تم تسجيل الحضور' : '📱 عرض رمز الدخول'}
         </button>` : ''}
       ${(!b.is_split && b.status==='pending' && b.payment_status==='unpaid') ? `
@@ -5617,9 +5882,9 @@ async function renderPlayerRegistrationsTab(){
     let pauseBtnHtml = '';
     if (summary?.available) {
       if (summary.policy_type === 'count_days') {
-        pauseBtnHtml = `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showRequestPauseForm(${e.id},${summary.max_days_per_request})">⏸️ طلب إيقاف مؤقت (متبقٍ ${summary.remaining_count} من ${summary.total_count})</button>`;
+        pauseBtnHtml = `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="pushOwnerPage('showRequestPauseForm',${e.id},${summary.max_days_per_request})">⏸️ طلب إيقاف مؤقت (متبقٍ ${summary.remaining_count} من ${summary.total_count})</button>`;
       } else if (summary.policy_type === 'percent_duration') {
-        pauseBtnHtml = `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showRequestPauseForm(${e.id},${summary.remaining_days})">⏸️ طلب إيقاف مؤقت (رصيدك المتبقي ${summary.remaining_days} يوم)</button>`;
+        pauseBtnHtml = `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="pushOwnerPage('showRequestPauseForm',${e.id},${summary.remaining_days})">⏸️ طلب إيقاف مؤقت (رصيدك المتبقي ${summary.remaining_days} يوم)</button>`;
       }
     }
     return `
@@ -5630,7 +5895,7 @@ async function renderPlayerRegistrationsTab(){
       </div>
       ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="startRegistrationPayment('enrollment',${e.id},${e.amount})">💳 أكمل الدفع</button>` : ''}
       ${(e.status==='confirmed' && e.ends_on && e.ends_on <= riyadhTodayPlusDays(7) && e.plan_id) ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="renewEnrollment(${e.academy_id},${e.plan_id},${e.id},'${escapeHtml(e.player_name).replace(/'/g,"\\'")}')">🔄 جدّد الاشتراك (${e.academy_plans?.name||''})</button>` : ''}
-      ${(e.status==='confirmed') ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showMyChildAttendance(${e.id},'${escapeHtml(e.player_name).replace(/'/g,"\\'")}')">📋 سجل الحضور</button>` : ''}
+      ${(e.status==='confirmed') ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="pushOwnerPage('showMyChildAttendance',${e.id},'${escapeHtml(e.player_name).replace(/'/g,"\\'")}')">📋 سجل الحضور</button>` : ''}
       ${pauseBtnHtml}
       ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-danger btn-sm btn-block" style="margin-top:6px" onclick="cancelMyRegistration('enrollment',${e.id})">إلغاء التسجيل</button>` : ''}
       ${(e.status==='confirmed' && !reviewedEnroll.has(e.id)) ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="openRateRegistration('enrollment',${e.id},${e.academies?.id})">⭐ قيّم تجربتك</button>` : ''}
@@ -5958,7 +6223,12 @@ function adminTabsHtml(active){
     ${ADMIN_TABS.map(t=>`<button onclick="adminGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
   </div>`;
 }
-async function adminGoTab(tab){
+async function adminGoTab(tab, isRoot){
+  if (isRoot || !window._ownerNavStack.length) {
+    window._ownerNavStack = [{ fn: 'adminGoTab', args: [tab, true] }];
+    history.pushState({ _ownerPage: true, stackDepth: 1 }, '', window.location.href);
+  }
+  updateOwnerBackButton();
   document.getElementById('ownerTitle').textContent = '🛡️ لوحة تحكم المالك';
   document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
   document.getElementById('ownerBody').innerHTML = adminTabsHtml(tab) + '<div id="adminTabInner"></div>';
@@ -6082,7 +6352,7 @@ async function renderAdminOverviewTab(){
     </div>
 
     <div class="dlabel">🎯 إجراءات سريعة</div>
-    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="showBroadcastForm()">📢 إرسال إشعار جماعي</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showBroadcastForm',)">📢 إرسال إشعار جماعي</button>
     <button class="btn btn-soft btn-block" onclick="adminGoTab('reviews')">⭐ مراجعة التقييمات</button>
   `;
 }
@@ -6115,7 +6385,7 @@ async function renderAdminFinanceTab(){
 
     <div class="dlabel">📄 التقارير المحاسبية</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="exportAdminAccountingReport()">تصدير تقرير محاسبي شامل للمنصة (CSV)</button>
-    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="showAdminMonthlyReports()">🗓️ الأرشيف الشهري (يُنشأ تلقائيًا)</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="pushOwnerPage('showAdminMonthlyReports',)">🗓️ الأرشيف الشهري (يُنشأ تلقائيًا)</button>
 
     <div class="dlabel">⚙️ الإعدادات</div>
     <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="adminView('commission')">نسبة عمولة المنصة</button>
