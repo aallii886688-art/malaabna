@@ -1748,6 +1748,60 @@ setTimeout(()=>{ if (typeof initRealMap==='function') initRealMap(); }, 0);
   }, 500);
 })();
 
+// ── رابط متابعة عام للبطولة (?tournament=<slug>) — يعمل بدون تسجيل دخول، يعرض الترتيب والنتائج مباشرة ──
+(function checkTournamentPublicLink(){
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get('tournament');
+  if (!slug) return;
+  setTimeout(() => showPublicTournamentPage(slug), 300);
+})();
+
+async function showPublicTournamentPage(slug){
+  if (!window.sb) { showToast('الرابط يحتاج اتصال قاعدة بيانات فعّال','error'); return; }
+  openInfoModal('🏆 متابعة البطولة', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+
+  const { data: tourn } = await sb.from('tournaments').select('*').eq('public_slug', slug).eq('approved', true).eq('is_deleted', false).maybeSingle();
+  if (!tourn) { document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">لم يتم العثور على هذه البطولة</div>'; return; }
+
+  const [{ data: teams }, { data: matches }] = await Promise.all([
+    sb.from('tournament_teams').select('id, team_name').eq('tournament_id', tourn.id).eq('status', 'confirmed'),
+    sb.from('tournament_matches').select('id, match_date, start_time, team_a_id, team_b_id, score_a, score_b, stage, group_number, fields(name)').eq('tournament_id', tourn.id).order('match_date').order('start_time')
+  ]);
+  const teamMap = {};
+  (teams||[]).forEach(t => { teamMap[t.id] = t.team_name; });
+  const stageLabels = { league:'الدوري', group:'دور المجموعات', round_of_16:'دور الـ16', quarter:'ربع النهائي', semi:'نصف النهائي', final:'النهائي' };
+
+  document.getElementById('ownerTitle').textContent = `🏆 ${tourn.name}`;
+  document.getElementById('ownerBody').innerHTML = `
+    <div style="text-align:center;padding:14px;background:var(--bg-soft);border-radius:12px;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(tourn.city)||''} · ${teams?.length||0} فريق مشارك</div>
+    </div>
+
+    ${(tourn.format === 'league') ? `<div class="dlabel">📊 جدول الترتيب</div><div id="pub-standings-league">جارٍ التحميل...</div>` : ''}
+    ${(tourn.format === 'groups_knockout') ? Array.from({length: tourn.group_count||0}, (_,i)=>i+1).map(g=>`
+      <div class="dlabel" style="margin-top:14px">📊 ترتيب المجموعة ${g}</div><div id="pub-standings-group-${g}">جارٍ التحميل...</div>
+    `).join('') : ''}
+
+    <div class="dlabel" style="margin-top:18px">📋 المباريات والنتائج</div>
+    ${(matches&&matches.length) ? matches.map(m=>`
+      <div style="padding:11px 13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="font-size:10.5px;color:var(--ink-dim);margin-bottom:4px">${m.match_date} · ${formatTime12(m.start_time)} · ${escapeHtml(m.fields?.name)||''} ${m.group_number?`· مجموعة ${m.group_number}`:''} · ${stageLabels[m.stage]||m.stage}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px">
+          <span style="flex:1;font-size:13px;font-weight:600;text-align:left">${escapeHtml(teamMap[m.team_a_id])||'؟'}</span>
+          <span style="font-weight:900;color:var(--flood)">${m.score_a??'-'} : ${m.score_b??'-'}</span>
+          <span style="flex:1;font-size:13px;font-weight:600;text-align:right">${escapeHtml(teamMap[m.team_b_id])||'؟'}</span>
+        </div>
+      </div>`).join('') : '<div style="text-align:center;padding:20px;color:var(--ink-dim);font-size:12.5px">لم يبدأ الجدول بعد</div>'}
+  `;
+
+  if (tourn.format === 'league') renderStandingsTable('pub-standings-league', tourn.id, null);
+  if (tourn.format === 'groups_knockout') {
+    for (let g = 1; g <= (tourn.group_count||0); g++) renderStandingsTable(`pub-standings-group-${g}`, tourn.id, g);
+  }
+}
+
 // ── رابط التحقق من رمز QR للحجز ──
 (function checkVerifyLinkOnLoad(){
   const params = new URLSearchParams(window.location.search);
@@ -2106,7 +2160,6 @@ function initBackend() {
       const totalPrice = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePrice;
       const isSplit = bookingMode === 'split';
       const myShareAmount = isSplit ? Math.round((totalPrice/playerCount)*100)/100 : totalPrice;
-      const shareToken = isSplit ? (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2))) : null;
       const openForJoin = isSplit && !!document.getElementById('open-for-join')?.checked;
 
       const insertPayload = {
@@ -2122,7 +2175,7 @@ function initBackend() {
         is_open_for_join: openForJoin,
         payment_status: 'unpaid'
       };
-      if (shareToken) insertPayload.share_link_token = shareToken;
+      // نترك share_link_token فارغًا هنا عمدًا — قاعدة البيانات تولّده تلقائيًا بعشوائية آمنة تشفيريًا (gen_random_bytes) عبر DEFAULT العمود، بدل توليده بجافاسكربت بالمتصفح
 
       const { data: newBooking, error } = await sb.from('bookings').insert(insertPayload).select().single();
 
@@ -3339,7 +3392,7 @@ async function renderOwnerTournamentsTab(){
           </div>
         </div>
         ${capacityAlert}
-        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="showScheduleMatch(${t.id})">📅 جدولة مباراة</button>
+        <button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="showTournamentManage(${t.id})">🏆 إدارة البطولة</button>
       </div>`;
     }).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد بطولات بعد</div>'}
     ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:12px" onclick="showAddTournamentForm()">+ إضافة بطولة</button>` : ''}
@@ -3754,11 +3807,11 @@ async function createManualBooking(){
     d.setDate(d.getDate() + (w * 7));
     const weekDate = d.toISOString().split('T')[0];
 
-    const shareToken = crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2));
     const payload = {
       field_id: fieldId, booking_date: weekDate, start_time: start, end_time: end,
       players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid',
-      created_by: currentOwner?.id || null, share_link_token: shareToken,
+      created_by: currentOwner?.id || null,
+      // نترك share_link_token فارغًا هنا عمدًا — قاعدة البيانات تولّده تلقائيًا بعشوائية آمنة تشفيريًا (gen_random_bytes)
     };
     if (prof) { payload.user_id = prof.id; } else { payload.guest_name = name; payload.guest_phone = phone; }
 
@@ -3767,8 +3820,8 @@ async function createManualBooking(){
       results.push({ date: weekDate, ok: false, reason: (error.code === '23514' || error.message?.includes('conflict')) ? 'الوقت متعارض مع حجز آخر' : error.message });
       continue;
     }
-    // رابط داخلي بالكامل — يفتح نموذج الدفع المضمّن بنفس الموقع (بدون أي تحويل خارجي)
-    results.push({ date: weekDate, ok: true, join_url: window.location.origin + '?join=' + shareToken });
+    // رابط داخلي بالكامل — يفتح نموذج الدفع المضمّن بنفس الموقع (بدون أي تحويل خارجي)، باستخدام التوكن الفعلي المولَّد من قاعدة البيانات
+    results.push({ date: weekDate, ok: true, join_url: window.location.origin + '?join=' + booking.share_link_token });
   }
 
   const successCount = results.filter(r=>r.ok).length;
@@ -4433,58 +4486,206 @@ async function markAttendance(sessionId, enrollmentId, dateStr, status, academyI
   showToast(status==='present' ? 'تم تسجيل الحضور ✓' : 'تم تسجيل الغياب ✓');
 }
 
-async function showScheduleMatch(tournamentId){
+// ── شاشة إدارة البطولة الشاملة — توليد الجدول تلقائيًا حسب النظام المختار، إدخال نتائج، ترتيب تلقائي، ورابط متابعة عام ──
+async function showTournamentManage(tournamentId){
   const bodyEl = document.getElementById('ownerBody');
-  document.getElementById('ownerTitle').textContent = '📅 جدولة مباراة';
-  const [fieldOpts, { data: matches }] = await Promise.all([
-    myFieldsOptionsHtml(),
-    sb.from('tournament_matches').select('id, field_id, match_date, start_time, end_time, team_a, team_b, status, fields(name)').eq('tournament_id', tournamentId).order('match_date')
+  document.getElementById('ownerTitle').textContent = '🏆 إدارة البطولة';
+  const _lt = delayedLoading(bodyEl.id);
+
+  const [{ data: tourn }, { data: teams }, { data: matches }, fieldOpts] = await Promise.all([
+    sb.from('tournaments').select('*').eq('id', tournamentId).single(),
+    sb.from('tournament_teams').select('id, team_name').eq('tournament_id', tournamentId).eq('status', 'confirmed'),
+    sb.from('tournament_matches').select('id, field_id, match_date, start_time, end_time, team_a_id, team_b_id, score_a, score_b, stage, group_number, fields(name)').eq('tournament_id', tournamentId).order('match_date').order('start_time'),
+    myFieldsOptionsHtml()
   ]);
+  clearTimeout(_lt);
+
+  if (!tourn) { bodyEl.innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر تحميل البطولة</div>'; return; }
+
+  const teamMap = {};
+  (teams||[]).forEach(t => { teamMap[t.id] = t.team_name; });
+  const stageLabels = { league:'الدوري', group:'دور المجموعات', round_of_16:'دور الـ16', quarter:'ربع النهائي', semi:'نصف النهائي', final:'النهائي' };
+  const formatLabels = { league:'دوري', groups_knockout:'مجموعات ثم إقصاء', knockout:'خروج المغلوب المباشر' };
+
+  const matchRow = (m) => `
+    <div style="padding:11px 13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+      <div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">${m.match_date} · ${formatTime12(m.start_time)} · ${escapeHtml(m.fields?.name)||''} ${m.group_number?`· مجموعة ${m.group_number}`:''} · ${stageLabels[m.stage]||m.stage}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="flex:1;font-size:13px;font-weight:600;text-align:left">${escapeHtml(teamMap[m.team_a_id])||'؟'}</span>
+        <input type="number" min="0" value="${m.score_a??''}" id="score-a-${m.id}" style="width:44px;text-align:center;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink)">
+        <span style="color:var(--ink-dim)">-</span>
+        <input type="number" min="0" value="${m.score_b??''}" id="score-b-${m.id}" style="width:44px;text-align:center;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink)">
+        <span style="flex:1;font-size:13px;font-weight:600">${escapeHtml(teamMap[m.team_b_id])||'؟'}</span>
+      </div>
+      <button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="saveMatchScore(${m.id},${tournamentId})">💾 حفظ النتيجة</button>
+    </div>`;
+
+  const hasMatches = matches && matches.length;
+  const allCurrentStageFinished = hasMatches && matches.every(m => m.score_a != null && m.score_b != null);
+  const isKnockoutFinished = tourn.format === 'knockout' && matches?.some(m => m.stage === 'final' && m.score_a != null);
+
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('tournaments')" style="margin-bottom:14px">→ رجوع</button>
-    <div class="field"><label>الملعب *</label><select id="tm-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
-    <div class="field"><label>التاريخ *</label><input id="tm-date" type="date"></div>
-    <div style="display:flex;gap:8px">
-      <div class="field" style="flex:1"><label>من *</label><input id="tm-start" type="time" value="18:00"></div>
-      <div class="field" style="flex:1"><label>إلى *</label><input id="tm-end" type="time" value="19:00"></div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <div class="field" style="flex:1"><label>الفريق الأول</label><input id="tm-team-a" type="text" placeholder="صقور الساحل"></div>
-      <div class="field" style="flex:1"><label>الفريق الثاني</label><input id="tm-team-b" type="text" placeholder="نسور الجبل"></div>
-    </div>
-    <button class="btn btn-brand btn-block" onclick="saveMatch(${tournamentId})">💾 حفظ المباراة</button>
+    <div class="dlabel" style="justify-content:center;margin-bottom:4px">${escapeHtml(tourn.name)} <span style="font-size:11px;color:var(--ink-dim);font-weight:400">(${formatLabels[tourn.format]})</span></div>
 
-    <div class="dlabel" style="margin-top:18px">📋 المباريات المجدولة</div>
-    ${(matches&&matches.length)? matches.map(m=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
-        <span style="font-size:12.5px"><b>${m.match_date}</b> · ${formatTime12(m.start_time)}–${formatTime12(m.end_time)} · ${escapeHtml(m.fields?.name)||''}${(m.team_a||m.team_b)? ' · '+(m.team_a||'؟')+' ضد '+(m.team_b||'؟'):''}</span>
-        <button class="btn btn-ghost btn-sm" onclick="deleteMatch(${m.id},${tournamentId})">حذف</button>
-      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد مباريات مجدولة بعد</div>'}
+    <div style="display:flex;gap:6px;margin:12px 0 16px">
+      <a href="${window.location.origin}?tournament=${tourn.public_slug}" target="_blank" class="btn btn-soft btn-sm" style="flex:1;text-decoration:none">🔗 رابط المتابعة العام</a>
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="copyTournamentPublicLink('${tourn.public_slug}')">📋 نسخ الرابط</button>
+    </div>
+    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:16px" onclick="showTournamentCoorganizers(${tournamentId})">👥 إدارة المشرفين المساعدين</button>
+
+    ${!hasMatches ? `
+      <div class="dlabel">⚙️ توليد جدول المباريات</div>
+      <div class="legal-note" style="margin-bottom:12px">عدد الفرق المؤكدة حاليًا: <b>${teams?.length||0}</b>. حدّد نقطة البداية فقط، والنظام يولّد كل المباريات تلقائيًا.</div>
+      <div class="field"><label>الملعب *</label><select id="tg-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
+      <div class="field"><label>تاريخ أول مباراة *</label><input id="tg-date" type="date"></div>
+      <div style="display:flex;gap:8px">
+        <div class="field" style="flex:1"><label>وقت أول مباراة *</label><input id="tg-time" type="time" value="16:00"></div>
+        <div class="field" style="flex:1"><label>مدة المباراة (دقيقة)</label><input id="tg-duration" type="number" value="60" min="15"></div>
+      </div>
+      <div class="field"><label>عدد المباريات باليوم الواحد</label><input id="tg-per-day" type="number" value="4" min="1"></div>
+      ${tourn.format === 'groups_knockout' ? `<div class="field"><label>عدد المجموعات *</label><input id="tg-groups" type="number" value="2" min="2"></div>` : ''}
+      <button class="btn btn-brand btn-block" onclick="generateTournamentFixtures(${tournamentId}, '${tourn.format}')">⚡ توليد الجدول الآن</button>
+    ` : `
+      <div class="dlabel">📋 المباريات</div>
+      ${matches.map(matchRow).join('')}
+
+      ${(tourn.format !== 'league' && allCurrentStageFinished && !isKnockoutFinished) ? `
+        <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="advanceToNextStage(${tournamentId})">➡️ توليد المرحلة التالية (الفائزون يتقدمون)</button>
+      ` : ''}
+      ${isKnockoutFinished ? `<div class="legal-note" style="margin-top:10px;text-align:center">🏆 انتهت البطولة!</div>` : ''}
+
+      ${(tourn.format === 'league') ? `<div class="dlabel" style="margin-top:18px">📊 جدول الترتيب</div><div id="standings-league">جارٍ التحميل...</div>` : ''}
+      ${(tourn.format === 'groups_knockout') ? Array.from({length: tourn.group_count||0}, (_,i)=>i+1).map(g=>`
+        <div class="dlabel" style="margin-top:18px">📊 ترتيب المجموعة ${g}</div><div id="standings-group-${g}">جارٍ التحميل...</div>
+      `).join('') : ''}
+    `}
+  `;
+
+  if (tourn.format === 'league' && hasMatches) renderStandingsTable('standings-league', tournamentId, null);
+  if (tourn.format === 'groups_knockout' && hasMatches) {
+    for (let g = 1; g <= (tourn.group_count||0); g++) renderStandingsTable(`standings-group-${g}`, tournamentId, g);
+  }
+}
+
+async function renderStandingsTable(elementId, tournamentId, groupNumber){
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const { data: standings } = await sb.rpc('get_tournament_standings', { p_tournament_id: tournamentId, p_group_number: groupNumber });
+  if (!standings || !standings.length) { el.innerHTML = '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد نتائج مسجّلة بعد</div>'; return; }
+  el.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+        <thead><tr style="color:var(--ink-dim);text-align:center">
+          <th style="text-align:right;padding:6px 4px">الفريق</th><th>ل</th><th>ف</th><th>ت</th><th>خ</th><th>فأ</th><th>نق</th>
+        </tr></thead>
+        <tbody>
+          ${standings.map((s,i)=>`
+            <tr style="background:${i%2===0?'var(--bg-soft)':'transparent'};text-align:center">
+              <td style="text-align:right;padding:6px 4px;font-weight:700">${i+1}. ${escapeHtml(s.team_name)}</td>
+              <td>${s.played}</td><td>${s.won}</td><td>${s.drawn}</td><td>${s.lost}</td>
+              <td>${s.goal_diff>0?'+':''}${s.goal_diff}</td><td style="font-weight:800;color:var(--flood)">${s.points}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function generateTournamentFixtures(tournamentId, format){
+  const fieldId = document.getElementById('tg-field').value;
+  const startDate = document.getElementById('tg-date').value;
+  const startTime = document.getElementById('tg-time').value;
+  const duration = parseInt(document.getElementById('tg-duration').value);
+  const perDay = parseInt(document.getElementById('tg-per-day').value);
+  if (!fieldId || !startDate || !startTime) { showToast('املأ كل الحقول المطلوبة','error'); return; }
+
+  showToast('جارٍ توليد الجدول...');
+  let result;
+  if (format === 'league') {
+    result = await sb.rpc('generate_league_fixtures', { p_tournament_id: tournamentId, p_field_id: fieldId, p_start_date: startDate, p_start_time: startTime, p_match_duration_minutes: duration, p_matches_per_day: perDay });
+  } else if (format === 'knockout') {
+    result = await sb.rpc('generate_knockout_fixtures', { p_tournament_id: tournamentId, p_field_id: fieldId, p_start_date: startDate, p_start_time: startTime, p_match_duration_minutes: duration, p_matches_per_day: perDay });
+  } else {
+    const groupCount = parseInt(document.getElementById('tg-groups').value);
+    result = await sb.rpc('generate_groups_fixtures', { p_tournament_id: tournamentId, p_field_id: fieldId, p_group_count: groupCount, p_start_date: startDate, p_start_time: startTime, p_match_duration_minutes: duration, p_matches_per_day: perDay });
+  }
+
+  if (result.error || !result.data?.ok) { showToast(result.data?.error || result.error?.message || 'تعذّر توليد الجدول','error'); return; }
+  showToast(`تم توليد ${result.data.created_count} مباراة ✓`);
+  showTournamentManage(tournamentId);
+}
+
+async function advanceToNextStage(tournamentId){
+  const fieldId = document.getElementById('tg-field')?.value;
+  showConfirmDialog('توليد المرحلة التالية؟ سيتقدّم الفائزون تلقائيًا حسب النتائج المسجّلة.', 'نعم، تابع', async () => {
+    const { data: lastMatch } = await sb.from('tournament_matches').select('field_id, match_date, start_time').eq('tournament_id', tournamentId).order('match_date',{ascending:false}).limit(1).single();
+    const nextDate = new Date(lastMatch.match_date); nextDate.setDate(nextDate.getDate()+1);
+    const { data: result, error } = await sb.rpc('advance_knockout_stage', {
+      p_tournament_id: tournamentId, p_field_id: lastMatch.field_id,
+      p_start_date: nextDate.toISOString().slice(0,10), p_start_time: lastMatch.start_time,
+      p_match_duration_minutes: 60, p_matches_per_day: 4
+    });
+    if (error || !result?.ok) { showToast(result?.error || error?.message || 'تعذّر التقدم للمرحلة التالية','error'); return; }
+    showToast(`تم توليد ${result.created_count} مباراة للمرحلة التالية ✓`);
+    showTournamentManage(tournamentId);
+  });
+}
+
+async function saveMatchScore(matchId, tournamentId){
+  const scoreA = parseInt(document.getElementById(`score-a-${matchId}`).value);
+  const scoreB = parseInt(document.getElementById(`score-b-${matchId}`).value);
+  if (isNaN(scoreA) || isNaN(scoreB) || scoreA < 0 || scoreB < 0) { showToast('أدخل نتيجة صحيحة للفريقين','error'); return; }
+  const { error } = await sb.from('tournament_matches').update({ score_a: scoreA, score_b: scoreB, status: 'completed' }).eq('id', matchId);
+  if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
+  showToast('تم حفظ النتيجة ✓');
+  showTournamentManage(tournamentId);
+}
+
+function copyTournamentPublicLink(slug){
+  const url = `${window.location.origin}?tournament=${slug}`;
+  navigator.clipboard.writeText(url).then(()=>showToast('تم نسخ الرابط ✓')).catch(()=>showToast(url));
+}
+
+// ── إدارة المشرفين المساعدين — صاحب البطولة الأصلي فقط يقدر يضيف/يحذف ──
+async function showTournamentCoorganizers(tournamentId){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '👥 المشرفون المساعدون';
+  const { data: coorgs } = await sb.from('tournament_coorganizers').select('id, profiles(name, phone)').eq('tournament_id', tournamentId);
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="showTournamentManage(${tournamentId})" style="margin-bottom:14px">→ رجوع</button>
+    <div class="legal-note" style="margin-bottom:14px">المشرف المساعد يقدر يسجّل النتائج ويولّد الجدول، لكن لا يقدر يحذف البطولة أو يضيف/يحذف مشرفين آخرين.</div>
+    <div class="field"><label>رقم جوال المشرف (يجب أن يكون مسجّلاً بالمنصة)</label><input id="coorg-phone" type="tel" placeholder="05xxxxxxxx"></div>
+    <button class="btn btn-brand btn-block" onclick="addTournamentCoorganizer(${tournamentId})">+ إضافة مشرف</button>
+
+    <div class="dlabel" style="margin-top:18px">المشرفون الحاليون</div>
+    ${(coorgs&&coorgs.length) ? coorgs.map(c=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div><b style="font-size:13px">${escapeHtml(c.profiles?.name)||'—'}</b><div style="font-size:11.5px;color:var(--ink-dim)">${escapeHtml(c.profiles?.phone)||''}</div></div>
+        <button class="btn btn-danger btn-sm" onclick="removeTournamentCoorganizer(${c.id},${tournamentId})">إزالة</button>
+      </div>`).join('') : '<div style="text-align:center;padding:20px;color:var(--ink-dim);font-size:12.5px">لا يوجد مشرفون مساعدون بعد</div>'}
   `;
 }
-async function saveMatch(tournamentId){
-  const field_id = document.getElementById('tm-field').value;
-  const match_date = document.getElementById('tm-date').value;
-  const start_time = document.getElementById('tm-start').value;
-  const end_time = document.getElementById('tm-end').value;
-  const team_a = document.getElementById('tm-team-a').value.trim();
-  const team_b = document.getElementById('tm-team-b').value.trim();
-  if (!field_id || !match_date) { showToast('اختر ملعباً وتاريخاً','error'); return; }
-  if (start_time >= end_time) { showToast('وقت النهاية لازم يكون بعد وقت البداية','error'); return; }
-  const { error } = await sb.from('tournament_matches').insert({ tournament_id: tournamentId, field_id, match_date, start_time, end_time, team_a: team_a||null, team_b: team_b||null });
+
+async function addTournamentCoorganizer(tournamentId){
+  const phone = document.getElementById('coorg-phone').value.trim();
+  if (!phone) { showToast('أدخل رقم الجوال','error'); return; }
+  const { data: prof } = await sb.from('profiles').select('id').eq('phone', phone).maybeSingle();
+  if (!prof) { showToast('لا يوجد حساب مسجّل بهذا الرقم','error'); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('tournament_coorganizers').insert({ tournament_id: tournamentId, user_id: prof.id, added_by: user.id });
   if (error) {
-    if (error.message.includes('BOOKING_CONFLICT')) { showToast('⚠️ يوجد حجز لاعب بهذا الوقت على هذا الملعب','error'); return; }
-    if (error.message.includes('ACADEMY_CONFLICT')) { showToast('⚠️ يوجد تدريب أكاديمية بهذا اليوم والوقت على هذا الملعب','error'); return; }
-    showToast('تعذّر الحفظ: ' + error.message,'error'); return;
+    if (error.code === '23505') { showToast('هذا الشخص مضاف مسبقًا كمشرف','error'); return; }
+    showToast('تعذّرت الإضافة: ' + error.message,'error'); return;
   }
-  showToast('تم حفظ المباراة ✓ لا يوجد تعارض');
-  showScheduleMatch(tournamentId);
+  showToast('تمت إضافة المشرف ✓');
+  showTournamentCoorganizers(tournamentId);
 }
-async function deleteMatch(id, tournamentId){
-  const { error } = await sb.from('tournament_matches').delete().eq('id', id);
+
+async function removeTournamentCoorganizer(coorgId, tournamentId){
+  const { error } = await sb.from('tournament_coorganizers').delete().eq('id', coorgId);
   if (error) { showToast('تعذّر الحذف','error'); return; }
-  showToast('تم الحذف ✓');
-  showScheduleMatch(tournamentId);
+  showToast('تمت الإزالة ✓');
+  showTournamentCoorganizers(tournamentId);
 }
 
 async function deleteAcademy(id){
@@ -4700,6 +4901,7 @@ async function showAddTournamentForm(editId){
     t = data;
   }
   document.getElementById('ownerTitle').textContent = editId ? '✏️ تعديل بطولة' : '➕ إضافة بطولة';
+  const formatLabels = { league:'🔄 دوري', groups_knockout:'🏆 مجموعات ثم إقصاء', knockout:'⚡ خروج المغلوب المباشر' };
   bodyEl.innerHTML = `
     <div class="field"><label>اسم البطولة *</label><input id="tn-name" type="text" value="${escapeHtml(t.name)||''}" placeholder="بطولة الحي الرمضانية"></div>
     <div class="field"><label>المدينة *</label><input id="tn-city" type="text" value="${escapeHtml(t.city)||''}" placeholder="مثال: الرياض"></div>
@@ -4714,6 +4916,28 @@ async function showAddTournamentForm(editId){
     <div class="field"><label>الحد الأقصى للفرق</label><input id="tn-maxteams" type="number" placeholder="16" value="${t.max_teams||16}"></div>
     <div class="field"><label>تاريخ البداية</label><input id="tn-startdate" type="date" value="${t.start_date||''}"></div>
     <div class="field"><label>وصف مختصر</label><input id="tn-desc" type="text" value="${escapeHtml(t.description)||''}" placeholder="بطولة سداسي"></div>
+
+    <div class="dlabel" style="margin-top:16px">🎮 نظام البطولة</div>
+    ${editId ? `
+      <div class="legal-note" style="margin-bottom:14px">نظام البطولة الحالي: <b>${formatLabels[t.format]||'دوري'}</b> — لا يمكن تغييره بعد الإنشاء لتفادي تعارض المباريات المجدولة.</div>
+      <input id="tn-format" type="hidden" value="${t.format||'league'}">
+    ` : `
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:12px">اختر نظام المنافسة — لا يمكن تغييره بعد الإنشاء.</div>
+      <div onclick="setTournamentFormat('league')" id="tn-format-league" style="padding:13px;border:2px solid var(--brand);background:var(--bg-soft);border-radius:12px;margin-bottom:8px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🔄</span><b style="font-size:13.5px">دوري (الكل يلعب الكل)</b></div>
+        <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">كل فريق يلعب ضد كل الفرق الأخرى، والفوز بالترتيب النهائي حسب النقاط. مناسب لعدد فرق صغير-متوسط.</div>
+      </div>
+      <div onclick="setTournamentFormat('groups_knockout')" id="tn-format-groups_knockout" style="padding:13px;border:2px solid var(--line);background:var(--bg-soft);border-radius:12px;margin-bottom:8px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🏆</span><b style="font-size:13.5px">مجموعات ثم إقصاء</b></div>
+        <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">تُقسَّم الفرق لمجموعات (بنظام كأس العالم)، يتأهل الأفضل من كل مجموعة لدور الإقصاء المباشر.</div>
+      </div>
+      <div onclick="setTournamentFormat('knockout')" id="tn-format-knockout" style="padding:13px;border:2px solid var(--line);background:var(--bg-soft);border-radius:12px;margin-bottom:14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">⚡</span><b style="font-size:13.5px">خروج المغلوب المباشر</b></div>
+        <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">كل مباراة إقصائية مباشرة — الخاسر يخرج فورًا. الأسرع والأنسب لعدد فرق كبير أو وقت محدود.</div>
+      </div>
+      <input id="tn-format" type="hidden" value="league">
+    `}
+
     <div class="field">
       <label>صورة البطولة <span style="color:var(--ink-dim);font-weight:400">(اختياري)</span></label>
       <input id="st-image" type="file" accept="image/*" onchange="previewStadiumImg(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
@@ -4736,6 +4960,15 @@ async function showAddTournamentForm(editId){
   initLocationPicker('pickerMap', t.lat??null, t.lng??null);
   initLocationPicker('pickerMap', null, null);
 }
+
+function setTournamentFormat(format){
+  document.getElementById('tn-format').value = format;
+  ['league','groups_knockout','knockout'].forEach(f => {
+    const el = document.getElementById(`tn-format-${f}`);
+    if (el) el.style.borderColor = (f===format) ? 'var(--brand)' : 'var(--line)';
+  });
+}
+
 async function saveTournament(editId){
   const name = document.getElementById('tn-name').value.trim();
   const city = document.getElementById('tn-city').value.trim();
@@ -4773,6 +5006,7 @@ async function saveTournament(editId){
     ({ error } = await sb.from('tournaments').update(payload).eq('id', editId));
   } else {
     payload.owner_id = user.id;
+    payload.format = document.getElementById('tn-format').value; // يُحدَّد فقط عند الإنشاء، لا يمكن تعديله لاحقًا
     ({ error } = await sb.from('tournaments').insert(payload));
   }
   if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
