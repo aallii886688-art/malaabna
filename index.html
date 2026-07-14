@@ -4761,7 +4761,7 @@ async function showScheduleAcademySession(academyId){
   document.getElementById('ownerTitle').textContent = '⏱️ جدولة موعد تدريب';
   const [fieldOpts, { data: sessions }] = await Promise.all([
     myFieldsOptionsHtml('academy', academyId),
-    sb.from('academy_sessions').select('id, weekday, start_time, end_time, label, fields(name)').eq('academy_id', academyId)
+    sb.from('academy_sessions').select('id, weekday, start_time, end_time, label, fields(name)').eq('academy_id', academyId).eq('is_active', true)
   ]);
   bodyEl.innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="showOwnerAcademiesSection()" style="margin-bottom:14px">→ رجوع</button>
@@ -4803,11 +4803,22 @@ async function saveAcademySession(academyId){
   showToast('تم حفظ الموعد ✓ لا يوجد تعارض');
   showScheduleAcademySession(academyId);
 }
-async function deleteAcademySession(id, academyId){
+function deleteAcademySession(id, academyId){
+  showConfirmDialog('حذف هذا الموعد الأسبوعي؟ لو كان له سجل حضور سابق، سيُعطَّل فقط (بدون حذف السجل التاريخي) للحماية.', 'نعم، احذف/عطّل', () => _executeDeleteAcademySession(id, academyId));
+}
+async function _executeDeleteAcademySession(id, academyId){
   const { error } = await sb.from('academy_sessions').delete().eq('id', id);
-  if (error) { showToast('تعذّر الحذف','error'); return; }
-  showToast('تم الحذف ✓');
-  showScheduleAcademySession(academyId);
+  if (!error) { showToast('تم الحذف ✓'); showScheduleAcademySession(academyId); return; }
+
+  if (error.code === '23503') {
+    // فيه سجلات حضور تاريخية مرتبطة — نعطّل الموعد بدل حذفه، يحافظ على كل سجلات الحضور القديمة كاملة
+    const { error: softErr } = await sb.from('academy_sessions').update({ is_active: false }).eq('id', id);
+    if (softErr) { showToast('تعذّر: ' + softErr.message, 'error'); return; }
+    showToast('تم تعطيل الموعد ✓ — سجل الحضور السابق محفوظ بالكامل');
+    showScheduleAcademySession(academyId);
+    return;
+  }
+  showToast('تعذّر الحذف: ' + error.message, 'error');
 }
 
 // ── تسجيل الحضور والغياب — لكل مناسبة فعلية من الموعد الأسبوعي بتاريخ محدد، لكل الطلاب النشطين بالأكاديمية ──
@@ -4881,11 +4892,13 @@ async function showTournamentManage(tournamentId){
   const stageLabels = { league:'الدوري', group:'دور المجموعات', round_of_16:'دور الـ16', quarter:'ربع النهائي', semi:'نصف النهائي', final:'النهائي' };
   const formatLabels = { league:'دوري', groups_knockout:'مجموعات ثم إقصاء', knockout:'خروج المغلوب المباشر' };
 
-  const matchRow = (m) => `
+  const matchRow = (m) => {
+    const hasScore = m.score_a != null || m.score_b != null;
+    return `
     <div style="padding:11px 13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div style="font-size:11px;color:var(--ink-dim)">${m.match_date} · ${formatTime12(m.start_time)} · ${escapeHtml(m.fields?.name)||''} ${m.group_number?`· مجموعة ${m.group_number}`:''} · ${stageLabels[m.stage]||m.stage}</div>
-        <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="deleteTournamentMatch(${m.id},${tournamentId})">🗑️</button>
+        ${!hasScore ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="deleteTournamentMatch(${m.id},${tournamentId},false)">🗑️</button>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="flex:1;font-size:13px;font-weight:600;text-align:left">${escapeHtml(teamMap[m.team_a_id])||'؟'}</span>
@@ -4896,6 +4909,7 @@ async function showTournamentManage(tournamentId){
       </div>
       <button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="saveMatchScore(${m.id},${tournamentId})">💾 حفظ النتيجة</button>
     </div>`;
+  };
 
   const hasMatches = matches && matches.length;
   const hasAnyScoreRecorded = hasMatches && matches.some(m => m.score_a != null || m.score_b != null);
@@ -5026,12 +5040,15 @@ async function saveMatchScore(matchId, tournamentId){
 }
 
 // ── حذف مباراة واحدة (فريق انسحب، خطأ بالجدولة، إلخ) — بدون المساس بباقي الجدول ──
-function deleteTournamentMatch(matchId, tournamentId){
+function deleteTournamentMatch(matchId, tournamentId, hasScore){
+  if (hasScore) { showToast('لا يمكن حذف مباراة عندها نتيجة مسجّلة — النتائج التاريخية محمية دائمًا','error'); return; }
   showConfirmDialog('حذف هذه المباراة؟ لن تؤثر على باقي المباريات.', 'نعم، احذف', () => _executeDeleteTournamentMatch(matchId, tournamentId));
 }
 async function _executeDeleteTournamentMatch(matchId, tournamentId){
-  const { error } = await sb.from('tournament_matches').delete().eq('id', matchId);
+  // حماية مزدوجة: حتى لو تجاوزت الواجهة الفحص الأول، الاستعلام نفسه يرفض الحذف لأي مباراة عندها نتيجة مسجّلة بأي من الفريقين
+  const { error, count } = await sb.from('tournament_matches').delete({ count: 'exact' }).eq('id', matchId).is('score_a', null).is('score_b', null);
   if (error) { showToast('تعذّر الحذف: ' + error.message,'error'); return; }
+  if (!count) { showToast('لا يمكن حذف مباراة عندها نتيجة مسجّلة — النتائج التاريخية محمية دائمًا','error'); return; }
   showToast('تم حذف المباراة ✓');
   showTournamentManage(tournamentId);
 }
@@ -5110,7 +5127,7 @@ async function deleteAcademy(id){
   showToast('تعذّر الحذف: ' + error.message, 'error');
 }
 async function deleteTournament(id){
-  if (!confirm('حذف هذه البطولة؟ لو كان لها فرق مسجّلة، سيُحفظ سجلها (معلَّمة "محذوف") للحماية المالية والقانونية.')) return;
+  if (!confirm('حذف هذه البطولة؟ لو كان لها فرق مسجّلة أو نتائج مباريات، سيُحفظ سجلها (معلَّمة "محذوف") للحماية المالية والقانونية.')) return;
   const { error } = await sb.from('tournaments').delete().eq('id', id);
   if (!error) { showToast('تم حذف البطولة نهائيًا ✓'); renderOwnerTournamentsTab(); return; }
   if (error.code === '23503') {
@@ -5118,7 +5135,7 @@ async function deleteTournament(id){
     const markedName = current?.name?.includes('(محذوف)') ? current.name : `${escapeHtml(current?.name)||'بطولة'} (محذوف)`;
     const { error: softErr } = await sb.from('tournaments').update({ name: markedName, is_deleted: true, status: 'cancelled' }).eq('id', id);
     if (softErr) { showToast('تعذّر الحذف: ' + softErr.message, 'error'); return; }
-    showToast('تم الحذف ✓ — سجل الفرق المسجّلة محفوظ للحماية المالية والقانونية');
+    showToast('تم الحذف ✓ — سجل الفرق ونتائج المباريات محفوظ للحماية المالية والقانونية');
     renderOwnerTournamentsTab();
     return;
   }
