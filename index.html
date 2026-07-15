@@ -1704,6 +1704,8 @@ async function submitJoinPayment(token, remaining){
       </div>
     `);
 
+    if (!ensureMoyasarLoaded()) return;
+
     Moyasar.init({
       element: '.mysr-form',
       amount: data.amount_halalas,
@@ -1715,6 +1717,10 @@ async function submitJoinPayment(token, remaining){
       supported_networks: ['mada', 'visa', 'mastercard'],
       on_completed: async function (payment) {
         await confirmFormPayment(data.payment_row_id, payment.id, info.booking_id);
+      },
+      on_failure: async function (err) {
+        console.error('Moyasar form failure:', err);
+        document.getElementById('mysrPayWrap').innerHTML = paymentFailureHelpHtml('رقم الحجز', info.booking_id);
       }
     });
   } catch(e) {
@@ -2042,6 +2048,7 @@ function initBackend() {
           <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
         </div>
       `);
+      if (!ensureMoyasarLoaded()) return;
 
       Moyasar.init({
         element: '.mysr-form',
@@ -2054,6 +2061,11 @@ function initBackend() {
         supported_networks: ['mada', 'visa', 'mastercard'],
         on_completed: async function (payment) {
           await confirmFormPayment(data.payment_row_id, payment.id, bookingId);
+        },
+        on_failure: async function (err) {
+          // بدون هذا الاستدعاء، أي فشل بتحميل نموذج الدفع نفسه (مو استدعاء create-payment) كان يترك منطقة الدفع فارغة بصمت بدون أي رسالة توضح للمستخدم إنه فيه مشكلة
+          console.error('Moyasar form failure:', err);
+          document.getElementById('mysrPayWrap').innerHTML = paymentFailureHelpHtml('رقم الحجز', bookingId);
         }
       });
     } catch(e) {
@@ -2062,6 +2074,17 @@ function initBackend() {
     }
   }
   window.startRealPayment = startRealPayment;
+
+  // ── نتأكد من تحميل مكتبة Moyasar فعليًا قبل محاولة استخدامها — لو فشل تحميل السكربت من الـCDN (حجب إعلانات، بطء شبكة)، نعرض رسالة واضحة فورًا بدل صمت تام ──
+  function ensureMoyasarLoaded() {
+    if (typeof Moyasar === 'undefined') {
+      showToast('تعذّر تحميل بوابة الدفع — تأكد من اتصالك بالإنترنت أو عطّل حاجب الإعلانات وأعد المحاولة', 'error');
+      closeAll();
+      return false;
+    }
+    return true;
+  }
+  window.ensureMoyasarLoaded = ensureMoyasarLoaded;
 
   async function confirmFormPayment(paymentRowId, paymentId, bookingId, attempt) {
     attempt = attempt || 1;
