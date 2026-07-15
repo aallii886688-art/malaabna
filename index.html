@@ -4060,7 +4060,7 @@ async function showManualBookingForm(){
       </select>
     </div>
     <div style="display:flex;gap:8px">
-      <div class="field" style="flex:1"><label>التاريخ *</label><input id="mb-date" type="date" value="${riyadhTodayStr()}"></div>
+      <div class="field" style="flex:1"><label>التاريخ *</label><input id="mb-date" type="date" value="${riyadhTodayStr()}" min="${riyadhTodayStr()}"></div>
       <div class="field" style="flex:1"><label>وقت البداية *</label><input id="mb-start" type="time"></div>
     </div>
     <div style="display:flex;gap:8px">
@@ -4093,6 +4093,8 @@ async function createManualBooking(){
   const isRecurring = document.getElementById('mb-recurring').checked;
   const weeks = isRecurring ? (parseInt(document.getElementById('mb-weeks').value) || 4) : 1;
   if (!name || !phone || !fieldId || !date || !start || !end || !price || price<=0) { showToast('املأ كل الحقول الإلزامية (*)','error'); return; }
+  if (date < riyadhTodayStr()) { showToast('لا يمكن اختيار تاريخ سابق لليوم','error'); return; }
+  if (end <= start) { showToast('وقت النهاية يجب أن يكون بعد وقت البداية','error'); return; }
 
   // لو عنده حساب مسجّل بنفس الرقم نربطه تلقائيًا، ولو ما عنده نسجّله كحجز ضيف بدون أي عائق
   const { data: prof } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
@@ -4256,8 +4258,10 @@ async function addStaffMember(){
     showStaffInviteHelp(phone);
     return;
   }
+  const { data: { user: currentUser } } = await sb.auth.getUser();
+  if (prof.id === currentUser.id) { showToast('لا يمكنك إضافة نفسك كموظف — تأكد من رقم الجوال المدخل','error'); return; }
 
-  const { error } = await sb.from('facility_staff').insert({ facility_id: facilityId, user_id: prof.id, added_by: (await sb.auth.getUser()).data.user.id, permissions });
+  const { error } = await sb.from('facility_staff').insert({ facility_id: facilityId, user_id: prof.id, added_by: currentUser.id, permissions });
   if (error) {
     if (error.code === '23505') { showToast('هذا الموظف مضاف مسبقاً لهذه المنشأة','error'); return; }
     showToast('تعذّرت الإضافة: ' + error.message,'error'); return;
@@ -4385,12 +4389,21 @@ async function showAcademyStudents(academyId){
   document.getElementById('ownerTitle').textContent = '👥 طلاب الأكاديمية';
   const _lt = delayedLoading(bodyEl.id);
 
-  const [{ data: academy }, { data: students }, { data: trialRequests }] = await Promise.all([
+  const [{ data: academy }, { data: students, error: studentsErr }, { data: trialRequests }] = await Promise.all([
     sb.from('academies').select('name, pause_policy_type, max_pauses_per_enrollment, max_pause_percent, premium_active, premium_expires_on').eq('id', academyId).single(),
     sb.from('academy_enrollments').select('id, player_name, player_age, status, payment_status, amount, created_at, starts_on, ends_on, profiles(name, phone), academy_plans(name, duration_months, features)').eq('academy_id', academyId).order('created_at', { ascending: false }),
     sb.from('academy_trial_requests').select('id, player_name, player_age, profiles(phone)').eq('academy_id', academyId).eq('status', 'pending').order('created_at', { ascending: false })
   ]);
   clearTimeout(_lt);
+
+  // نتحقق صراحة من فشل استعلام الطلاب (جلسة منتهية، خطأ صلاحيات، انقطاع اتصال) بدل عرض "لا يوجد طلاب" بصمت وكأن القائمة فارغة فعلاً
+  if (studentsErr) {
+    bodyEl.innerHTML = `
+      <button class="btn btn-ghost btn-sm" onclick="showOwnerAcademiesSection()" style="margin-bottom:14px">→ رجوع</button>
+      <div style="text-align:center;padding:24px;color:var(--danger)">تعذّر تحميل الطلاب: ${escapeHtml(studentsErr.message)}<br><span style="font-size:12px;color:var(--ink-dim)">جرّب تسجيل الخروج والدخول من جديد</span></div>
+    `;
+    return;
+  }
 
   const active = (students||[]).filter(s => s.status === 'confirmed');
   const pending = (students||[]).filter(s => s.status === 'pending');
@@ -4931,7 +4944,7 @@ async function showTournamentManage(tournamentId){
       <div class="legal-note" style="margin-bottom:12px">عدد الفرق المؤكدة حاليًا: <b>${teams?.length||0}</b>. حدّد نقطة البداية فقط، والنظام يولّد كل المباريات تلقائيًا.</div>
       <div class="field"><label>الملعب *</label><select id="tg-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">${fieldOpts}</select></div>
       <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:12px" onclick="pushOwnerPage('showRequestFieldPartnership','tournament',${tournamentId})">🤝 ملعبك غير موجود؟ اطلب شراكة مع ملعب آخر</button>
-      <div class="field"><label>تاريخ أول مباراة *</label><input id="tg-date" type="date"></div>
+      <div class="field"><label>تاريخ أول مباراة *</label><input id="tg-date" type="date" min="${riyadhTodayStr()}"></div>
       <div style="display:flex;gap:8px">
         <div class="field" style="flex:1"><label>وقت أول مباراة *</label><input id="tg-time" type="time" value="16:00"></div>
         <div class="field" style="flex:1"><label>مدة المباراة (دقيقة)</label><input id="tg-duration" type="number" value="60" min="15"></div>
@@ -4996,6 +5009,7 @@ async function generateTournamentFixtures(tournamentId, format){
   const duration = parseInt(document.getElementById('tg-duration').value);
   const perDay = parseInt(document.getElementById('tg-per-day').value);
   if (!fieldId || !startDate || !startTime) { showToast('املأ كل الحقول المطلوبة','error'); return; }
+  if (startDate < riyadhTodayStr()) { showToast('لا يمكن اختيار تاريخ سابق لليوم لأول مباراة','error'); return; }
 
   showToast('جارٍ توليد الجدول...');
   let result;
@@ -5095,6 +5109,7 @@ async function addTournamentCoorganizer(tournamentId){
   const { data: prof } = await sb.from('profiles').select('id').eq('phone', phone).maybeSingle();
   if (!prof) { showToast('لا يوجد حساب مسجّل بهذا الرقم','error'); return; }
   const { data: { user } } = await sb.auth.getUser();
+  if (prof.id === user.id) { showToast('أنت مالك البطولة أصلاً — لا حاجة لإضافة نفسك كمشرف','error'); return; }
   const { error } = await sb.from('tournament_coorganizers').insert({ tournament_id: tournamentId, user_id: prof.id, added_by: user.id });
   if (error) {
     if (error.code === '23505') { showToast('هذا الشخص مضاف مسبقًا كمشرف','error'); return; }
@@ -5337,7 +5352,7 @@ async function showAddTournamentForm(editId){
     </div>
     <div class="field"><label>رسوم الفريق (ريال) *</label><input id="tn-fee" type="number" value="${t.team_fee||''}" placeholder="500"></div>
     <div class="field"><label>الحد الأقصى للفرق</label><input id="tn-maxteams" type="number" placeholder="16" value="${t.max_teams||16}"></div>
-    <div class="field"><label>تاريخ البداية</label><input id="tn-startdate" type="date" value="${t.start_date||''}"></div>
+    <div class="field"><label>تاريخ البداية</label><input id="tn-startdate" type="date" value="${t.start_date||''}" min="${riyadhTodayStr()}"></div>
     <div class="field"><label>وصف مختصر</label><input id="tn-desc" type="text" value="${escapeHtml(t.description)||''}" placeholder="بطولة سداسي"></div>
 
     <div class="dlabel" style="margin-top:16px">🎮 نظام البطولة</div>
@@ -5406,6 +5421,7 @@ async function saveTournament(editId){
   const imgFile = document.getElementById('st-image')?.files?.[0];
   if (!name || !city) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!fee || fee<=0) { showToast('أدخل رسوم فريق صحيحة','error'); return; }
+  if (startDate && startDate < riyadhTodayStr()) { showToast('لا يمكن اختيار تاريخ بداية سابق لليوم','error'); return; }
 
   showToast('جارٍ الحفظ...');
   let imageUrl = null;
@@ -5599,6 +5615,15 @@ async function updateStadium(facilityId) {
   if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
   if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
 
+  // تحذير غير قاطع (مو رفض) لسعر غير واقعي — يحمي من خطأ كتابة رقم إضافي بالغلط، مع بقاء الخيار متاحًا لو كان مقصودًا فعلاً
+  if (price > 2000) {
+    showConfirmDialog(`السعر المدخل ${price} ريال/ساعة يبدو مرتفعًا جدًا — هل أنت متأكد إن هذا هو السعر الصحيح؟`, 'نعم، هذا صحيح', () => _executeUpdateStadium(facilityId, name, city, district, region, price, latVal, lngVal));
+    return;
+  }
+  await _executeUpdateStadium(facilityId, name, city, district, region, price, latVal, lngVal);
+}
+
+async function _executeUpdateStadium(facilityId, name, city, district, region, price, latVal, lngVal) {
   showToast('جارٍ الحفظ...');
 
   const facUpdate = { city, district, region };
@@ -6052,7 +6077,7 @@ async function renderPlayerRegistrationsTab(){
         <span class="badge ${statusCls[e.status]||'pending'}" style="font-size:11px">${statusMap[e.status]||e.status}</span>
       </div>
       ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="startRegistrationPayment('enrollment',${e.id},${e.amount})">💳 أكمل الدفع</button>` : ''}
-      ${(e.status==='confirmed' && e.ends_on && e.ends_on <= riyadhTodayPlusDays(7) && e.plan_id) ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="renewEnrollment(${e.academy_id},${e.plan_id},${e.id},'${escapeHtml(e.player_name).replace(/'/g,"\\'")}')">🔄 جدّد الاشتراك (${e.academy_plans?.name||''})</button>` : ''}
+      ${(e.status==='confirmed' && e.ends_on && e.ends_on <= riyadhTodayPlusDays(7) && e.plan_id) ? `<button class="btn btn-brand btn-sm btn-block" style="margin-top:8px" onclick="renewEnrollment(${e.academy_id},${e.plan_id},${e.id},'${escapeHtml(e.player_name).replace(/'/g,"\\'")}')">🔄 جدّد الاشتراك (${e.academy_plans?.name||''} — ${e.academy_plans?.price??e.amount} ريال)</button>` : ''}
       ${(e.status==='confirmed') ? `<button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="pushOwnerPage('showMyChildAttendance',${e.id},'${escapeHtml(e.player_name).replace(/'/g,"\\'")}')">📋 سجل الحضور</button>` : ''}
       ${pauseBtnHtml}
       ${(e.status==='pending' && e.payment_status!=='paid') ? `<button class="btn btn-danger btn-sm btn-block" style="margin-top:6px" onclick="cancelMyRegistration('enrollment',${e.id})">إلغاء التسجيل</button>` : ''}
@@ -8006,6 +8031,15 @@ async function saveStadium() {
 
   if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
 
+  // تحذير غير قاطع (مو رفض) لسعر غير واقعي — يحمي من خطأ كتابة رقم إضافي بالغلط
+  if (price > 2000) {
+    showConfirmDialog(`السعر المدخل ${price} ريال/ساعة يبدو مرتفعًا جدًا — هل أنت متأكد إن هذا هو السعر الصحيح؟`, 'نعم، هذا صحيح', () => _executeSaveStadium(existingFacilityId, isNewFacility, price));
+    return;
+  }
+  await _executeSaveStadium(existingFacilityId, isNewFacility, price);
+}
+
+async function _executeSaveStadium(existingFacilityId, isNewFacility, price) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); return; }
 
