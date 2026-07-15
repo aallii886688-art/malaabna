@@ -1986,17 +1986,11 @@ function initBackend() {
       const { data: newBooking, error } = await sb.from('bookings').insert(insertPayload).select().single();
 
       if (error) {
-        if (error.message.includes('BOOKING_OVERLAP')) {
-          showToast('عذراً، هذا الوقت محجوز. اختر وقتاً آخر','error'); return;
+        if (error.message.includes('BOOKING_CONFLICT')) {
+          showToast('عذراً، هذا الوقت محجوز بالفعل (ربما بمحاولة سابقة لك لم تكتمل). اختر وقتاً آخر أو راجع "حجوزاتي" لإلغاء أي محاولة معلّقة','error'); return;
         }
         if (error.message.includes('FIELD_UNAVAILABLE')) {
           showToast('الملعب مغلق أو تحت الصيانة','error'); return;
-        }
-        if (error.message.includes('TOURNAMENT_CONFLICT')) {
-          showToast('عذراً، هذا الوقت محجوز لمباراة بطولة. اختر وقتاً آخر','error'); return;
-        }
-        if (error.message.includes('ACADEMY_CONFLICT')) {
-          showToast('عذراً، هذا الوقت محجوز لتدريب أكاديمية. اختر وقتاً آخر','error'); return;
         }
         if (error.message.includes('foreign key') || error.code === '23503') {
           showToast('أضف الملاعب لقاعدة البيانات أولاً (راجع الدليل)','error'); return;
