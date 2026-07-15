@@ -4389,10 +4389,12 @@ async function showAcademyStudents(academyId){
   document.getElementById('ownerTitle').textContent = '👥 طلاب الأكاديمية';
   const _lt = delayedLoading(bodyEl.id);
 
-  const [{ data: academy }, { data: students, error: studentsErr }, { data: trialRequests }] = await Promise.all([
+  const [{ data: academy }, { data: studentsRaw, error: studentsErr }, { data: trialRequestsRaw }] = await Promise.all([
     sb.from('academies').select('name, pause_policy_type, max_pauses_per_enrollment, max_pause_percent, premium_active, premium_expires_on').eq('id', academyId).single(),
-    sb.from('academy_enrollments').select('id, player_name, player_age, status, payment_status, amount, created_at, starts_on, ends_on, profiles(name, phone), academy_plans(name, duration_months, features)').eq('academy_id', academyId).order('created_at', { ascending: false }),
-    sb.from('academy_trial_requests').select('id, player_name, player_age, profiles(phone)').eq('academy_id', academyId).eq('status', 'pending').order('created_at', { ascending: false })
+    // ملاحظة: academy_enrollments.user_id يشير لـauth.users مباشرة، مو لـpublic.profiles — لا يوجد foreign key صريح بينها وبين profiles
+    // فيُستحيل استخدام صيغة الـjoin المختصرة profiles(...) هنا؛ نجيب user_id فقط، ونربط بيانات الملف الشخصي يدويًا بعدها
+    sb.from('academy_enrollments').select('id, user_id, player_name, player_age, status, payment_status, amount, created_at, starts_on, ends_on, academy_plans(name, duration_months, features)').eq('academy_id', academyId).order('created_at', { ascending: false }),
+    sb.from('academy_trial_requests').select('id, user_id, player_name, player_age').eq('academy_id', academyId).eq('status', 'pending').order('created_at', { ascending: false })
   ]);
   clearTimeout(_lt);
 
@@ -4404,6 +4406,16 @@ async function showAcademyStudents(academyId){
     `;
     return;
   }
+
+  // نجيب بيانات أولياء الأمور (الاسم ورقم الجوال) بضربة واحدة منفصلة، ونربطها يدويًا بكل طالب وطلب تجريبي عبر user_id
+  const allUserIds = [...new Set([...(studentsRaw||[]).map(s=>s.user_id), ...(trialRequestsRaw||[]).map(t=>t.user_id)].filter(Boolean))];
+  let profilesMap = {};
+  if (allUserIds.length) {
+    const { data: profilesData } = await sb.from('profiles').select('id, name, phone').in('id', allUserIds);
+    (profilesData||[]).forEach(p => { profilesMap[p.id] = p; });
+  }
+  const students = (studentsRaw||[]).map(s => ({ ...s, profiles: profilesMap[s.user_id] || null }));
+  const trialRequests = (trialRequestsRaw||[]).map(t => ({ ...t, profiles: profilesMap[t.user_id] || null }));
 
   const active = (students||[]).filter(s => s.status === 'confirmed');
   const pending = (students||[]).filter(s => s.status === 'pending');
