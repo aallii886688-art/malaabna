@@ -22,9 +22,19 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="حجز ملعب | ملاعبنا — منصة حجز الملاعب في السعودية">
 <meta property="og:description" content="حجز ملعب أونلاين في الرياض، جدة، الدمام، وجميع مدن السعودية — تقسيم التكلفة تلقائيًا، أكاديميات، وبطولات.">
+<meta property="og:site_name" content="ملاعبنا">
+<meta property="og:image" content="https://malaebnaa.com/og-image.svg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="حجز ملعب | ملاعبنا — منصة حجز الملاعب في السعودية">
+<meta name="twitter:description" content="حجز ملعب أونلاين في الرياض، جدة، الدمام، وجميع مدن السعودية — تقسيم التكلفة تلقائيًا، أكاديميات، وبطولات.">
+<meta name="twitter:image" content="https://malaebnaa.com/og-image.svg">
 <meta property="og:url" content="https://malaebnaa.com/">
 <meta property="og:locale" content="ar_SA">
 <meta name="robots" content="index, follow">
+<meta name="application-name" content="منصة ملاعبنا">
+<meta name="apple-mobile-web-app-title" content="ملاعبنا">
 <title>حجز ملعب | ملاعبنا — منصة حجز الملاعب في السعودية</title>
 <script type="application/ld+json">
 {
@@ -4729,8 +4739,23 @@ async function showSeoHealth(){
 
     <div class="dlabel">✅ العناصر التقنية المطبّقة</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
-      ${['خارطة موقع ديناميكية (sitemap.xml)','ملف توجيه الزحف (robots.txt)','بيانات مهيكلة (Schema.org)','ملف llms.txt للذكاء الاصطناعي','عناوين ووصف Open Graph','أسماء وصفية لكل عنصر تفاعلي (aria-label)','تحقق ملكية Google Search Console']
-        .map(item=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--bg-soft);border-radius:8px;padding:8px 12px"><span style="color:var(--brand)">✅</span> ${item}</div>`).join('')}
+      ${[
+        'خارطة موقع ديناميكية (sitemap.xml)',
+        'ملف توجيه الزحف (robots.txt)',
+        'بيانات مهيكلة (Schema.org)',
+        'ملف llms.txt للذكاء الاصطناعي',
+        'عنوان ووصف الصفحة (title + meta description)',
+        'رابط أساسي لمنع تكرار المحتوى (canonical)',
+        'إعداد العرض للجوال (viewport)',
+        'لغة واتجاه الصفحة (lang="ar" + RTL)',
+        'عناوين ووصف Open Graph (Facebook/WhatsApp)',
+        'صورة معاينة عند المشاركة (og:image)',
+        'بطاقة معاينة تويتر/X (Twitter Card)',
+        'نص بديل لكل صورة (alt text)',
+        'أسماء وصفية لكل عنصر تفاعلي (aria-label)',
+        'اتصال آمن مشفّر (HTTPS)',
+        'تحقق ملكية Google Search Console'
+      ].map(item=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--bg-soft);border-radius:8px;padding:8px 12px"><span style="color:var(--brand)">✅</span> ${item}</div>`).join('')}
     </div>
 
     <div class="legal-note">📌 لمتابعة الترتيب الفعلي بنتائج البحث وعدد الظهور، هذي بيانات حيّة تتطلب حسابك الشخصي — راجعها مباشرة عبر <a href="https://search.google.com/search-console" target="_blank" style="color:var(--brand);font-weight:700">Google Search Console</a>.</div>

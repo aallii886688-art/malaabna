@@ -1,0 +1,35 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a1408"/>
+      <stop offset="100%" stop-color="#122010"/>
+    </linearGradient>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#39ff14"/>
+      <stop offset="100%" stop-color="#1f9d57"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- خطوط ملعب زخرفية خفيفة بالخلفية -->
+  <rect x="60" y="60" width="1080" height="510" rx="24" fill="none" stroke="#1f9d57" stroke-width="2" opacity="0.25"/>
+  <line x1="600" y1="60" x2="600" y2="570" stroke="#1f9d57" stroke-width="2" opacity="0.25"/>
+  <circle cx="600" cy="315" r="90" fill="none" stroke="#1f9d57" stroke-width="2" opacity="0.25"/>
+
+  <!-- أيقونة الكرة/الملعب بنفس هوية الفافيكون -->
+  <g transform="translate(150,225)">
+    <rect width="180" height="180" rx="40" fill="url(#g)"/>
+    <line x1="90" y1="28" x2="90" y2="152" stroke="#0a1408" stroke-width="9"/>
+    <circle cx="90" cy="90" r="38" fill="none" stroke="#0a1408" stroke-width="9"/>
+    <circle cx="90" cy="90" r="9" fill="#0a1408"/>
+  </g>
+
+  <!-- النص الرئيسي -->
+  <text x="410" y="270" font-family="Arial, sans-serif" font-size="72" font-weight="900" fill="#ffffff">ملاعبنا</text>
+  <text x="410" y="330" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#39ff14">منصة حجز الملاعب في السعودية</text>
+  <text x="410" y="385" font-family="Arial, sans-serif" font-size="24" fill="#c8d6cc">احجز ملعبك بثواني، في جميع مدن المملكة</text>
+
+  <!-- شريط سفلي بسيط -->
+  <rect x="410" y="430" width="640" height="2" fill="#1f9d57" opacity="0.4"/>
+  <text x="410" y="475" font-family="Arial, sans-serif" font-size="22" fill="#8fa896">malaebnaa.com</text>
+</svg>
