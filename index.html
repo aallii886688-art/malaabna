@@ -1052,10 +1052,10 @@ function renderActive(){
       ? `<img src="${it.image}" alt="${escapeHtml(it.name)}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
       : it.icon;
     return `<div class="card" onclick="openItem('${currentMod}',${it.id})">
-      <div class="card-media">${mediaContent}${ratingBadge}<div class="tag-tr">${escapeHtml(it.region)}</div></div>
+      <div class="card-media">${mediaContent}${ratingBadge}<div class="tag-tr">${escapeHtml(it.city)}</div></div>
       <div class="card-b">
         <div class="card-name">${escapeHtml(it.name)}</div>
-        <div class="card-loc">📍 ${escapeHtml(it.loc)}، ${escapeHtml(it.region)}</div>
+        <div class="card-loc">📍 ${escapeHtml(it.loc)}، ${escapeHtml(it.city)}</div>
         <div class="card-tags">${it.tags.map(t=>`<span class="ctag">${t}</span>`).join('')}${amenityBadgesHtml(it.amenities, 2)}</div>
         <div class="card-f">
           <div class="cprice">${priceDisplay}</div>
@@ -1227,7 +1227,7 @@ async function renderStadiumDrawer(skipFetch){
     document.getElementById('drawerBody').innerHTML = `
       ${fieldGalleryHtml(s.images, s.icon)}
       <div style="font-size:20px;font-weight:900;margin-bottom:8px">${escapeHtml(s.name)}</div>
-      <div class="irow">📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.region)}</b></div>
+      <div class="irow">📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.city)}</b></div>
       <div class="dlabel">📅 اختر اليوم</div>
       <div class="dates">${pills}</div>
       <div style="text-align:center;padding:30px;background:var(--danger-soft);border-radius:12px;margin-top:14px">
@@ -1259,7 +1259,7 @@ async function renderStadiumDrawer(skipFetch){
       ${window.currentUser ? `<button id="favHeartBtn-${s.id}" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="handleFavHeartClick(${s.id})">♡</button>` : ''}
     </div>
     <div class="irow" style="display:flex;justify-content:space-between;align-items:center">
-      <span>📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.region)}</b></span>
+      <span>📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.city)}</b></span>
       ${(s.lat!=null && s.lng!=null) ? `<a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}" target="_blank" style="font-size:12px;color:var(--brand);font-weight:700;text-decoration:none;white-space:nowrap">🗺️ افتح الموقع</a>` : ''}
     </div>
     <div class="irow" ${s.reviewCount ? `onclick="pushOwnerPage('showItemReviews','stadiums',${s.id})" style="cursor:pointer"` : ''}>⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
@@ -2181,6 +2181,7 @@ function initBackend() {
         id: f.id,
         name: f.name,
         region: f.facilities.region || f.facilities.district || f.facilities.city,
+        city: f.facilities.city || f.facilities.district,
         loc: f.facilities.district || f.facilities.city,
         price: Number(f.price_per_hour),
         lat: f.facilities.lat!=null ? Number(f.facilities.lat) : null,
