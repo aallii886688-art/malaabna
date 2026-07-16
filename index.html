@@ -1315,7 +1315,7 @@ async function renderStadiumDrawer(skipFetch){
 
     <div class="summary">
       <div class="srow"><span>الملعب</span><span>${escapeHtml(s.name)}</span></div>
-      <div class="srow"><span>الوقت</span><span>${selSlot? formatTime12(selSlot)+' - '+formatTime12((parseInt(selSlot)+1)+':00') : '— اختر وقتًا —'}</span></div>
+      <div class="srow"><span>الوقت</span><span>${selSlot? formatTime12(selSlot)+' - '+formatTime12(parseInt(selSlot)===23?'23:59':(parseInt(selSlot)+1)+':00') : '— اختر وقتًا —'}</span></div>
       <div class="srow" id="couponRow" style="display:none"><span>خصم الكوبون</span><span id="couponDiscount">0 ر</span></div>
       ${bookingMode==='split' ? `<div class="srow"><span>الإجمالي الكامل</span><span>${totalForSplit} ريال</span></div>` : ''}
       <div class="srow tot"><span>${bookingMode==='split' ? 'تدفعه أنت الآن' : 'الإجمالي'}</span><span class="amt" id="finalPrice">${myShare} ريال</span></div>
@@ -1989,7 +1989,8 @@ function initBackend() {
         field_id: active.id,
         booking_date: dateStr,
         start_time: selSlot,
-        end_time: (parseInt(selSlot)+1)+':00',
+        // نستخدم 23:59 بدل 24:00 لخانة الساعة الأخيرة باليوم — '24:00' قيمة غير صالحة منطقيًا تسبب فشل مقارنات التاريخ/الوقت اللي تعتمد على "نفس اليوم التقويمي"
+        end_time: (parseInt(selSlot) === 23 ? '23:59' : (parseInt(selSlot)+1)+':00'),
         players_count: playerCount,
         total_price: totalPrice,
         status: 'pending',
