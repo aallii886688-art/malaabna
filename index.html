@@ -2020,7 +2020,7 @@ function initBackend() {
         }
       } catch(e){}
 
-      await startRealPayment(newBooking.id, myShareAmount, true, user.user_metadata?.name || 'اللاعب', shareToken);
+      await startRealPayment(newBooking.id, myShareAmount, true, user.user_metadata?.name || 'اللاعب', newBooking.share_link_token);
       return;
     }
   };
