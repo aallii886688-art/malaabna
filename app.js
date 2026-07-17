@@ -1235,7 +1235,71 @@ function initBackend() {
     startNotificationsWatch(user.id);
   }
   window.afterLogin = afterLogin;
+async function openNotifTemplates(){
+  document.getElementById('ownerTitle').textContent = '🔔 نماذج التنبيهات';
+  document.getElementById('ownerBody').innerHTML = '';
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+  const inner = document.getElementById('ownerBody');
+  inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim);text-align:center">جارٍ التحميل...</div>';
 
+  let rows, error;
+  try {
+    ({ data: rows, error } = await sb.from('notification_templates').select('*').order('id'));
+  } catch(e) { error = e; }
+  if (error) { inner.innerHTML = `<div style="padding:20px;color:var(--danger)">خطأ: ${error.message||error}</div>`; return; }
+  if (!rows || !rows.length) { inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim)">لا توجد نماذج</div>'; return; }
+
+  const cards = rows.map(r => `
+    <div class="notif-tpl-card" data-role="${r.role}" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:15px;margin-bottom:12px">🔔 ${r.role_label}</div>
+
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:var(--ink-dim);display:block;margin-bottom:4px">نموذج تنبيه الموقع</label>
+        <textarea class="tpl-web" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:inherit;font-size:13px;resize:vertical">${r.template_web||''}</textarea>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;color:var(--ink-dim);display:block;margin-bottom:4px">نموذج تنبيه الواتساب</label>
+        <textarea class="tpl-wa" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:inherit;font-size:13px;resize:vertical">${r.template_whatsapp||''}</textarea>
+      </div>
+
+      <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" class="chk-web" ${r.send_web?'checked':''} style="width:17px;height:17px;accent-color:var(--brand);cursor:pointer">
+          <span>التنبيه يوصل للموقع</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" class="chk-wa" ${r.send_whatsapp?'checked':''} style="width:17px;height:17px;accent-color:var(--brand);cursor:pointer">
+          <span>التنبيه يوصل للواتساب</span>
+        </label>
+      </div>
+
+      <button class="btn btn-brand btn-sm" onclick="saveNotifTemplate('${r.role}',this)">حفظ</button>
+    </div>
+  `).join('');
+
+  inner.innerHTML = `
+    <div style="max-width:680px">
+      <p style="font-size:12.5px;color:var(--ink-dim);margin-bottom:16px">المتغيرات المتاحة: <code>{{name}}</code> اسم المستخدم &nbsp;·&nbsp; <code>{{message}}</code> نص التنبيه</p>
+      ${cards}
+    </div>`;
+}
+
+window.saveNotifTemplate = async function(role, btn){
+  const card = btn.closest('.notif-tpl-card');
+  const template_web     = card.querySelector('.tpl-web').value.trim();
+  const template_whatsapp = card.querySelector('.tpl-wa').value.trim();
+  const send_web         = card.querySelector('.chk-web').checked;
+  const send_whatsapp    = card.querySelector('.chk-wa').checked;
+  btn.disabled = true; btn.textContent = '...';
+  const { error } = await sb.from('notification_templates')
+    .update({ template_web, template_whatsapp, send_web, send_whatsapp, updated_at: new Date().toISOString() })
+    .eq('role', role);
+  btn.disabled = false; btn.textContent = 'حفظ';
+  if (error) showToast('خطأ في الحفظ: ' + error.message, 'error');
+  else showToast('تم الحفظ ✓');
+};
 
   window.forgotPassword = async function () {
     const phone = (document.getElementById('au-phone')?.value || '').trim();
@@ -1533,7 +1597,7 @@ function openSidebar() {
       ` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('seo')"><span class="si">📈</span> صحة السيو</a>` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('analytics')"><span class="si">📊</span> إحصائيات الموقع</a>` : ''}
-
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('notif-templates')"><span class="si">🔔</span> نماذج التنبيهات</a>` : ''}
       <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
       <a class="side-link" onclick="sideGo('bookings')"><span class="si">🎽</span> ${isOwnerOrAdmin ? 'حجوزاتي كلاعب' : 'حجوزاتي'}</a>
       <a class="side-link" onclick="sideGo('favorites')"><span class="si">⭐</span> ملاعبي المفضّلة</a>
@@ -1567,6 +1631,7 @@ async function sideGo(where) {
     case 'share':         shareSite(); break;
     case 'help':           showHelpCenter(); break;
     case 'seo':             showSeoHealth(); break;
+    case 'notif-templates': openNotifTemplates(); break;
     case 'analytics':       showSiteAnalytics(); break;
     case 'contact':       showContact(); break;
     case 'about':         showAbout(); break;
@@ -5478,8 +5543,6 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
-
-
 
 
 
