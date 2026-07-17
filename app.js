@@ -1597,6 +1597,7 @@ function openSidebar() {
       ` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('seo')"><span class="si">📈</span> صحة السيو</a>` : ''}
       ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('analytics')"><span class="si">📊</span> إحصائيات الموقع</a>` : ''}
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('notif-templates')"><span class="si">🔔</span> نماذج التنبيهات</a>` : ''}
       <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
       <a class="side-link" onclick="sideGo('bookings')"><span class="si">🎽</span> ${isOwnerOrAdmin ? 'حجوزاتي كلاعب' : 'حجوزاتي'}</a>
       <a class="side-link" onclick="sideGo('favorites')"><span class="si">⭐</span> ملاعبي المفضّلة</a>
@@ -5542,6 +5543,7 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
+
 
 
 
