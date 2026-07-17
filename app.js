@@ -3792,7 +3792,7 @@ async function renderAdminOverviewTab(){
     sb.from('facilities').select('*', { count: 'exact', head: true }).eq('approved', false),
     sb.from('bookings').select('total_price, refunded_amount').in('status', ['confirmed','completed','cancelled']).neq('payment_status','unpaid'),
     sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
-    sb.from('sms_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('whatsapp_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
     sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', twoWeeksAgoIso).lt('created_at', weekAgoIso),
     sb.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
@@ -3804,7 +3804,7 @@ async function renderAdminOverviewTab(){
   const commissionEarned = Math.round(totalRevenue * (commissionPct/100) * 100) / 100;
   // "مفعّلة" تعني الإعداد موجود فعليًا — لا نعتمد على وجود استخدام ناجح سابق، لأن منصة جديدة كليًا تكون بلا أي استخدام بعد رغم إعدادها الصحيح
   const paymentActive = !!pubKeySetting?.value;
-  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key';
+  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key' && latestSmsLog.status !== 'failed';
 
   const growthPct = (curr, prev) => prev>0 ? Math.round(((curr-prev)/prev)*100) : (curr>0 ? 100 : 0);
   const usersGrowth = growthPct(usersThisWeek||0, usersPrevWeek||0);
@@ -4111,10 +4111,10 @@ async function showSeoHealth(){
 async function renderAdminIntegrationsTab(){
   const [{ data: pubKeySetting }, { data: latestSmsLog }] = await Promise.all([
     sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
-    sb.from('sms_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('whatsapp_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ]);
   const paymentActive = !!pubKeySetting?.value;
-  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key';
+  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key' && latestSmsLog.status !== 'failed';
 
   clearTimeout(window._tabLoadTimer);
   document.getElementById('adminTabInner').innerHTML = `
@@ -4124,7 +4124,7 @@ async function renderAdminIntegrationsTab(){
       <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
     </div>
 
-    <div class="dlabel">📱 الرسائل النصية</div>
+    <div class="dlabel">💬 واتساب</div>
     <div class="stat-click" onclick="adminView('sms')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:13px">${smsActive?'✅ مفعّلة':'⚠️ غير مفعّلة بعد'}</span>
       <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
@@ -4279,31 +4279,26 @@ async function adminView(kind) {
   }
 
   else if (kind === 'sms') {
-    titleEl.textContent = '📱 بوابة الرسائل النصية';
-    const { data: logs } = await sb.from('sms_logs').select('*').order('created_at',{ascending:false}).limit(30);
-    // نفحص أحدث سجل فقط لتحديد الحالة الحقيقية الحالية، بدل "هل صار إرسال ناجح أي وقت بالماضي" —
-    // هذا يفرّق بوضوح بين "غير مفعّلة أصلًا" (no_api_key) و"مفعّلة وتعمل" و"مفعّلة لكن تواجه خطأ حاليًا"
+    titleEl.textContent = '\u{1F4AC} واتساب (WaSender)';
+    const { data: logs } = await sb.from('whatsapp_logs').select('*').order('created_at',{ascending:false}).limit(30);
     const latestLog = (logs||[])[0];
     const neverConfigured = !latestLog || latestLog.status === 'no_api_key';
-    const activated = !neverConfigured;
     const workingNow = latestLog?.status === 'sent';
     clearTimeout(_lt);
-    bodyEl.innerHTML = backBtn + `
-      <div class="legal-note">
-        ${neverConfigured ? '⚠️ الدالة الخلفية منشورة وجاهزة — بس تحتاج تضيف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions (سجّل حساب أول في <b>taqnyat.sa</b>).' : workingNow ? '✅ البوابة مفعّلة وتعمل فعليًا (تقنيات Taqnyat).' : '⚠️ البوابة مفعّلة (المفتاح مضاف) لكن آخر محاولة إرسال فشلت — تحقق من صلاحية المفتاح أو رصيدك عند تقنيات.'}
-      </div>
-      <div class="dlabel">🧪 اختبار الإرسال</div>
-      <div class="field"><label>رقم الجوال</label><input id="sms-test-phone" type="tel" placeholder="05xxxxxxxx"></div>
-      <div class="field"><label>نص الرسالة</label><input id="sms-test-msg" type="text" value="رسالة تجريبية من ملاعبنا"></div>
-      <button class="btn btn-brand btn-block" onclick="sendTestSms()">إرسال تجريبي</button>
-
-      <div class="dlabel" style="margin-top:18px">📋 آخر الرسائل المرسلة</div>
-      ${(logs&&logs.length)? logs.map(l=>`
-        <div style="padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
-          <div style="display:flex;justify-content:space-between"><b>${escapeHtml(l.phone)}</b><span class="badge ${l.status==='sent'?'available':'closed'}" style="font-size:10px">${l.status}</span></div>
-          <div style="color:var(--ink-dim);margin-top:3px">${escapeHtml(l.message)}</div>
-        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد رسائل بعد</div>'}
-    `;
+    const statusNote = neverConfigured ? '⚠️ الدالة جاهزة — تحتاج تضيف مفتاح WASENDER_API_KEY من Project Settings → Edge Functions.' : workingNow ? '✅ البوابة مفعلة وتعمل فعليًا (WaSender).' : '⚠️ البوابة مفعلة لكن آخر محاولة إرسال فشلت — تحقق من صلاحية المفتاح.';
+    const logsHtml = (logs&&logs.length)? logs.map(l=>
+      '<div style="padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">'+
+      '<div style="display:flex;justify-content:space-between"><b>'+escapeHtml(l.phone)+'</b><span class="badge '+(l.status==='sent'?'available':'closed')+'" style="font-size:10px">'+l.status+'</span></div>'+
+      '<div style="color:var(--ink-dim);margin-top:3px">'+escapeHtml(l.message)+'</div></div>'
+    ).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد رسائل بعد</div>';
+    bodyEl.innerHTML = backBtn +
+      '<div class="legal-note">'+statusNote+'</div>'+
+      '<div class="dlabel">\u{1F9EA} اختبار الإرسال</div>'+
+      '<div class="field"><label>رقم الجوال</label><input id="sms-test-phone" type="tel" placeholder="05xxxxxxxx"></div>'+
+      '<div class="field"><label>نص الرسالة</label><input id="sms-test-msg" type="text" value="رسالة تجريبية من ملاعبنا"></div>'+
+      '<button class="btn btn-brand btn-block" onclick="sendTestSms()">إرسال تجريبي</button>'+
+      '<div class="dlabel" style="margin-top:18px">\u{1F4CB} آخر الرسائل المرسلة</div>'+
+      logsHtml;
   }
 
   else if (kind === 'payment') {
@@ -5201,7 +5196,7 @@ async function sendTestSms(){
   if (!phone || !msg) { showToast('أدخل الرقم والرسالة','error'); return; }
   showToast('جارٍ الإرسال...');
   try {
-    const { data, error } = await sb.functions.invoke('send-sms', { body: { to_phone: phone, message: msg } });
+    const { data, error } = await sb.functions.invoke('send-whatsapp', { body: { to_phone: phone, message: msg } });
     if (error) { showToast('تعذّر الإرسال: ' + error.message,'error'); adminView('sms'); return; }
     if (data?.error) { showToast(data.error,'error'); adminView('sms'); return; }
     showToast('تم الإرسال ✓');
@@ -5543,6 +5538,8 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
+
+
 
 
 
