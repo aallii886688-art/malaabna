@@ -1178,6 +1178,7 @@ function initBackend() {
     await sb.functions.invoke('confirm-user-email', { body: { user_id: data.user.id } });
       await sb.from('profiles').update({ phone, name, role: chosenRole }).eq('id', data.user.id);
     }
+    await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
     window._pendingSignup = null;
     const brandBtn = document.querySelector('#mConfirm .btn-brand');
     if (brandBtn) brandBtn.style.display = '';
