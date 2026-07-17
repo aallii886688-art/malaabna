@@ -1157,7 +1157,6 @@ function initBackend() {
   window.completeSignupAfterVerification = async function(){
     const code = document.getElementById('otp-code-input')?.value.trim();
     const pending = window._pendingSignup;
-    showToast('DEBUG: code=' + code + ' pending=' + !!pending, 'error');
     if (!pending) { showToast('انتهت الجلسة — ابدأ التسجيل من جديد','error'); authTab('signup'); return; }
     if (!code || code.length !== 6) { showToast('أدخل الرمز المكوّن من 6 أرقام','error'); return; }
 
@@ -1175,6 +1174,7 @@ function initBackend() {
     if (error) { showToast(translateErr(error.message),'error'); return; }
 
     if (data.user) {
+    await sb.functions.invoke('confirm-user-email', { body: { user_id: data.user.id } });
       await sb.from('profiles').update({ phone, name, role: chosenRole }).eq('id', data.user.id);
     }
     window._pendingSignup = null;
