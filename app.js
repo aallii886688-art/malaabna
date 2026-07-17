@@ -1235,9 +1235,12 @@ function initBackend() {
     startNotificationsWatch(user.id);
   }
   window.afterLogin = afterLogin;
-async function renderAdminNotifTemplatesTab(){
-  clearTimeout(window._tabLoadTimer);
-  const inner = document.getElementById('adminTabInner');
+async function openNotifTemplates(){
+  document.getElementById('ownerTitle').textContent = '🔔 نماذج التنبيهات';
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+  closeSidebar();
+  const inner = document.getElementById('ownerBody');
   inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim);text-align:center">جارٍ التحميل...</div>';
 
   let rows, error;
@@ -1627,6 +1630,7 @@ async function sideGo(where) {
     case 'share':         shareSite(); break;
     case 'help':           showHelpCenter(); break;
     case 'seo':             showSeoHealth(); break;
+    case 'notif-templates': openNotifTemplates(); break;
     case 'analytics':       showSiteAnalytics(); break;
     case 'contact':       showContact(); break;
     case 'about':         showAbout(); break;
@@ -3744,7 +3748,6 @@ const ADMIN_TABS = [
   {key:'finance', label:'💰 المالية'},
   {key:'reviews', label:'⭐ التقييمات'},
   {key:'integrations', label:'🔌 التكاملات'},
-  {key:'notif-templates', label:'🔔 نماذج التنبيهات'},
 ];
 function adminTabsHtml(active){
   return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
@@ -3768,7 +3771,6 @@ async function adminGoTab(tab, isRoot){
     case 'reviews':      await adminView('reviews'); break;
     case 'finance':      await renderAdminFinanceTab(); break;
     case 'integrations': await renderAdminIntegrationsTab(); break;
-    case 'notif-templates': await renderAdminNotifTemplatesTab(); break;
   }
 }
 
@@ -5540,6 +5542,7 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
+
 
 
 
