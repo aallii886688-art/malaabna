@@ -1709,7 +1709,7 @@ async function submitJoinPayment(token, remaining){
 
     openInfoModal('💳 إتمام الدفع', `
       <div id="mysrPayWrap">
-        <div style="text-align:center;margin-bottom:12px;padding:8px 12px;background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;font-size:12px;color:var(--warn,#f59e0b);font-weight:700">⏰ أكمل الدفع خلال 30 دقيقة (أو قبل بداية موعد الملعب لو كان أقرب)، وإلا يُلغى الحجز تلقائيًا وتُفتح الخانة لغيرك</div>
+        <div style="text-align:center;margin-bottom:12px;padding:8px 12px;background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;font-size:12px;color:var(--warn,#f59e0b);font-weight:700">⏰ هذا الوقت متاح لأي شخص آخر يحاول حجزه الآن — أول من يكمل الدفع فعليًا يفوز بالخانة. أكمل دفعك خلال 30 دقيقة (أو قبل موعد الملعب لو كان أقرب) وإلا يُلغى حجزك تلقائيًا</div>
         <div class="mysr-form"></div>
         <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
       </div>
@@ -2014,7 +2014,7 @@ function initBackend() {
 
       if (error) {
         if (error.message.includes('BOOKING_CONFLICT')) {
-          showToast('عذراً، هذا الوقت محجوز بالفعل (ربما بمحاولة سابقة لك لم تكتمل). اختر وقتاً آخر أو راجع "حجوزاتي" لإلغاء أي محاولة معلّقة','error'); return;
+          showToast('عذراً، أكمل شخص آخر دفع هذا الوقت بالكامل قبلك. اختر وقتاً آخر','error'); return;
         }
         if (error.message.includes('FIELD_UNAVAILABLE')) {
           showToast('الملعب مغلق أو تحت الصيانة','error'); return;
@@ -2065,7 +2065,7 @@ function initBackend() {
 
       openInfoModal('💳 إتمام الدفع', `
         <div id="mysrPayWrap">
-          <div style="text-align:center;margin-bottom:12px;padding:8px 12px;background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;font-size:12px;color:var(--warn,#f59e0b);font-weight:700">⏰ أكمل الدفع خلال 30 دقيقة (أو قبل بداية موعد الملعب لو كان أقرب)، وإلا يُلغى الحجز تلقائيًا وتُفتح الخانة لغيرك</div>
+          <div style="text-align:center;margin-bottom:12px;padding:8px 12px;background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;font-size:12px;color:var(--warn,#f59e0b);font-weight:700">⏰ هذا الوقت متاح لأي شخص آخر يحاول حجزه الآن — أول من يكمل الدفع فعليًا يفوز بالخانة. أكمل دفعك خلال 30 دقيقة (أو قبل موعد الملعب لو كان أقرب) وإلا يُلغى حجزك تلقائيًا</div>
           <div class="mysr-form"></div>
           <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
         </div>
