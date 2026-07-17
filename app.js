@@ -1061,7 +1061,7 @@ function initBackend() {
   })();
 
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible' && !window.currentUser) {
+    if (document.visibilityState === 'visible' && !window.currentUser && !window._pendingSignup) {
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (session && session.user) { loggedIn = true; await afterLogin(); }
