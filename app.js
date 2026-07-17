@@ -1,4 +1,4 @@
-const DATA = {
+﻿const DATA = {
   stadiums: [
     { id:1, name:"ملعب النخيل الرياضي", region:"الرياض",          loc:"حي النخيل",     price:160, rating:4.9, tags:["إنارة ليلية","عشب صناعي"], icon:"🏟️" },
     { id:2, name:"ملعب الواحة",         region:"مكة المكرمة",     loc:"حي العزيزية",   price:140, rating:4.6, tags:["مواقف","غرف تبديل"], icon:"⚽" },
@@ -1174,11 +1174,13 @@ function initBackend() {
     if (error) { showToast(translateErr(error.message),'error'); return; }
 
     if (data.user) {
-    await sb.functions.invoke('confirm-user-email', { body: { user_id: data.user.id } });
-    await sb.functions.invoke('confirm-user-email', { body: { user_id: data.user.id } });
+      await sb.functions.invoke('confirm-user-email', { body: { user_id: data.user.id } });
       await sb.from('profiles').update({ phone, name, role: chosenRole }).eq('id', data.user.id);
     }
-    await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
+    if (!data.session) {
+      const { error: signInErr } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
+      if (signInErr) { showToast('تم التسجيل — أدخل بياناتك لتسجيل الدخول', 'info'); authTab('login'); window._pendingSignup = null; closeAll(); return; }
+    }
     window._pendingSignup = null;
     const brandBtn = document.querySelector('#mConfirm .btn-brand');
     if (brandBtn) brandBtn.style.display = '';
@@ -5474,3 +5476,5 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
+
+
