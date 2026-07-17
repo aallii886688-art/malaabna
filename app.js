@@ -1237,9 +1237,9 @@ function initBackend() {
   window.afterLogin = afterLogin;
 async function openNotifTemplates(){
   document.getElementById('ownerTitle').textContent = '🔔 نماذج التنبيهات';
+  document.getElementById('ownerBody').innerHTML = '';
   document.getElementById('mOwner').classList.add('open');
   document.getElementById('ov').classList.add('open');
-  closeSidebar();
   const inner = document.getElementById('ownerBody');
   inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim);text-align:center">جارٍ التحميل...</div>';
 
@@ -5543,6 +5543,7 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
+
 
 
 
