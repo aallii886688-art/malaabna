@@ -1236,12 +1236,16 @@ function initBackend() {
   }
   window.afterLogin = afterLogin;
 async function renderAdminNotifTemplatesTab(){
+  clearTimeout(window._tabLoadTimer);
   const inner = document.getElementById('adminTabInner');
   inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim);text-align:center">جارٍ التحميل...</div>';
-  clearTimeout(window._tabLoadTimer);
 
-  const { data: rows, error } = await sb.from('notification_templates').select('*').order('id');
-  if (error || !rows) { inner.innerHTML = '<div style="padding:20px;color:var(--danger)">خطأ في تحميل النماذج</div>'; return; }
+  let rows, error;
+  try {
+    ({ data: rows, error } = await sb.from('notification_templates').select('*').order('id'));
+  } catch(e) { error = e; }
+  if (error) { inner.innerHTML = `<div style="padding:20px;color:var(--danger)">خطأ: ${error.message||error}</div>`; return; }
+  if (!rows || !rows.length) { inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim)">لا توجد نماذج</div>'; return; }
 
   const cards = rows.map(r => `
     <div class="notif-tpl-card" data-role="${r.role}" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:14px">
@@ -5536,6 +5540,7 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
+
 
 
 
