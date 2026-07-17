@@ -1,1 +1,5474 @@
-hello
+const DATA = {
+  stadiums: [
+    { id:1, name:"ملعب النخيل الرياضي", region:"الرياض",          loc:"حي النخيل",     price:160, rating:4.9, tags:["إنارة ليلية","عشب صناعي"], icon:"🏟️" },
+    { id:2, name:"ملعب الواحة",         region:"مكة المكرمة",     loc:"حي العزيزية",   price:140, rating:4.6, tags:["مواقف","غرف تبديل"], icon:"⚽" },
+    { id:3, name:"ملعب القمة",          region:"المنطقة الشرقية", loc:"حي الشاطئ",     price:210, rating:5.0, tags:["VIP","تكييف"], icon:"🏟️" },
+    { id:4, name:"ملعب الشلال",         region:"عسير",            loc:"حي الشلال",     price:130, rating:4.5, tags:["اقتصادي","مواقف"], icon:"⚽" },
+    { id:5, name:"ملعب الأمير",         region:"المدينة المنورة", loc:"حي العوالي",    price:170, rating:4.7, tags:["إنارة ليلية","مدرجات"], icon:"🏟️" },
+    { id:6, name:"ملعب الفيصلية",       region:"القصيم",          loc:"حي الصفراء",    price:120, rating:4.4, tags:["اقتصادي"], icon:"⚽" },
+  ]
+};
+
+const dayNames = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+const timeSlots = ["14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"];
+
+// المناطق الإدارية الرسمية الثلاث عشرة بالمملكة العربية السعودية
+const SAUDI_REGIONS = [
+  "الرياض","مكة المكرمة","المدينة المنورة","المنطقة الشرقية","عسير",
+  "القصيم","تبوك","حائل","الحدود الشمالية","جازان","نجران","الباحة","الجوف"
+];
+function saudiRegionOptionsHtml(selected){
+  return SAUDI_REGIONS.map(r=>`<option value="${r}" ${selected===r?'selected':''}>${r}</option>`).join('');
+}
+
+// مميزات الملعب — يختارها صاحب الملعب، وتظهر كشارات للاعب وقت الحجز
+const FIELD_AMENITIES = [
+  { key:'ac',        label:'مكيف',            icon:'❄️' },
+  { key:'lighting',  label:'إنارة ليلية',      icon:'💡' },
+  { key:'restrooms', label:'دورات مياه',       icon:'🚻' },
+  { key:'changing',  label:'غرف تبديل',        icon:'👕' },
+  { key:'parking',   label:'مواقف سيارات',     icon:'🅿️' },
+  { key:'prayer',    label:'مصلى',             icon:'🕌' },
+  { key:'women',     label:'مناسب للنساء',     icon:'👩' },
+  { key:'equipment', label:'كرات ومعدات',      icon:'🥅' },
+  { key:'screen',    label:'شاشة عرض',         icon:'📺' },
+  { key:'sound',     label:'نظام صوتي',        icon:'🔊' },
+  { key:'recording', label:'تصوير المباراة',   icon:'🎥' },
+  { key:'wifi',      label:'واي فاي مجاني',    icon:'📶' },
+  { key:'cameras',   label:'كاميرات مراقبة',   icon:'📹' },
+  { key:'cafeteria', label:'كافيتريا',         icon:'☕' },
+  { key:'showers',   label:'دشات ساخنة',       icon:'🚿' },
+  { key:'vip',       label:'تصنيف VIP',        icon:'🌟' },
+];
+function amenityLabel(key){ const a = FIELD_AMENITIES.find(x=>x.key===key); return a ? `${a.icon} ${escapeHtml(a.label)}` : key; }
+
+// شبكة checkboxes تُستخدم في فورمي إضافة/تعديل ملعب
+function amenitiesCheckboxesHtml(selected){
+  selected = selected || [];
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    ${FIELD_AMENITIES.map(a=>`
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+        <input type="checkbox" class="amenity-check" value="${a.key}" ${selected.includes(a.key)?'checked':''}>
+        <span>${a.icon} ${escapeHtml(a.label)}</span>
+      </label>`).join('')}
+  </div>`;
+}
+function collectCheckedAmenities(){
+  return Array.from(document.querySelectorAll('.amenity-check:checked')).map(el=>el.value);
+}
+// شارات مميزات مختصرة تُعرض على كروت التصفح (أول 4 + الباقي كعدد)
+function amenityBadgesHtml(amenities, max){
+  amenities = amenities || [];
+  if (!amenities.length) return '';
+  max = max || 4;
+  const shown = amenities.slice(0, max).map(k=>{
+    const a = FIELD_AMENITIES.find(x=>x.key===k);
+    return a ? `<span class="ctag">${a.icon} ${escapeHtml(a.label)}</span>` : '';
+  }).join('');
+  const extra = amenities.length > max ? `<span class="ctag">+${amenities.length - max}</span>` : '';
+  return shown + extra;
+}
+
+// صورة رمزية للمستخدم: افتراضية (ذكر/أنثى) أو صورة شخصية مرفوعة أو حرف الاسم كحل أخير
+function avatarHtml(avatarUrl, initial, sizeStyle){
+  sizeStyle = sizeStyle || '';
+  if (avatarUrl === 'default:male') return `<div class="av" style="${sizeStyle};background:#2b6cb0;font-size:inherit">👨</div>`;
+  if (avatarUrl === 'default:female') return `<div class="av" style="${sizeStyle};background:#b83280;font-size:inherit">👩</div>`;
+  if (avatarUrl && avatarUrl.startsWith('http')) return `<div class="av" style="${sizeStyle};padding:0;overflow:hidden"><img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`;
+  return `<div class="av" style="${sizeStyle}">${initial}</div>`;
+}
+
+// تحويل الوقت من صيغة 24 ساعة (المخزّنة بالقاعدة) إلى صيغة 12 ساعة بصباحًا/مساءً (الأنسب للمستخدم السعودي)
+function formatTime12(t){
+  if (!t) return '';
+  const [hStr, mStr] = t.slice(0,5).split(':');
+  let h = parseInt(hStr, 10);
+  const period = h >= 12 ? 'م' : 'ص';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${mStr} ${period}`;
+}
+
+// يعرض "جارٍ التحميل" فقط لو الطلب أخذ وقتًا فعليًا (>250ms) — يمنع الوميض المزعج عند كل ضغطة
+function delayedLoading(elId, delay){
+  const el = document.getElementById(elId);
+  if (!el) return null;
+  return setTimeout(()=>{
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>';
+  }, delay || 250);
+}
+// يمنع حقن HTML/سكربت من أي محتوى يكتبه المستخدمون (تعليقات، أسماء، إلخ) قبل عرضه بالصفحة
+// يعرض حالة الحجز بوضوح — يميّز بين ملغي عادي (ما فيه دفع) وملغي مع استرجاع جزئي أو كامل
+function bookingStatusLabel(b, statusMap){
+  if (b.status === 'cancelled') {
+    const refunded = Number(b.refunded_amount||0);
+    const total = Number(b.total_price||0);
+    const wasEverPaid = b.payment_status === 'paid' || b.payment_status === 'partial' || b.payment_status === 'refunded' || b.payment_status === 'partially_refunded';
+    if (refunded > 0 && refunded < total) return 'ملغي (استرجاع جزئي)';
+    if (refunded > 0 && refunded >= total - 0.01) return 'ملغي (استرجاع كامل)';
+    if (!wasEverPaid) return 'ملغي (لم يتم الدفع)';
+    return 'ملغي';
+  }
+  return statusMap[b.status] || b.status;
+}
+
+function escapeHtml(str){
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+let currentMod = 'stadiums';
+
+// ── الوقت دائمًا بتوقيت السعودية (UTC+3 بدون توقيت صيفي) بغض النظر عن جهاز الزائر ──
+// ملاحظة مهمة: بعد استخدام هذي الدالة، اقرأ القيم دائمًا عبر getUTC*() (مثل getUTCDay/getUTCHours)
+// وليس getDay()/getHours() العادية، لأن القيمة هنا مُزاحة يدويًا وليست توقيت الجهاز المحلي
+function riyadhNow(){
+  return new Date(Date.now() + 3 * 3600000);
+}
+function riyadhTodayStr(){
+  return riyadhNow().toISOString().split('T')[0];
+}
+function riyadhTodayPlusDays(days){
+  const d = riyadhNow();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+let appliedCoupon = null, finalBookingPrice = null;
+let bookingMode = 'solo';
+function setBookingMode(m){ bookingMode = m; renderStadiumDrawer(true); }
+let active = null, activeType = null;
+let selDate = 0, selSlot = null, playerCount = 6, payMethod = 'mada';
+let loggedIn = false, authMode = 'login';
+
+function takenSlots(id, d){ const seed=id*7+d*3; return timeSlots.filter((_,i)=>(seed+i*13)%5===0); }
+function takenSlotsWithPast(id, d){
+  const base = takenSlots(id, d);
+  if (d !== 0) return base;
+  const nowStr = riyadhNow().toISOString().slice(11,16);
+  const extra = timeSlots.filter(t => t <= nowStr && !base.includes(t));
+  return [...base, ...extra];
+}
+
+function calculateSmartSplit(totalPrice, playersCount){
+  if(playersCount <= 0) return { error:"يجب تحديد عدد اللاعبين بشكل صحيح" };
+  const sharePerPlayer = totalPrice / playersCount;
+  const finalShare = Math.round(sharePerPlayer * 100) / 100;
+  return { totalAmount:totalPrice, numberOfPlayers:playersCount, sharePerPlayer:finalShare, currency:"SAR" };
+}
+
+async function applyCoupon(basePrice){
+  const codeInput = document.getElementById('coupon-code');
+  const msgEl = document.getElementById('couponMsg');
+  const code = (codeInput?.value||'').trim().toUpperCase();
+  if (!code) { msgEl.textContent = 'أدخل كود الخصم'; msgEl.style.color = 'var(--danger)'; return; }
+  if (!window.sb) { msgEl.textContent = 'الكوبونات تحتاج اتصال قاعدة بيانات'; msgEl.style.color='var(--danger)'; return; }
+
+  const { data: coupon, error } = await sb.from('coupons').select('*').eq('code', code).eq('active', true).maybeSingle();
+  if (error || !coupon) { msgEl.textContent = 'كود غير صحيح أو منتهي'; msgEl.style.color='var(--danger)'; appliedCoupon=null; finalBookingPrice=null; updateCouponUI(basePrice); return; }
+  if (coupon.field_id && active && coupon.field_id !== active.id) { msgEl.textContent = 'هذا الكود غير صالح لهذا الملعب'; msgEl.style.color='var(--danger)'; return; }
+  if (coupon.expires_at && coupon.expires_at < new Date().toISOString().split('T')[0]) { msgEl.textContent = 'انتهت صلاحية هذا الكود'; msgEl.style.color='var(--danger)'; return; }
+  if (coupon.max_uses && coupon.used_count >= coupon.max_uses) { msgEl.textContent = 'تم استنفاد هذا الكود'; msgEl.style.color='var(--danger)'; return; }
+
+  const discount = coupon.discount_type === 'percent' ? basePrice * (coupon.discount_value/100) : coupon.discount_value;
+  finalBookingPrice = Math.max(0, Math.round((basePrice - discount) * 100) / 100);
+  appliedCoupon = coupon;
+  msgEl.textContent = `✓ تم تطبيق الخصم (${coupon.discount_type==='percent'?coupon.discount_value+'%':coupon.discount_value+' ر'})`;
+  msgEl.style.color = 'var(--brand)';
+  updateCouponUI(basePrice);
+}
+function updateCouponUI(basePrice){
+  const row = document.getElementById('couponRow');
+  const discEl = document.getElementById('couponDiscount');
+  const finalEl = document.getElementById('finalPrice');
+  if (!row || !finalEl) return;
+  if (appliedCoupon && finalBookingPrice!=null) {
+    row.style.display = 'flex';
+    discEl.textContent = `- ${(basePrice-finalBookingPrice).toFixed(2)} ر`;
+    finalEl.textContent = `${finalBookingPrice} ريال`;
+  } else {
+    row.style.display = 'none';
+    finalEl.textContent = `${basePrice} ريال`;
+  }
+}
+
+function applyThemeMode(mode){
+  let effective = mode;
+  if (mode === 'auto') {
+    effective = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', effective);
+  document.querySelectorAll('.tt-seg').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+}
+function setThemeMode(mode){
+  window._themeMode = mode;
+  try { localStorage.setItem('malaabna-theme-mode', mode); } catch(e){}
+  applyThemeMode(mode);
+}
+applyThemeMode(window._themeMode || 'dark');
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    if (window._themeMode === 'auto') applyThemeMode('auto');
+  });
+}
+
+function switchMod(mod, el){
+  currentMod = mod;
+  document.querySelectorAll('.mod-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.mod-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+mod).classList.add('active');
+  const fbarEl = document.getElementById('fbar');
+  if (fbarEl) fbarEl.style.display = (mod === 'openmatches') ? 'none' : 'flex';
+  if (mod === 'openmatches') { loadOpenMatches(); return; }
+  renderActive();
+}
+function goMod(mod){
+  const el = document.querySelector(`[data-mod="${mod}"]`);
+  switchMod(mod, el);
+  scrollToId('modules');
+}
+
+// ── أكمل الفريق: تصفّح المباريات المفتوحة للانضمام من كل المنصة ──
+async function loadOpenMatches(){
+  const grid = document.getElementById('grid-openmatches');
+  if (!window.sb) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--ink-dim)">هذي الميزة تحتاج اتصال قاعدة بيانات فعّال</div>';
+    return;
+  }
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--ink-dim)">جارٍ البحث عن مباريات مفتوحة...</div>';
+
+  const todayStr = riyadhTodayStr();
+  const nowStr = riyadhNow().toISOString().slice(11,16);
+  const { data, error } = await sb.from('bookings')
+    .select('id, booking_date, start_time, end_time, total_price, amount_paid, players_count, share_link_token, fields(name, facilities(city, district))')
+    .eq('is_open_for_join', true).eq('status', 'pending').gte('booking_date', todayStr)
+    .order('booking_date');
+
+  // نستبعد يدويًا أي مباراة اليوم فات وقتها فعليًا (فلترة التاريخ فوق ما تكفي وحدها)
+  const filtered = (data||[]).filter(b => !(b.booking_date === todayStr && b.start_time.slice(0,5) <= nowStr));
+
+  if (error || !filtered.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:50px;color:var(--ink-dim)">
+      <div style="font-size:34px;margin-bottom:8px">🤝</div>
+      لا توجد مباريات مفتوحة للانضمام حاليًا<br><span style="font-size:12px">افتح حجزك للانضمام العام وقت الحجز عشان يظهر هنا</span>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(b=>{
+    const share = b.players_count > 0 ? Math.round((b.total_price/b.players_count)*100)/100 : b.total_price;
+    const remaining = Math.max(0, Number(b.total_price) - Number(b.amount_paid));
+    return `<div class="card" onclick="openJoinPage('${b.share_link_token}')">
+      <div class="card-media">🤝<div class="tag-tl">💰 ${share} ر/فرد</div><div class="tag-tr">${escapeHtml(b.fields?.facilities?.city)||''}</div></div>
+      <div class="card-b">
+        <div class="card-name">${escapeHtml(b.fields?.name)||'ملعب'}</div>
+        <div class="card-loc">📍 ${escapeHtml(b.fields?.facilities?.district)||''}، ${escapeHtml(b.fields?.facilities?.city)||''}</div>
+        <div class="card-tags"><span class="ctag">📅 ${b.booking_date}</span><span class="ctag">⏱️ ${formatTime12(b.start_time)}</span><span class="ctag">👥 ${b.players_count} لاعب</span></div>
+        <div class="card-f">
+          <div class="cprice"><span class="a">${remaining}</span> <span class="p">ريال متبقي</span></div>
+          <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();openJoinPage('${b.share_link_token}')">انضم ←</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── يوحّد النص العربي للمقارنة بالبحث: يشيل التشكيل، يوحّد أشكال الألف والهمزة والتاء المربوطة، ويشيل المسافات الزائدة ──
+function normalizeArabicText(str){
+  if (!str) return '';
+  return str
+    .replace(/[\u064B-\u065F\u0670]/g, '') // إزالة التشكيل (فتحة، ضمة، كسرة، شدة، سكون، إلخ)
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// ── يحدّث نصوص خيارات فلتر السعر لتعكس النطاق الفعلي للأسعار المعروضة، بدل أرقام ثابتة قد لا تناسب كل سوق ──
+function updatePriceFilterLabels(lowThreshold, highThreshold){
+  const sel = document.getElementById('priceFilter');
+  if (!sel) return;
+  const options = sel.querySelectorAll('option');
+  if (options[1]) options[1].textContent = `أقل من ${lowThreshold} ر`;
+  if (options[2]) options[2].textContent = `${lowThreshold} - ${highThreshold} ر`;
+  if (options[3]) options[3].textContent = `أكثر من ${highThreshold} ر`;
+}
+
+function renderActive(){
+  const q = normalizeArabicText((document.getElementById('search').value||'').trim());
+  const region = document.getElementById('regionFilter').value;
+  const price = document.getElementById('priceFilter').value;
+
+  const allPrices = DATA[currentMod].map(it=>it.price).filter(p=>typeof p === 'number');
+  const minP = allPrices.length ? Math.min(...allPrices) : 0;
+  const maxP = allPrices.length ? Math.max(...allPrices) : 0;
+  // نقسّم النطاق الفعلي للأسعار المعروضة لثلاث فئات متساوية تقريبًا، بدل حدود ثابتة قد لا تناسب كل سوق
+  const lowThreshold = Math.round(minP + (maxP - minP) / 3);
+  const highThreshold = Math.round(minP + (maxP - minP) * 2 / 3);
+  updatePriceFilterLabels(lowThreshold, highThreshold);
+
+  const items = DATA[currentMod].filter(it=>{
+    const qok = !q || normalizeArabicText(it.name).includes(q) || normalizeArabicText(it.loc).includes(q) || normalizeArabicText(it.region).includes(q);
+    const rok = region==='all' || it.region===region;
+    let pok = true;
+    if(price==='low') pok = it.price <= lowThreshold;
+    else if(price==='mid') pok = it.price > lowThreshold && it.price <= highThreshold;
+    else if(price==='high') pok = it.price > highThreshold;
+    return qok && rok && pok;
+  });
+
+  const grid = document.getElementById('grid-'+currentMod);
+  if(items.length===0){ grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:50px;color:var(--ink-dim)">لا توجد نتائج مطابقة.</div>`; return; }
+
+  grid.innerHTML = items.map(it=>{
+    const cta = 'احجز';
+    const ratingBadge = it.rating>0 ? `<div class="tag-tl" onclick="event.stopPropagation();showItemReviews('${currentMod}',${it.id})" style="cursor:pointer">⭐ ${it.rating}</div>` : `<div class="tag-tl">🆕 جديد</div>`;
+    const priceLbl = 'ر/ساعة';
+    const priceDisplay = `<span class="a">${it.price}</span> <span class="p">${priceLbl}</span>`;
+    const mediaContent = it.image
+      ? `<img src="${it.image}" alt="${escapeHtml(it.name)}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
+      : it.icon;
+    return `<div class="card" onclick="openItem('${currentMod}',${it.id})">
+      <div class="card-media">${mediaContent}${ratingBadge}<div class="tag-tr">${escapeHtml(it.city)}</div></div>
+      <div class="card-b">
+        <div class="card-name">${escapeHtml(it.name)}</div>
+        <div class="card-loc">📍 ${escapeHtml(it.loc)}، ${escapeHtml(it.city)}</div>
+        <div class="card-tags">${it.tags.map(t=>`<span class="ctag">${t}</span>`).join('')}${amenityBadgesHtml(it.amenities, 2)}</div>
+        <div class="card-f">
+          <div class="cprice">${priceDisplay}</div>
+          <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();openItem('${currentMod}',${it.id})">${cta} ←</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function openItem(type, id, presetPlayerCount){
+  activeType = type;
+  active = DATA[type].find(x=>x.id===id);
+  selDate=0; selSlot=null; playerCount = presetPlayerCount || 6;
+  appliedCoupon=null; finalBookingPrice=null; bookingMode='solo';
+
+  // لو الملعب/الأكاديمية/البطولة مو موجود بالقائمة المحمّلة مسبقًا (مثلاً صار "مغلق" أو "تحت صيانة" بعد تحميل الصفحة)
+  // نتحقق مباشرة من قاعدة البيانات بدل ما نفتح شاشة فاضية بصمت
+  if (!active && type === 'stadiums' && window.sb) {
+    try {
+      const { data: fd } = await sb.from('fields').select('id, name, status, is_deleted').eq('id', id).maybeSingle();
+      if (!fd || fd.is_deleted) {
+        showToast('عذرًا، هذا الملعب لم يعد متاحًا','error');
+        return;
+      }
+      if (fd.status !== 'available') {
+        showToast(`عذرًا، ملعب "${fd.name}" مغلق مؤقتًا حاليًا — جرّب لاحقًا`,'error');
+        return;
+      }
+      // الملعب فعليًا متاح لكنه غير محمّل بالذاكرة بعد (حالة نادرة) — نطلب تحديث القائمة
+      showToast('جارٍ تحديث بيانات الملعب...','error');
+      if (window.loadRealFields) await window.loadRealFields();
+      active = DATA[type].find(x=>x.id===id);
+      if (!active) { showToast('تعذّر فتح الملعب — جرّب تحديث الصفحة','error'); return; }
+    } catch(e) {
+      showToast('تعذّر التحقق من حالة الملعب','error');
+      return;
+    }
+  }
+
+  if (!active) { showToast('عذرًا، هذا العنصر لم يعد متاحًا','error'); return; }
+
+  await renderStadiumDrawer();
+  document.getElementById('ov').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+
+// ── يفتح نفس الملعب مباشرة لحجز جديد، مع تعبئة عدد اللاعبين من الحجز السابق تلقائيًا (يوفر إعادة كل الخطوات من الصفر) ──
+async function rebookSameField(fieldId, previousPlayerCount){
+  closeAll();
+  const count = Math.max(1, Math.min(22, previousPlayerCount || 6));
+  await openItem('stadiums', fieldId, count);
+}
+
+// يجلب أوقات العمل الحقيقية + أيام الإغلاق + الحجوزات الفعلية لهذا الملعب واليوم المحدد
+// يرجع للوضع التجريبي تلقائياً إذا لم تكن قاعدة البيانات متصلة أو الملعب غير حقيقي (بيانات تجريبية)
+async function getFieldAvailability(fieldId, dateStr, weekday){
+  if (!window.sb) return { slots: timeSlots, taken: takenSlotsWithPast(fieldId, selDate), dayClosed: false };
+  try {
+    const [{ data: wh }, { data: bo }, { data: bookings }, { data: priceOverride }] = await Promise.all([
+      sb.from('field_working_hours').select('open_time,close_time,is_closed').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle(),
+      sb.from('field_blackouts').select('id,reason').eq('field_id', fieldId).eq('blackout_date', dateStr).maybeSingle(),
+      sb.from('bookings').select('start_time').eq('field_id', fieldId).eq('booking_date', dateStr).in('status', ['pending','confirmed']).eq('payment_status', 'paid'),
+      sb.from('field_weekday_pricing').select('price').eq('field_id', fieldId).eq('weekday', weekday).maybeSingle()
+    ]);
+    const dayClosed = !!bo || (wh && wh.is_closed);
+    let slots = timeSlots;
+    if (wh && wh.open_time && wh.close_time) {
+      const o = wh.open_time.slice(0,5), c = wh.close_time.slice(0,5);
+      slots = timeSlots.filter(t => t >= o && t < c);
+    }
+    const taken = (bookings||[]).map(b => (b.start_time||'').slice(0,5));
+    // لو اليوم المختار هو اليوم الحالي، أي وقت فات فعليًا يُعتبر غير متاح (ما تقدر تحجز وقت راح)
+    if (selDate === 0) {
+      const nowStr = riyadhNow().toISOString().slice(11,16);
+      timeSlots.forEach(t => { if (t <= nowStr && !taken.includes(t)) taken.push(t); });
+    }
+    return { slots, taken, dayClosed, blackoutReason: bo?.reason || null, priceOverride: priceOverride?.price!=null ? Number(priceOverride.price) : null };
+  } catch(e) {
+    // الملعب تجريبي (id غير موجود فعلياً في قاعدة البيانات) → استخدم البيانات الوهمية
+    return { slots: timeSlots, taken: takenSlotsWithPast(fieldId, selDate), dayClosed: false };
+  }
+}
+
+let _availCache = {};
+// ── يولّد HTML لمعرض صور بسيط (صورة رئيسية + نقاط تنقل) بدل الصورة الواحدة القديمة ──
+window._galleryImages = window._galleryImages || {};
+window._galleryCounter = window._galleryCounter || 0;
+function fieldGalleryHtml(images, icon){
+  const list = (images && images.length) ? images : [];
+  if (!list.length) return `<div class="dmedia">${icon || '🏟️'}</div>`;
+  if (list.length === 1) return `<div class="dmedia" style="padding:0;position:relative">
+      <img src="${list[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;cursor:zoom-in" onclick="openImageFullscreen('${list[0]}')">
+    </div>`;
+  const galId = 'gal-' + (++window._galleryCounter);
+  window._galleryImages[galId] = list;
+  return `
+    <div class="dmedia" id="${galId}" data-idx="0" style="padding:0">
+      <img src="${list[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">
+      <div style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;z-index:3" class="gal-counter-${galId}">1 / ${list.length}</div>
+      <button onclick="event.stopPropagation();openImageFullscreen(window._galleryImages['${galId}'][parseInt(document.getElementById('${galId}').dataset.idx||'0')])" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:15px;z-index:3;cursor:pointer">⛶</button>
+      <div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2">
+        ${list.map((_,i)=>`<span class="gal-dot-${galId}" data-i="${i}" style="width:${i===0?'18px':'6px'};height:6px;border-radius:3px;background:${i===0?'#fff':'rgba(255,255,255,.5)'};transition:all .2s;cursor:pointer" onclick="setGalleryImage('${galId}',${i})"></span>`).join('')}
+      </div>
+      <div style="position:absolute;inset:0;display:flex;z-index:1">
+        <div style="flex:1;cursor:pointer" onclick="shiftGalleryImage('${galId}',-1)"></div>
+        <div style="flex:1;cursor:pointer" onclick="shiftGalleryImage('${galId}',1)"></div>
+      </div>
+    </div>`;
+}
+// ── يفتح صورة الملعب بحجمها الكامل (ملء الشاشة) — للاعب اللي يبي يفحص جودة الملعب عن قرب قبل الحجز ──
+function openImageFullscreen(imageUrl){
+  if (!imageUrl) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
+  overlay.innerHTML = `
+    <img src="${imageUrl}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px">
+    <button style="position:absolute;top:20px;left:20px;background:rgba(255,255,255,.15);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer">✕</button>
+  `;
+  overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
+}
+function setGalleryImage(galId, idx){
+  const el = document.getElementById(galId);
+  if (!el) return;
+  const list = window._galleryImages[galId];
+  if (!list || !list[idx]) return;
+  el.dataset.idx = idx;
+  el.querySelector('img').src = list[idx];
+  const counterEl = el.querySelector(`.gal-counter-${galId}`);
+  if (counterEl) counterEl.textContent = `${idx+1} / ${list.length}`;
+  el.querySelectorAll(`.gal-dot-${galId}`).forEach((dot,i) => {
+    dot.style.width = i===idx ? '18px' : '6px';
+    dot.style.background = i===idx ? '#fff' : 'rgba(255,255,255,.5)';
+  });
+}
+function shiftGalleryImage(galId, delta){
+  const el = document.getElementById(galId);
+  if (!el) return;
+  const list = window._galleryImages[galId];
+  if (!list) return;
+  let idx = (parseInt(el.dataset.idx||'0') + delta + list.length) % list.length;
+  setGalleryImage(galId, idx);
+}
+
+async function renderStadiumDrawer(skipFetch){
+  const s = active;
+  document.getElementById('drawerTitle').textContent = 'حجز ملعب';
+  const today = riyadhNow();
+  let pills='';
+  for(let i=0;i<7;i++){ const d=new Date(today);d.setUTCDate(d.getUTCDate()+i);
+    pills+=`<div class="dpill ${i===selDate?'active':''}" onclick="setDate(${i})"><div class="dw">${dayNames[d.getUTCDay()]}</div><div class="dd">${d.getUTCDate()}</div></div>`; }
+
+  const dsel = new Date(today); dsel.setUTCDate(dsel.getUTCDate() + selDate);
+  const dateStr = dsel.toISOString().split('T')[0];
+  const weekday = dsel.getUTCDay();
+  const cacheKey = s.id + '_' + dateStr;
+
+  let avail;
+  if (skipFetch && _availCache[cacheKey]) {
+    avail = _availCache[cacheKey];
+  } else {
+    document.getElementById('drawerBody').innerHTML = `<div style="text-align:center;padding:40px;color:var(--ink-dim)">جارٍ تحميل الأوقات المتاحة...</div>`;
+    avail = await getFieldAvailability(s.id, dateStr, weekday);
+    _availCache[cacheKey] = avail;
+  }
+
+  if (avail.dayClosed) {
+    document.getElementById('drawerBody').innerHTML = `
+      ${fieldGalleryHtml(s.images, s.icon)}
+      <div style="font-size:20px;font-weight:900;margin-bottom:8px">${escapeHtml(s.name)}</div>
+      <div class="irow">📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.city)}</b></div>
+      <div class="dlabel">📅 اختر اليوم</div>
+      <div class="dates">${pills}</div>
+      <div style="text-align:center;padding:30px;background:var(--danger-soft);border-radius:12px;margin-top:14px">
+        <div style="font-size:30px;margin-bottom:8px">🚫</div>
+        <div style="font-weight:700;color:var(--danger)">الملعب مغلق في هذا اليوم</div>
+        ${avail.blackoutReason? `<div style="font-size:12.5px;color:var(--ink-dim);margin-top:4px">${avail.blackoutReason}</div>` : ''}
+        <div style="font-size:12.5px;color:var(--ink-dim);margin-top:4px">جرّب يومًا آخر</div>
+      </div>`;
+    return;
+  }
+
+  const taken = avail.taken;
+  const activeSlots = avail.slots.length ? avail.slots : timeSlots;
+  const slots = activeSlots.map(t=>{ const tk=taken.includes(t); const sl=selSlot===t;
+    return `<div class="slot ${tk?'taken':sl?'sel':'free'}" ${tk?'':`onclick="setSlot('${t}')"`}>${formatTime12(t)}</div>`; }).join('');
+
+  window.effectivePrice = avail.priceOverride!=null ? avail.priceOverride : s.price;
+  const totalForSplit = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : window.effectivePrice;
+  const split = calculateSmartSplit(totalForSplit, playerCount);
+  const canBook = !!selSlot;
+  const priceNote = avail.priceOverride!=null ? ` <span style="font-size:11px;color:var(--flood)">(سعر ${dayNames[weekday]})</span>` : '';
+
+  const myShare = bookingMode==='split' ? split.sharePerPlayer : totalForSplit;
+
+  document.getElementById('drawerBody').innerHTML = `
+    ${fieldGalleryHtml(s.images, s.icon)}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:20px;font-weight:900">${escapeHtml(s.name)}</div>
+      ${window.currentUser ? `<button id="favHeartBtn-${s.id}" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="handleFavHeartClick(${s.id})">♡</button>` : ''}
+    </div>
+    <div class="irow" style="display:flex;justify-content:space-between;align-items:center">
+      <span>📍 <b>${escapeHtml(s.loc)}، ${escapeHtml(s.city)}</b></span>
+      ${(s.lat!=null && s.lng!=null) ? `<a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}" target="_blank" style="font-size:12px;color:var(--brand);font-weight:700;text-decoration:none;white-space:nowrap">🗺️ افتح الموقع</a>` : ''}
+    </div>
+    <div class="irow" ${s.reviewCount ? `onclick="pushOwnerPage('showItemReviews','stadiums',${s.id})" style="cursor:pointer"` : ''}>⭐ <b>${s.rating}</b>${s.reviewCount? ` (${s.reviewCount} تقييم)`:''} · ${s.tags.join(' · ')}</div>
+    <div class="irow">💰 <b>${window.effectivePrice} ريال</b> / الساعة${priceNote}</div>
+    ${(s.amenities && s.amenities.length) ? `
+    <div class="dlabel" style="margin:16px 0 10px">✨ مميزات الملعب</div>
+    <div class="card-tags" style="margin-bottom:6px">${amenityBadgesHtml(s.amenities, 8)}</div>
+    ` : ''}
+
+    <div class="dlabel">📅 اختر اليوم</div>
+    <div class="dates">${pills}</div>
+    ${(function(){ if (window.currentUser) isFieldFavorited(s.id).then(fav => refreshFavoriteButton(s.id, fav)); return ''; })()}
+    <div class="dlabel">⏱️ اختر الوقت المتاح <span style="font-size:11px;color:var(--ink-dim);font-weight:400">(كل خانة = ساعة واحدة)</span></div>
+    <div class="slots">${slots || '<div style="grid-column:1/-1;text-align:center;color:var(--ink-dim);padding:14px">لا توجد أوقات معرّفة لهذا اليوم</div>'}</div>
+
+    <div class="dlabel">💳 طريقة الدفع</div>
+    <div class="pays" style="margin-bottom:0">
+      <div class="pay ${bookingMode==='solo'?'sel':''}" id="mode-solo" onclick="setBookingMode('solo')"><div class="ic">🧍</div>أدفع كامل المبلغ</div>
+      <div class="pay ${bookingMode==='split'?'sel':''}" id="mode-split" onclick="setBookingMode('split')"><div class="ic">🤝</div>قطة مع أصحابي</div>
+    </div>
+
+    ${bookingMode==='split' ? `
+    <div class="split-box">
+      <div class="split-head">🤝 أدفع نصيبي فقط، والباقي عبر رابط</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        ${[2,5,6,10,14].map(n=>`<button onclick="setPlayerCount(${n})" style="flex:1;padding:8px 4px;border-radius:8px;font-size:12.5px;font-weight:700;border:1px solid var(--line);background:${playerCount===n?'var(--brand)':'var(--bg-elev)'};color:${playerCount===n?'#fff':'var(--ink-soft)'};cursor:pointer">${n}</button>`).join('')}
+      </div>
+      <div class="split-ctrl">
+        <span class="lbl">عدد اللاعبين</span>
+        <div class="stepper">
+          <button onclick="changePlayers(-1)">−</button>
+          <span class="cnt">${playerCount}</span>
+          <button onclick="changePlayers(1)">+</button>
+        </div>
+      </div>
+      <div class="split-result">
+        <span class="each">نصيبك أنت (تدفعه الآن)</span>
+        <span class="amt">${split.sharePerPlayer} <span style="font-size:13px">ر</span></span>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;color:var(--ink-soft);margin-top:12px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--brand) 20%,transparent)">
+        <input type="checkbox" id="open-for-join" style="margin-top:3px;flex-shrink:0">
+        <span>🤝 <b>أكمل الفريق</b> — افتح هذا الحجز ليقدر أي لاعب من المنصة ينضم ويدفع نصيبه (مو بس اللي تشاركه الرابط)</span>
+      </label>
+    </div>
+    <div class="legal-note">بعد الدفع، بتحصل رابط تشاركه مع الباقين ليكمّلوا المبلغ. الحجز يتأكد فقط بعد اكتمال المبلغ بالكامل.</div>
+    ` : ''}
+
+    <div class="field" style="display:flex;gap:8px;align-items:flex-end;margin-top:14px">
+      <div style="flex:1"><label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px">لديك كود خصم؟</label><input id="coupon-code" type="text" placeholder="مثال: RAMADAN20" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13px"></div>
+      <button class="btn btn-soft btn-sm" onclick="applyCoupon(window.effectivePrice)" type="button">تطبيق</button>
+    </div>
+    <div id="couponMsg" style="font-size:12px;margin-top:6px"></div>
+
+    <div class="summary">
+      <div class="srow"><span>الملعب</span><span>${escapeHtml(s.name)}</span></div>
+      <div class="srow"><span>الوقت</span><span>${selSlot? formatTime12(selSlot)+' - '+formatTime12(parseInt(selSlot)===23?'23:59':(parseInt(selSlot)+1)+':00') : '— اختر وقتًا —'}</span></div>
+      <div class="srow" id="couponRow" style="display:none"><span>خصم الكوبون</span><span id="couponDiscount">0 ر</span></div>
+      ${bookingMode==='split' ? `<div class="srow"><span>الإجمالي الكامل</span><span>${totalForSplit} ريال</span></div>` : ''}
+      <div class="srow tot"><span>${bookingMode==='split' ? 'تدفعه أنت الآن' : 'الإجمالي'}</span><span class="amt" id="finalPrice">${myShare} ريال</span></div>
+    </div>
+
+    <button class="btn btn-brand btn-block btn-lg neon-glow" style="margin-top:16px" onclick="proceed()" ${canBook?'':'disabled'}>
+      ${canBook? (bookingMode==='split' ? '💳 ادفع نصيبك واحصل على الرابط' : '💳 ادفع وأكّد الحجز') : 'اختر وقتًا أولًا'}
+    </button>`;
+
+  // استعد حالة الكوبون المطبّق (إن وُجد) بعد إعادة الرسم، حتى يبقى السعر المعروض مطابقًا للمبلغ الفعلي
+  if (appliedCoupon) {
+    const discount = appliedCoupon.discount_type === 'percent' ? window.effectivePrice * (appliedCoupon.discount_value/100) : appliedCoupon.discount_value;
+    finalBookingPrice = Math.max(0, Math.round((window.effectivePrice - discount) * 100) / 100);
+    const codeInput = document.getElementById('coupon-code');
+    const msgEl = document.getElementById('couponMsg');
+    if (codeInput) codeInput.value = appliedCoupon.code;
+    if (msgEl) { msgEl.textContent = `✓ مطبّق (${appliedCoupon.discount_type==='percent'?appliedCoupon.discount_value+'%':appliedCoupon.discount_value+' ر'})`; msgEl.style.color = 'var(--brand)'; }
+    updateCouponUI(window.effectivePrice);
+  }
+}
+
+
+
+// ── طلب حصة تجريبية مجانية — بدون أي التزام مالي، يوصل مباشرة لصاحب الأكاديمية ──
+
+
+async function setDate(i){ selDate=i; selSlot=null; appliedCoupon=null; finalBookingPrice=null; await renderStadiumDrawer(); }
+function setSlot(t){ selSlot=t; renderStadiumDrawer(true); }
+async function changePlayers(d){ playerCount=Math.max(1,Math.min(22,playerCount+d)); await renderStadiumDrawer(true); }
+async function setPlayerCount(n){ playerCount=Math.max(1,Math.min(22,n)); await renderStadiumDrawer(true); }
+
+function openAuth(mode){ authTab(mode); document.getElementById('mAuth').classList.add('open'); document.getElementById('ov').classList.add('open'); }
+function authTab(mode){ authMode=mode;
+  document.getElementById('tabLogin').classList.toggle('active',mode==='login');
+  document.getElementById('tabSignup').classList.toggle('active',mode==='signup');
+  document.getElementById('fieldName').style.display  = mode==='signup'?'block':'none';
+  document.getElementById('fieldRole').style.display  = mode==='signup'?'block':'none';
+  document.getElementById('fieldEmail').style.display = mode==='signup'?'block':'none';
+  document.getElementById('termsAgree').style.display = mode==='signup'?'block':'none';
+  document.getElementById('forgotLink').style.display = mode==='login'?'block':'none';
+  document.getElementById('authBtn').textContent = mode==='login'?'دخول':'إنشاء الحساب';
+}
+let selectedRole = 'customer';
+function selRole(r){
+  selectedRole = r;
+  document.getElementById('role-customer').classList.toggle('sel', r==='customer');
+  document.getElementById('role-owner').classList.toggle('sel', r==='owner');
+}
+function doAuth(){
+  loggedIn=true; closeAll();
+  document.getElementById('navAuth').innerHTML = `<div class="nav-user"><div class="av">أ</div> أحمد</div>`;
+  showToast(authMode==='login'?'تم تسجيل الدخول ✓':'تم إنشاء حسابك ✓');
+}
+
+const LEGAL = {
+  terms: { t:"الشروط والأحكام", html:`
+    <h4>١. التعريفات وقبول الشروط</h4><p>"المنصة" تعني موقع وتطبيق ملاعبنا. "المستخدم" يشمل اللاعب وصاحب الملعب وموظفيه. باستخدامك المنصة أو إنشائك حسابًا، فإنك تقرّ بموافقتك الكاملة على هذه الشروط.</p>
+    <h4>٢. طبيعة الخدمة</h4><p>ملاعبنا منصة وسيطة تربط بين اللاعبين من جهة، وأصحاب الملاعب والأكاديميات ومنظّمي البطولات من جهة أخرى، لتسهيل الحجز والدفع الإلكتروني. المنصة ليست مالكة للملاعب ولا مسؤولة عن إدارتها التشغيلية اليومية.</p>
+    <h4>٣. إنشاء الحساب</h4><p>يلتزم المستخدم بتقديم رقم جوال صحيح وبيانات دقيقة. الحساب شخصي وغير قابل للتحويل، والمستخدم مسؤول عن سرية كلمة مروره وكل نشاط يصدر من حسابه.</p>
+    <h4>٤. الحجز والدفع الإلكتروني</h4><p>يتم تأكيد الحجز فقط بعد اكتمال الدفع الإلكتروني بالكامل عبر بوابة الدفع المعتمدة. السعر الظاهر وقت الحجز هو المبلغ النهائي المستحق، ولا تُقبل حجوزات بالدفع النقدي داخل المنصة.</p>
+    <h4>٥. القطة وميزة أكمل الفريق</h4><p>عند اختيار خاصية "القطة"، يتحمّل منظّم الحجز مسؤولية دفع نصيبه وإطلاع بقية المشاركين على رابط إكمال المبلغ. تفعيل "أكمل الفريق" يجعل الحجز مرئيًا لعموم مستخدمي المنصة للانضمام إليه ودفع حصتهم مباشرة. لا يتحمّل منظّم الحجز أي التزام تجاه من ينضم عبر هذي الخاصية بخلاف ما ورد في سياسة الإلغاء والاسترداد.</p>
+    <h4>٦. الإلغاء والاسترداد</h4><p>يخضع إلغاء الحجوزات لسياسة الإلغاء والاسترداد المنشورة على المنصة، والتي تُعد جزءًا لا يتجزأ من هذه الشروط.</p>
+    <h4>٧. التزامات صاحب الملعب</h4><p>يلتزم صاحب الملعب بدقة بيانات منشأته وملاعبه المعروضة، والالتزام بالحجوزات المؤكدة، والحفاظ على سلامة وصلاحية الملعب للاستخدام. يخضع انضمام أي منشأة جديدة لموافقة إدارة المنصة قبل نشرها للجمهور.</p>
+    <h4>٨. عمولة المنصة والتحويلات المالية</h4><p>تستحق المنصة عمولة على كل حجز مكتمل الدفع بالنسبة المعلنة في لوحة تحكم صاحب الملعب، والتي قد تُعدَّل من إدارة المنصة مستقبلًا مع إشعار مسبق. تُحوَّل المستحقات الصافية لأصحاب الملاعب دوريًا وفق الجدول المعتمد، مع سجل موثّق لكل عملية تحويل.</p>
+    <h4>٩. السلوك المحظور</h4><p>يُمنع استخدام المنصة لأي غرض احتيالي، أو انتحال صفة، أو نشر تقييمات كاذبة، أو الإساءة لمستخدمين آخرين أو أصحاب الملاعب. تحتفظ المنصة بحق تعليق أو إنهاء أي حساب يخالف ذلك دون إشعار مسبق في الحالات الجسيمة.</p>
+    <h4>١٠. التقييمات والمحتوى</h4><p>التقييمات والتعليقات يجب أن تعكس تجربة حقيقية للمستخدم. تحتفظ إدارة المنصة بحق حذف أي تقييم مسيء أو مخالف دون الحاجة لإشعار مسبق.</p>
+    <h4>١١. حدود المسؤولية</h4><p>المنصة وسيط تقني، ولا تتحمّل مسؤولية الإصابات أو الأضرار الناتجة عن استخدام الملاعب فعليًا، أو عن جودة الخدمة المقدَّمة من صاحب الملعب أو الأكاديمية، والتي تبقى مسؤوليتهم المباشرة.</p>
+    <h4>١٢. القانون الواجب التطبيق</h4><p>تخضع هذه الشروط لأنظمة المملكة العربية السعودية، وتختص المحاكم السعودية بالفصل في أي نزاع ينشأ عنها.</p>
+    <h4>١٣. تعديل الشروط</h4><p>يجوز للمنصة تعديل هذه الشروط من وقت لآخر، ويُعتد بالنسخة المنشورة وقت استخدامك للمنصة.</p>
+    <h4>١٤. التواصل</h4><p>لأي استفسار بخصوص هذه الشروط، يمكنك التواصل معنا عبر قسم "تواصل معنا" في القائمة الجانبية.</p>` },
+  privacy: { t:"سياسة الخصوصية", html:`
+    <h4>١. البيانات التي نجمعها</h4><p>الاسم ورقم الجوال عند التسجيل، الموقع الجغرافي عند تفعيله لعرض أقرب الملاعب، بيانات الحجوزات والتقييمات، وسجلات التواصل مع الدعم. لا تُخزَّن بيانات بطاقتك البنكية على خوادمنا أبدًا — تُعالَج مباشرة عبر بوابة الدفع المرخّصة.</p>
+    <h4>٢. كيف نستخدم بياناتك</h4><p>لتقديم خدمة الحجز وتأكيده، إرسال الإشعارات المتعلقة بحجوزاتك، تحسين تجربتك، ولأغراض منع الاحتيال وحماية حسابك.</p>
+    <h4>٣. مشاركة البيانات مع أطراف ثالثة</h4><p>نشارك الحد الأدنى اللازم من بياناتك مع: بوابة الدفع الإلكتروني المرخّصة لإتمام عمليات الدفع والاسترداد، مزوّد الرسائل النصية/واتساب لإرسال إشعارات الحجز، ومزوّد الاستضافة التقنية للمنصة. لا نبيع بياناتك لأي جهة تسويقية.</p>
+    <h4>٤. أمان البيانات</h4><p>تُخزَّن بياناتك بقواعد بيانات محمية بصلاحيات وصول مقيّدة، وتُشفَّر الاتصالات بين جهازك وخوادمنا.</p>
+    <h4>٥. حقوقك بموجب نظام حماية البيانات الشخصية السعودي</h4><p>يحق لك الاطلاع على بياناتك المحفوظة، طلب تصحيحها، طلب حذف حسابك وبياناته (باستثناء ما يلزم قانونًا الاحتفاظ به كسجلات مالية)، والاعتراض على أي استخدام غير ضروري لها.</p>
+    <h4>٦. مدة الاحتفاظ بالبيانات</h4><p>نحتفظ بسجلات الحجوزات والمدفوعات للمدة اللازمة نظاميًا لأغراض محاسبية ومالية، حتى بعد حذف الحساب، حماية لحقوق جميع الأطراف.</p>
+    <h4>٧. الأطفال والقاصرين</h4><p>تسجيل الأكاديميات لأطفال يتم عبر حساب ولي الأمر البالغ، ولا يُسمح للقاصرين بإنشاء حساب مستقل على المنصة.</p>
+    <h4>٨. تعديل هذي السياسة</h4><p>قد تُحدَّث هذي السياسة دوريًا، وسيصلك إشعار بأي تغيير جوهري يؤثر على بياناتك.</p>
+    <h4>٩. التواصل بخصوص خصوصيتك</h4><p>لأي استفسار أو طلب متعلق ببياناتك الشخصية، تواصل معنا عبر قسم "تواصل معنا" في القائمة الجانبية.</p>` },
+  refund: { t:"سياسة الإلغاء والاسترداد", html:`
+    <h4>١. الإلغاء قبل 24 ساعة أو أكثر من الموعد</h4><p>استرجاع كامل المبلغ (100%) مباشرة إلى بطاقتك عبر بوابة الدفع.</p>
+    <h4>٢. الإلغاء بين 6 و24 ساعة من الموعد</h4><p>استرجاع نصف المبلغ (50%).</p>
+    <h4>٣. الإلغاء قبل أقل من 6 ساعات أو عدم الحضور</h4><p>لا يوجد استرجاع.</p>
+    <h4>٤. الإلغاء من الملعب</h4><p>إذا ألغى صاحب الملعب الحجز، يُسترد كامل المبلغ فورًا للاعب بغض النظر عن التوقيت.</p>
+    <h4>٥. رسوم غير قابلة للاسترجاع</h4><p>رسوم بوابة الدفع في جميع الأحوال لا تُسترجع.</p>
+    <h4>٦. الحجز الذي لم يكتمل دفعه</h4><p>إذا لم يكتمل دفع الحجز (فرديًا أو قطة) قبل بداية وقت التمرين، يُلغى تلقائيًا ويُسترجع أي مبلغ سبق دفعه بالكامل (100%) — هذا الحجز لم يتأكد أصلاً، فلا تنطبق عليه نسب الإلغاء أعلاه.</p>
+    <div class="legal-note">⚠️ مدة ظهور المبلغ المسترجع في حسابك البنكي تعتمد على بنكك وبوابة الدفع (عادة 3-14 يوم عمل).</div>` },
+  pricing: { t:"سياسة الأسعار", html:`
+    <h4>١. العملة</h4><p>جميع الأسعار بالريال السعودي (SAR).</p>
+    <h4>٢. الشفافية</h4><p>لا توجد رسوم خفية. السعر الظاهر عند الحجز هو السعر النهائي الذي تدفعه، شاملًا أي عمولة أو رسوم خدمة.</p>
+    <h4>٣. تسعير الذروة</h4><p>يحق لصاحب الملعب تحديد أسعار مختلفة حسب يوم الأسبوع (تسعير ذروة/خارج الذروة)، ويظهر السعر المطبَّق بوضوح قبل تأكيد الحجز.</p>
+    <h4>٤. الكوبونات والخصومات</h4><p>كوبونات الخصم يديرها ويتحمّل تكلفتها صاحب الملعب مباشرة، وتُطبَّق تلقائيًا على السعر النهائي عند إدخال كود صالح.</p>` },
+};
+function openLegal(key){
+  const L = LEGAL[key];
+  document.getElementById('legalTitle').textContent = L.t;
+  document.getElementById('legalBody').innerHTML = L.html;
+  document.getElementById('mLegal').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+
+function locateMe(){
+  showToast('جارٍ تحديد موقعك...');
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      (pos)=>{
+        window._userLatLng = [pos.coords.latitude, pos.coords.longitude];
+        if (window._leafletMap) {
+          window._leafletMap.setView(window._userLatLng, 12);
+          if (window._youMarker) window._youMarker.setLatLng(window._userLatLng);
+          else window._youMarker = L.circleMarker(window._userLatLng, { radius:8, color:'#1f9d57', fillColor:'#1f9d57', fillOpacity:1 }).addTo(window._leafletMap).bindPopup('موقعك');
+        }
+        sortStadiumsByDistance();
+        showToast('تم تحديد موقعك ✓ رُتّبت الملاعب حسب القرب');
+      },
+      ()=>showToast('تعذّر الوصول للموقع — فعّل صلاحية الموقع','error')
+    );
+  } else { showToast('المتصفح لا يدعم تحديد الموقع','error'); }
+}
+
+function haversineKm(lat1,lon1,lat2,lon2){
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function sortStadiumsByDistance(){
+  if (!window._userLatLng) return;
+  const [ulat,ulng] = window._userLatLng;
+  DATA.stadiums.forEach(s=>{
+    if (s.lat!=null && s.lng!=null) s._distKm = haversineKm(ulat,ulng,s.lat,s.lng);
+  });
+  DATA.stadiums.sort((a,b)=>(a._distKm??999)-(b._distKm??999));
+  if (currentMod==='stadiums') renderActive();
+}
+
+// ── الخريطة الحقيقية (Leaflet + OpenStreetMap، مجاني بدون مفتاح API) ──
+function initRealMap(){
+  if (window._leafletMap || typeof L === 'undefined') return;
+  window._leafletMap = L.map('realMap', { zoomControl:true, attributionControl:false }).setView([24.0, 45.0], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(window._leafletMap);
+}
+function renderMapMarkers(){
+  if (!window._leafletMap) return;
+  (window._mapMarkers||[]).forEach(m=>window._leafletMap.removeLayer(m));
+  window._mapMarkers = [];
+
+  const stadiumCoords = DATA.stadiums.filter(s=>s.lat!=null && s.lng!=null);
+  const allCoords = [...stadiumCoords];
+  document.getElementById('mapEmptyState').style.display = allCoords.length? 'none':'flex';
+
+  stadiumCoords.forEach(s=>{
+    const marker = L.marker([s.lat, s.lng]).addTo(window._leafletMap)
+      .bindPopup(`<b>🏟️ ${escapeHtml(s.name)}</b><br>${s.price} ريال/ساعة`);
+    marker.on('click', ()=>openItem('stadiums', s.id));
+    window._mapMarkers.push(marker);
+  });
+
+  if (allCoords.length) {
+    const bounds = L.latLngBounds(allCoords.map(x=>[x.lat,x.lng]));
+    window._leafletMap.fitBounds(bounds, { padding:[30,30], maxZoom:13 });
+  }
+}
+
+// ── إحصائيات المنصة الحقيقية (تحل محل الأرقام الوهمية) ──
+async function loadRealTrustStats(){
+  if (!window.sb) return;
+  try {
+    const now = riyadhNow();
+    const firstOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().split('T')[0];
+    const [{ count: confirmedThisMonth }, { count: cancelledCount }, { count: fieldsCount }, { data: allReviews }] = await Promise.all([
+      sb.from('bookings').select('*', { count:'exact', head:true }).in('status',['confirmed','completed']).gte('booking_date', firstOfMonth),
+      sb.from('bookings').select('*', { count:'exact', head:true }).eq('status','cancelled'),
+      sb.from('fields').select('*', { count:'exact', head:true }).eq('status','available').eq('is_deleted', false),
+      sb.from('reviews').select('rating')
+    ]);
+    const avgRating = (allReviews && allReviews.length) ? (allReviews.reduce((s,r)=>s+r.rating,0)/allReviews.length).toFixed(1) : '—';
+    const cards = document.querySelectorAll('#trustStats .titem .b');
+    if (cards.length===4){
+      cards[0].textContent = (confirmedThisMonth||0);
+      cards[1].textContent = (cancelledCount||0);
+      cards[2].textContent = (fieldsCount||0);
+      cards[3].textContent = avgRating==='—' ? '—' : avgRating+'★';
+    }
+    const heroBookingsEl = document.getElementById('heroStatBookings');
+    const heroListingsEl = document.getElementById('heroStatListings');
+    if (heroBookingsEl) heroBookingsEl.textContent = (confirmedThisMonth||0) + '+';
+    if (heroListingsEl) heroListingsEl.textContent = (fieldsCount||0);
+  } catch(e){ console.log('تعذّر تحميل الإحصائيات الحقيقية', e); }
+}
+
+// ── نجم الأسبوع الحقيقي (اللاعب الأكثر حجزًا مكتملًا هذا الأسبوع) ──
+async function loadRealStarOfWeek(){
+  if (!window.sb) return;
+  try {
+    const weekAgo = new Date(riyadhNow().getTime() - 7*24*60*60*1000).toISOString().split('T')[0];
+    const { data } = await sb.from('bookings')
+      .select('user_id, profiles(name), fields(name)')
+      .eq('status','completed').gte('booking_date', weekAgo);
+    if (!data || !data.length) return;
+    const counts = {};
+    data.forEach(b=>{
+      if (!b.user_id) return;
+      counts[b.user_id] = counts[b.user_id] || { count:0, name:b.profiles?.name, field:b.fields?.name };
+      counts[b.user_id].count++;
+    });
+    const top = Object.values(counts).sort((a,b)=>b.count-a.count)[0];
+    if (top && top.count>0){
+      document.getElementById('starName').textContent = top.name || 'لاعب مميز';
+      document.getElementById('starMeta').textContent = `${top.field||''} · ${top.count} مباراة هذا الأسبوع`;
+      document.getElementById('starPts').textContent = top.count;
+      document.getElementById('starBand').style.display = 'block';
+    }
+  } catch(e){ console.log('تعذّر تحميل نجم الأسبوع', e); }
+}
+
+function scrollToId(id){ document.getElementById(id).scrollIntoView({behavior:'smooth'}); }
+function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); }
+function closeAll(){
+  ['ov','drawer','mConfirm','mAuth','mLegal','mOwner','sidebar'].forEach(id=>document.getElementById(id).classList.remove('open'));
+  // ننظّف الرابط من أي معاملات مؤقتة (دفع، تحقق، انضمام) عشان ما يبقى شريط العنوان عالق على رابط معاملة قديمة
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('payment_confirm') || params.has('id') || params.has('verify') || params.has('join')) {
+    history.replaceState(null, '', window.location.origin + window.location.pathname);
+  }
+  // نفرّغ مكدس تنقل لوحة التحكم عند الإغلاق الكامل، ونزيل أي إدخالات history خاصة بها
+  if (window._ownerNavStack && window._ownerNavStack.length) {
+    window._ownerNavStack = [];
+    if (history.state && history.state._ownerPage) history.replaceState(null, '', window.location.origin + window.location.pathname);
+  }
+}
+
+// ══════════════════ نظام التنقل داخل لوحة التحكم — يدعم زر رجوع المتصفح الفعلي فقط ══════════════════
+window._ownerNavStack = []; // كل عنصر: { fn: اسم الدالة كنص, args: مصفوفة المعاملات }
+
+// يُستدعى بدل الاستدعاء المباشر لأي دالة تعرض شاشة داخل لوحة التحكم — يسجّلها بالمكدس ويدفعها لتاريخ المتصفح
+function pushOwnerPage(fnName, ...args){
+  window._ownerNavStack.push({ fn: fnName, args });
+  history.pushState({ _ownerPage: true, stackDepth: window._ownerNavStack.length }, '', window.location.href);
+  window[fnName](...args);
+}
+
+// يعيد الفتح من نقطة معيّنة بالمكدس بدون إضافة إدخال history جديد (يُستخدم عند زر رجوع المتصفح)
+function replayOwnerPage(entry){
+  if (!entry) return;
+  window[entry.fn](...entry.args);
+}
+
+// يتعامل مع زر رجوع المتصفح الفعلي — يزامن مكدسنا الداخلي مع تاريخ المتصفح
+window.addEventListener('popstate', (e) => {
+  if (!document.getElementById('mOwner')?.classList.contains('open')) return; // لا نتدخل لو لوحة التحكم أصلًا مقفلة
+  if (window._ownerNavStack.length <= 1) { closeAll(); window._ownerNavStack = []; return; }
+  window._ownerNavStack.pop();
+  replayOwnerPage(window._ownerNavStack[window._ownerNavStack.length - 1]);
+});
+
+// ── نافذة تأكيد مخصّصة بنفس تصميم التطبيق — بديل لنافذة confirm() الافتراضية بالمتصفح ──
+window._pendingConfirmCallback = null;
+function showConfirmDialog(message, confirmLabel, onConfirmCallback){
+  window._pendingConfirmCallback = onConfirmCallback;
+  document.querySelector('#mConfirm .micon').textContent = '❓';
+  document.getElementById('confirmTitle').textContent = 'تأكيد العملية';
+  document.getElementById('confirmText').textContent = message;
+  document.getElementById('receipt').innerHTML = `
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-ghost" style="flex:1" onclick="_closeConfirmDialogOnly()">تراجع</button>
+      <button class="btn btn-danger" style="flex:1" onclick="_confirmDialogAccept()">${escapeHtml(confirmLabel || 'تأكيد')}</button>
+    </div>
+  `;
+  const btn = document.querySelector('#mConfirm .btn-brand');
+  if (btn) btn.style.display = 'none';
+  document.getElementById('mConfirm').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+// يقفل نافذة التأكيد فقط، ويبقي أي صفحة تحتها (مثل "حجوزاتي") مفتوحة كما كانت
+function _closeConfirmDialogOnly(){
+  window._pendingConfirmCallback = null;
+  document.getElementById('mConfirm').classList.remove('open');
+  const btn = document.querySelector('#mConfirm .btn-brand');
+  if (btn) btn.style.display = '';
+}
+function _confirmDialogAccept(){
+  const cb = window._pendingConfirmCallback;
+  window._pendingConfirmCallback = null;
+  _closeConfirmDialogOnly();
+  if (typeof cb === 'function') cb();
+}
+function showToast(msg,type='success'){ const t=document.createElement('div'); t.className=`toast ${type}`;
+  t.innerHTML=`<span>${type==='success'?'✅':'⚠️'}</span><span>${msg}</span>`;
+  document.getElementById('toasts').appendChild(t);
+  const duration = type==='error' ? 6500 : 3600; // رسائل الخطأ تبقى أطول عشان يقدر المستخدم يقرأها كاملة
+  setTimeout(()=>t.remove(),duration); }
+
+window.addEventListener('scroll',()=>document.getElementById('nav').classList.toggle('scrolled',window.scrollY>30));
+
+renderActive();
+setTimeout(()=>{ if (typeof initRealMap==='function') initRealMap(); }, 0);
+
+// ── رابط "أكمل القطة" — صفحة عامة بدون حساب ──
+(function checkJoinLink(){
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('join');
+  if (token) setTimeout(()=>openJoinPage(token), 300);
+})();
+
+// ── رابط مشاركة مباشر لصفحة أكاديمية معيّنة (?academy=<id>) — يفتحها تلقائيًا داخل التطبيق فور تحميل بيانات الأكاديميات ──
+// ── رابط التحقق من رمز QR للحجز ──
+(function checkVerifyLinkOnLoad(){
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('verify')) setTimeout(()=>checkVerifyLink(), 300);
+})();
+
+// ── لو صار تحويل خارجي مؤقت (3D Secure) ورجع المستخدم، نكمل التأكيد تلقائيًا ──
+(function checkPaymentConfirmOnLoad(){
+  const params = new URLSearchParams(window.location.search);
+  const paymentRowId = params.get('payment_confirm');
+  const paymentId = params.get('id');
+  if (paymentRowId && paymentId) {
+    setTimeout(async () => {
+      openInfoModal('💳 إتمام الدفع', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحقق من الدفع...</div>');
+      await confirmFormPayment(paymentRowId, paymentId, null);
+    }, 300);
+  }
+})();
+
+async function openJoinPage(token){
+  if (!window.sb) { showToast('الرابط يحتاج اتصال قاعدة بيانات فعّال','error'); return; }
+  document.getElementById('ownerTitle').textContent = '🤝 أكمل القطة';
+  const _lt = delayedLoading('ownerBody');
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+
+  try {
+    const { data, error } = await sb.functions.invoke('share-link-info', { body: { token } });
+    clearTimeout(_lt);
+    if (error || data?.error) {
+      document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">${data?.error || 'تعذّر تحميل الرابط'}</div>`;
+      return;
+    }
+    const pct = Math.min(100, Math.round((data.amount_paid/data.total_price)*100));
+    document.getElementById('ownerBody').innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:800">${data.field_name||'ملعب'}</div>
+        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">${data.facility_name||''} · ${escapeHtml(data.city)||''}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">📅 ${data.date} · ⏱️ ${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</div>
+      </div>
+      <div style="background:var(--bg-soft);border-radius:10px;height:10px;overflow:hidden;margin-bottom:8px">
+        <div style="height:100%;width:${pct}%;background:var(--brand)"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-dim);margin-bottom:18px">
+        <span>تم دفع ${data.amount_paid} ريال</span><span>الإجمالي ${data.total_price} ريال</span>
+      </div>
+      <div class="summary" style="margin-bottom:16px">
+        <div class="srow tot"><span>المبلغ المتبقي</span><span class="amt">${data.remaining} ريال</span></div>
+      </div>
+      <div class="field"><label>اسمك *</label><input id="join-name" type="text" placeholder="اسمك"></div>
+      <div class="field"><label>المبلغ اللي بتدفعه (ريال) *</label><input id="join-amount" type="number" value="${data.remaining}" max="${data.remaining}" min="1"></div>
+      <button class="btn btn-brand btn-block btn-lg" onclick="submitJoinPayment('${token}', ${data.remaining})">💳 ادفع الآن</button>
+    `;
+  } catch(e) {
+    clearTimeout(_lt);
+    document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">تعذّر الاتصال بالخادم</div>';
+  }
+}
+
+async function submitJoinPayment(token, remaining){
+  const name = document.getElementById('join-name').value.trim();
+  const amount = parseFloat(document.getElementById('join-amount').value);
+  if (!name) { showToast('أدخل اسمك','error'); return; }
+  if (!amount || amount <= 0 || amount > remaining + 0.01) { showToast('أدخل مبلغاً صحيحاً لا يتجاوز المتبقي','error'); return; }
+
+  try {
+    const { data: info, error: infoErr } = await sb.functions.invoke('share-link-info', { body: { token } });
+    if (infoErr || info?.error) { showToast(info?.error || 'الرابط لم يعد صالحًا','error'); return; }
+
+    showToast('جارٍ تجهيز نموذج الدفع...');
+    const { data, error } = await sb.functions.invoke('create-payment', {
+      body: { booking_id: info.booking_id, amount, payer_name: name, is_organizer: false }
+    });
+    if (error || data?.error) { showToast(data?.error || 'تعذّر تجهيز الدفع','error'); return; }
+
+    openInfoModal('💳 إتمام الدفع', `
+      <div id="mysrPayWrap">
+        <div style="text-align:center;margin-bottom:12px;padding:8px 12px;background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;font-size:12px;color:var(--warn,#f59e0b);font-weight:700">⏰ هذا الوقت متاح لأي شخص آخر يحاول حجزه الآن — أول من يكمل الدفع فعليًا يفوز بالخانة. أكمل دفعك خلال 30 دقيقة (أو قبل موعد الملعب لو كان أقرب) وإلا يُلغى حجزك تلقائيًا</div>
+        <div class="mysr-form"></div>
+        <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
+      </div>
+    `);
+
+    if (!ensureMoyasarLoaded()) return;
+
+    Moyasar.init({
+      element: '.mysr-form',
+      amount: data.amount_halalas,
+      currency: 'SAR',
+      description: data.description,
+      publishable_api_key: data.publishable_key,
+      callback_url: window.location.origin + '?payment_confirm=' + data.payment_row_id,
+      methods: ['creditcard'],
+      supported_networks: ['mada', 'visa', 'mastercard'],
+      on_completed: async function (payment) {
+        await confirmFormPayment(data.payment_row_id, payment.id, info.booking_id);
+      },
+      on_failure: async function (err) {
+        console.error('Moyasar form failure:', err);
+        document.getElementById('mysrPayWrap').innerHTML = paymentFailureHelpHtml('رقم الحجز', info.booking_id);
+      }
+    });
+  } catch(e) {
+    showToast('تعذّر الاتصال ببوابة الدفع','error');
+  }
+}
+
+// يُستدعى فقط بعد أن نتأكد فعلياً أن لا توجد جلسة نشطة —
+// هذا يمنع "ومضة" ظهور زر الدخول ثم اختفائه عند من هو مسجّل دخول أصلاً
+function renderLoggedOutNav(){
+  const el = document.getElementById('navAuth');
+  el.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="openSidebar()" aria-label="فتح القائمة" style="font-size:18px;padding:6px 12px">☰</button>`;
+  el.style.opacity = '1';
+}
+window.renderLoggedOutNav = renderLoggedOutNav;
+
+const SUPABASE_URL      = 'https://lsgakyydqomzntoebqep.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZ2FreXlkcW9tem50b2VicWVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTkwMDEsImV4cCI6MjA5ODU5NTAwMX0.33DmQ23ab5hw3Y3iGtzXphopVMKmnOnTZZfxhtVZmcM';
+
+const BACKEND_READY =
+  SUPABASE_URL.startsWith('https://') &&
+  !SUPABASE_URL.includes('YOUR_PROJECT') &&
+  !SUPABASE_ANON_KEY.includes('YOUR_ANON');
+
+let sb = null;
+window.sb = null;
+if (BACKEND_READY && window.supabase) {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'malaebna-auth' }
+  });
+  window.sb = sb;
+  console.log('✅ متصل بقاعدة البيانات Supabase');
+  initBackend();
+} else {
+  console.log('ℹ️ الوضع التجريبي — أدخل مفاتيح Supabase لتفعيل الحفظ الدائم');
+  renderLoggedOutNav();
+}
+
+function initBackend() {
+  (async function restoreSession() {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session && session.user) {
+        loggedIn = true;
+        await afterLogin();
+      } else {
+        renderLoggedOutNav();
+      }
+    } catch(e) {
+      console.log('لا توجد جلسة سابقة');
+      renderLoggedOutNav();
+    }
+  })();
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && !window.currentUser && !window._pendingSignup) {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session && session.user) { loggedIn = true; await afterLogin(); }
+      } catch(e){}
+    }
+  });
+
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      window.currentUser = null;
+      loggedIn = false;
+    }
+  });
+
+  function phoneToEmail(phone) {
+    return 'p' + phone + '@malaebna.local';
+  }
+  function isValidSaudiPhone(phone) {
+    return /^05[0-9]{8}$/.test(phone);
+  }
+
+  window.doAuth = async function () {
+    const phone = (document.getElementById('au-phone')?.value || '').trim();
+    const pass  = document.getElementById('au-pass')?.value || '';
+    const name  = (document.getElementById('au-name')?.value || '').trim();
+    const emailInput = (document.getElementById('au-email')?.value || '').trim();
+
+    if (!phone) { showToast('أدخل رقم الجوال','error'); return; }
+    if (!isValidSaudiPhone(phone)) { showToast('رقم الجوال يجب أن يبدأ بـ 05 ويتكوّن من 10 أرقام','error'); return; }
+    if (!pass) { showToast('أدخل كلمة المرور','error'); return; }
+    if (authMode === 'signup' && !document.getElementById('au-terms').checked) {
+      showToast('يجب الموافقة على الشروط والأحكام','error'); return;
+    }
+
+    if (authMode === 'signup') {
+      showToast('جارٍ إرسال رمز التحقق عبر واتساب...');
+      const { data: otpData, error: otpErr } = await sb.functions.invoke('send-otp-whatsapp', { body: { phone, purpose: 'signup' } });
+      if (otpErr || otpData?.error) { showToast(otpData?.error || 'تعذّر إرسال رمز التحقق', 'error'); return; }
+
+      window._pendingSignup = { phone, pass, name, emailInput, chosenRole: (selectedRole === 'owner') ? 'owner' : 'customer' };
+      showPhoneVerificationScreen(phone);
+      return;
+    } else {
+      const loginEmail = phoneToEmail(phone);
+
+      // نتحقق أولًا: هل تجاوز هذا الحساب الحد المسموح من محاولات الدخول الفاشلة خلال آخر 15 دقيقة؟ (حماية من هجمات Brute Force)
+      const { data: rateCheck } = await sb.rpc('check_login_rate_limit', { p_email: loginEmail });
+      if (rateCheck && !rateCheck.allowed) { showToast(rateCheck.message, 'error'); return; }
+
+      let { data, error } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
+
+      if (error && emailInput) {
+        ({ data, error } = await sb.auth.signInWithPassword({ email: emailInput, password: pass }));
+      }
+
+      // نسجّل نتيجة المحاولة دائمًا (ناجحة أو فاشلة) — يبني عليها الفحص القادم
+      try { await sb.rpc('log_login_attempt', { p_email: loginEmail, p_success: !error }); } catch(e){}
+
+      if (error) { showToast('رقم الجوال أو كلمة المرور غير صحيحة','error'); return; }
+
+      loggedIn = true;
+      showToast('تم تسجيل الدخول ✓');
+      await afterLogin();
+    }
+  };
+
+  // ── شاشة التحقق من رمز الواتساب المُرسل عند التسجيل — تُعرض بنافذة منفصلة حتى لا تتلف نموذج الدخول/التسجيل الأصلي ──
+  function showPhoneVerificationScreen(phone){
+    closeAll();
+    document.querySelector('#mConfirm .micon').textContent = '📱';
+    document.getElementById('confirmTitle').textContent = 'تحقق من رقم جوالك';
+    document.getElementById('confirmText').textContent = `أرسلنا رمز تحقق مكوّن من 6 أرقام عبر واتساب إلى ${phone}`;
+    document.getElementById('receipt').innerHTML = `
+      <div class="field"><label>رمز التحقق</label><input id="otp-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="text-align:center;font-size:22px;letter-spacing:6px;width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit"></div>
+      <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="completeSignupAfterVerification()">تأكيد</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="resendSignupOtp()">لم يصلك الرمز؟ إعادة الإرسال</button>
+    `;
+    const btn = document.querySelector('#mConfirm .btn-brand');
+    if (btn) btn.style.display = 'none';
+    document.getElementById('mConfirm').classList.add('open');
+    document.getElementById('ov').classList.add('open');
+  }
+
+  window.resendSignupOtp = async function(){
+    const phone = window._pendingSignup?.phone;
+    if (!phone) return;
+    showToast('جارٍ إعادة الإرسال...');
+    const { data, error } = await sb.functions.invoke('send-otp-whatsapp', { body: { phone, purpose: 'signup' } });
+    if (error || data?.error) { showToast(data?.error || 'تعذّر إعادة الإرسال — انتظر دقيقة وحاول مجددًا', 'error'); return; }
+    showToast('تم إرسال رمز جديد ✓');
+  };
+
+  window.completeSignupAfterVerification = async function(){
+    const code = document.getElementById('otp-code-input')?.value.trim();
+    const pending = window._pendingSignup;
+    if (!pending) { showToast('انتهت الجلسة — ابدأ التسجيل من جديد','error'); authTab('signup'); return; }
+    if (!code || code.length !== 6) { showToast('أدخل الرمز المكوّن من 6 أرقام','error'); return; }
+
+    showToast('جارٍ التحقق...');
+    const { data: verifyData, error: verifyErr } = await sb.functions.invoke('verify-otp-whatsapp', { body: { phone: pending.phone, code } });
+    if (verifyErr || verifyData?.error) { showToast(verifyData?.error || 'الرمز غير صحيح', 'error'); return; }
+
+    const { phone, pass, name, emailInput, chosenRole } = pending;
+    const loginEmail = emailInput || phoneToEmail(phone);
+    const { data, error } = await sb.auth.signUp({
+      email: loginEmail,
+      password: pass,
+      options: { data: { name, phone, real_email: emailInput || null, role: chosenRole } }
+    });
+    if (error) { showToast(translateErr(error.message),'error'); return; }
+
+    if (data.user) {
+    await sb.functions.invoke('confirm-user-email', { body: { user_id: data.user.id } });
+      await sb.from('profiles').update({ phone, name, role: chosenRole }).eq('id', data.user.id);
+    }
+    window._pendingSignup = null;
+    const brandBtn = document.querySelector('#mConfirm .btn-brand');
+    if (brandBtn) brandBtn.style.display = '';
+    loggedIn = true;
+    if (chosenRole === 'owner') {
+      showToast('تم إنشاء حساب صاحب الملعب ✓ (بانتظار تفعيل الإدارة)');
+    } else {
+      showToast('تم إنشاء حسابك ✓');
+    }
+    await afterLogin();
+  };
+
+  async function afterLogin() {
+    closeAll();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+
+    const { data: profile } = await sb
+      .from('profiles').select('name, role, phone, avatar_url').eq('id', user.id).single();
+
+    const name = profile?.name || user.user_metadata?.name || 'مستخدم';
+    let role = profile?.role || 'customer';
+    const initial = name.trim().charAt(0) || 'م';
+
+    // تحقق إذا كان المستخدم موظفاً مضافاً من صاحب ملعب (حتى لو حسابه الأساسي "لاعب")
+    let isStaffMember = false;
+    let staffPermissions = [];
+    try {
+      const { data: staffRows, count } = await sb.from('facility_staff').select('permissions', { count:'exact' }).eq('user_id', user.id);
+      isStaffMember = (count||0) > 0;
+      staffPermissions = [...new Set((staffRows||[]).flatMap(r => r.permissions||[]))];
+    } catch(e){}
+    if (isStaffMember && role === 'customer') role = 'staff';
+
+    window.currentUser = { id: user.id, name, role, phone: profile?.phone || '', initial, isStaffMember, staffPermissions, avatarUrl: profile?.avatar_url || null };
+
+    let roleBadge = '';
+    if (role === 'super_admin') roleBadge = '<span style="font-size:10px;color:var(--flood);font-weight:700">🛡️ مالك</span>';
+    else if (role === 'owner' || role === 'staff') roleBadge = '<span style="font-size:10px;color:var(--brand);font-weight:700">🏟️ صاحب ملعب</span>';
+
+    document.getElementById('navAuth').innerHTML = `
+      <div class="nav-user" onclick="openSidebar()" role="button" tabindex="0" aria-label="فتح القائمة الجانبية" style="cursor:pointer;position:relative">
+        <div style="position:relative">${avatarHtml(profile?.avatar_url, initial, 'position:relative')}<span id="navNotifDot" style="display:none;position:absolute;top:-2px;left:-2px;width:9px;height:9px;border-radius:50%;background:var(--danger);border:1.5px solid var(--bg);z-index:2"></span></div>
+        <span style="margin-right:4px">☰</span>
+      </div>`;
+    document.getElementById('navAuth').style.opacity = '1';
+
+    if (role === 'super_admin') showToast('مرحباً بك أيها المالك 🛡️');
+    else if (role === 'owner' || role === 'staff') showToast('مرحباً 🏟️');
+
+    // إشعارات لحظية حقيقية (Realtime) لكل الأدوار — كان يقتصر خطأً على المالك وصاحب الملعب فقط
+    startNotificationsWatch(user.id);
+  }
+  window.afterLogin = afterLogin;
+
+  window.forgotPassword = async function () {
+    const phone = (document.getElementById('au-phone')?.value || '').trim();
+    const emailInput = (document.getElementById('au-email')?.value || '').trim();
+
+    let email = emailInput;
+    if (!email && phone && isValidSaudiPhone(phone)) {
+      email = phoneToEmail(phone);
+    }
+    if (!email) {
+      showToast('أدخل رقم جوالك أولاً في الخانة أعلاه','error'); return;
+    }
+    if (email.endsWith('@malaebna.local')) {
+      showToast('حسابك مسجّل بالجوال فقط. تواصل مع الدعم لاستعادة كلمة المرور','error');
+      return;
+    }
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    if (error) { showToast('تعذّر الإرسال: ' + error.message,'error'); return; }
+    showToast('تم إرسال رابط استعادة كلمة المرور لبريدك ✓');
+  };
+
+  window.proceed = async function () {
+    if (!loggedIn) { showToast('سجّل الدخول أولاً','error'); closeDrawer(); openAuth('login'); return; }
+
+    if (activeType === 'stadiums') {
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); openAuth('login'); return; }
+
+      const today = riyadhNow(); today.setUTCDate(today.getUTCDate() + selDate);
+      const dateStr = today.toISOString().split('T')[0];
+      const basePrice = window.effectivePrice != null ? window.effectivePrice : active.price;
+      const totalPrice = (appliedCoupon && finalBookingPrice!=null) ? finalBookingPrice : basePrice;
+      const isSplit = bookingMode === 'split';
+      const myShareAmount = isSplit ? Math.round((totalPrice/playerCount)*100)/100 : totalPrice;
+      const openForJoin = isSplit && !!document.getElementById('open-for-join')?.checked;
+
+      const insertPayload = {
+        user_id: user.id,
+        field_id: active.id,
+        booking_date: dateStr,
+        start_time: selSlot,
+        // نستخدم 23:59 بدل 24:00 لخانة الساعة الأخيرة باليوم — '24:00' قيمة غير صالحة منطقيًا تسبب فشل مقارنات التاريخ/الوقت اللي تعتمد على "نفس اليوم التقويمي"
+        end_time: (parseInt(selSlot) === 23 ? '23:59' : (parseInt(selSlot)+1)+':00'),
+        players_count: playerCount,
+        total_price: totalPrice,
+        status: 'pending',
+        is_split: isSplit,
+        is_open_for_join: openForJoin,
+        payment_status: 'unpaid'
+      };
+      // نترك share_link_token فارغًا هنا عمدًا — قاعدة البيانات تولّده تلقائيًا بعشوائية آمنة تشفيريًا (gen_random_bytes) عبر DEFAULT العمود، بدل توليده بجافاسكربت بالمتصفح
+
+      const { data: newBooking, error } = await sb.from('bookings').insert(insertPayload).select().single();
+
+      if (error) {
+        if (error.message.includes('BOOKING_CONFLICT')) {
+          showToast('عذراً، أكمل شخص آخر دفع هذا الوقت بالكامل قبلك. اختر وقتاً آخر','error'); return;
+        }
+        if (error.message.includes('FIELD_UNAVAILABLE')) {
+          showToast('الملعب مغلق أو تحت الصيانة','error'); return;
+        }
+        if (error.message.includes('foreign key') || error.code === '23503') {
+          showToast('أضف الملاعب لقاعدة البيانات أولاً (راجع الدليل)','error'); return;
+        }
+        showToast('تعذّر الحجز: ' + error.message,'error'); return;
+      }
+
+      if (appliedCoupon) {
+        try { await sb.from('coupons').update({ used_count: appliedCoupon.used_count + 1 }).eq('id', appliedCoupon.id); } catch(e){}
+      }
+
+      try {
+        const { data: fieldInfo } = await sb.from('fields')
+          .select('name, facilities(owner_id)').eq('id', active.id).single();
+        const ownerId = fieldInfo?.facilities?.owner_id;
+        if (ownerId) {
+          await sb.rpc('send_notification', {
+            p_user_id: ownerId, p_title: 'حجز جديد (بانتظار الدفع) 📅',
+            p_body: `حجز جديد في ${escapeHtml(fieldInfo.name)} بتاريخ ${dateStr} الساعة ${selSlot}`
+          });
+        }
+      } catch(e){}
+
+      await startRealPayment(newBooking.id, myShareAmount, true, user.user_metadata?.name || 'اللاعب', newBooking.share_link_token);
+      return;
+    }
+  };
+
+  // ── يبدأ عملية دفع إلكتروني حقيقية عبر Moyasar، ويحوّل المستخدم لصفحة الدفع ──
+  async function startRealPayment(bookingId, amount, isOrganizer, payerName, shareToken) {
+    showToast('جارٍ تجهيز نموذج الدفع...');
+    try {
+      const { data, error } = await sb.functions.invoke('create-payment', {
+        body: { booking_id: bookingId, amount, payer_name: payerName, is_organizer: isOrganizer }
+      });
+      if (error || data?.error) {
+        showToast((data?.error || 'تعذّر تجهيز الدفع') + ' — راجع لوحة المالك لتفعيل بوابة الدفع', 'error');
+        closeAll();
+        return;
+      }
+      if (shareToken) {
+        try { await navigator.clipboard.writeText(window.location.origin + '?join=' + shareToken); } catch(e){}
+        showToast('تم نسخ رابط إكمال القطة ✓ شاركه بعد إتمام دفعتك');
+      }
+
+      openInfoModal('💳 إتمام الدفع', `
+        <div id="mysrPayWrap">
+          <div style="text-align:center;margin-bottom:12px;padding:8px 12px;background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;font-size:12px;color:var(--warn,#f59e0b);font-weight:700">⏰ هذا الوقت متاح لأي شخص آخر يحاول حجزه الآن — أول من يكمل الدفع فعليًا يفوز بالخانة. أكمل دفعك خلال 30 دقيقة (أو قبل موعد الملعب لو كان أقرب) وإلا يُلغى حجزك تلقائيًا</div>
+          <div class="mysr-form"></div>
+          <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
+        </div>
+      `);
+      if (!ensureMoyasarLoaded()) return;
+
+      Moyasar.init({
+        element: '.mysr-form',
+        amount: data.amount_halalas,
+        currency: 'SAR',
+        description: data.description,
+        publishable_api_key: data.publishable_key,
+        callback_url: window.location.origin + '?payment_confirm=' + data.payment_row_id,
+        methods: ['creditcard'],
+        supported_networks: ['mada', 'visa', 'mastercard'],
+        on_completed: async function (payment) {
+          await confirmFormPayment(data.payment_row_id, payment.id, bookingId);
+        },
+        on_failure: async function (err) {
+          // بدون هذا الاستدعاء، أي فشل بتحميل نموذج الدفع نفسه (مو استدعاء create-payment) كان يترك منطقة الدفع فارغة بصمت بدون أي رسالة توضح للمستخدم إنه فيه مشكلة
+          console.error('Moyasar form failure:', err);
+          document.getElementById('mysrPayWrap').innerHTML = paymentFailureHelpHtml('رقم الحجز', bookingId);
+        }
+      });
+    } catch(e) {
+      showToast('تعذّر الاتصال ببوابة الدفع','error');
+      closeAll();
+    }
+  }
+  window.startRealPayment = startRealPayment;
+
+  // ── نتأكد من تحميل مكتبة Moyasar فعليًا قبل محاولة استخدامها — لو فشل تحميل السكربت من الـCDN (حجب إعلانات، بطء شبكة)، نعرض رسالة واضحة فورًا بدل صمت تام ──
+  function ensureMoyasarLoaded() {
+    if (typeof Moyasar === 'undefined') {
+      showToast('تعذّر تحميل بوابة الدفع — تأكد من اتصالك بالإنترنت أو عطّل حاجب الإعلانات وأعد المحاولة', 'error');
+      closeAll();
+      return false;
+    }
+    return true;
+  }
+  window.ensureMoyasarLoaded = ensureMoyasarLoaded;
+
+  async function confirmFormPayment(paymentRowId, paymentId, bookingId, attempt) {
+    attempt = attempt || 1;
+    // ننظّف رابط المتصفح فورًا من معاملات الدفع المؤقتة — ما نخلي شريط العنوان عالق على رابط معاملة
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('payment_confirm') || params.has('id')) {
+      history.replaceState(null, '', window.location.origin + window.location.pathname);
+    }
+    document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع...</div>';
+    try {
+      const { data, error } = await sb.functions.invoke('confirm-form-payment', {
+        body: { payment_row_id: paymentRowId, payment_id: paymentId }
+      });
+      // حالة "قيد المعالجة" (لسا initiated/authorized عند ميسر): نعيد المحاولة بصمت، بدون أي رسالة فشل مؤقتة مضلّلة
+      const isPending = data?.pending === true;
+      if ((error || data?.error) && (isPending || attempt < 4)) {
+        document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ تأكيد الدفع... (قد يستغرق بضع ثوانٍ)</div>';
+        setTimeout(() => confirmFormPayment(paymentRowId, paymentId, bookingId, attempt + 1), 2000);
+        return;
+      }
+      if (error || data?.error) {
+        document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('رقم الحجز', '#' + bookingId);
+        return;
+      }
+      document.getElementById('ownerBody').innerHTML = `
+        <div style="text-align:center;padding:20px">
+          <div style="font-size:44px">✅</div>
+          <div style="font-weight:800;font-size:16px;margin-top:8px">${data.fully_paid ? 'تم تأكيد حجزك بنجاح!' : 'تم استلام دفعتك ✓'}</div>
+        </div>
+        <button class="btn btn-brand btn-block" onclick="closeAll(); showMyBookings(${data.booking_id || bookingId || ''});">عرض حجوزاتي</button>
+      `;
+    } catch(e) {
+      if (attempt < 4) {
+        setTimeout(() => confirmFormPayment(paymentRowId, paymentId, bookingId, attempt + 1), 2000);
+        return;
+      }
+      document.getElementById('ownerBody').innerHTML = paymentFailureHelpHtml('رقم الحجز', '#' + bookingId);
+    }
+  }
+  window.confirmFormPayment = confirmFormPayment;
+
+  loadRealFields();
+  async function loadRealFields() {
+    initRealMap();
+    const { data, error } = await sb
+      .from('fields')
+      .select('id, name, type, price_per_hour, image_url, amenities, facilities!inner(name, city, district, region, lat, lng, approved)')
+      .eq('status', 'available')
+      .eq('is_deleted', false)
+      .eq('facilities.approved', true);
+    if (error || !data || data.length === 0) {
+      console.log('ℹ️ لا توجد ملاعب في قاعدة البيانات بعد — عرض البيانات التجريبية');
+      document.getElementById('mapEmptyState').style.display = 'flex';
+      loadRealTrustStats();
+      return;
+    }
+
+    // اجلب متوسط التقييمات الحقيقية لكل الملاعب بضربة واحدة
+    let ratingsByField = {};
+    try {
+      const { data: reviewRows } = await sb.from('reviews').select('field_id, rating');
+      (reviewRows||[]).forEach(r => {
+        if (!ratingsByField[r.field_id]) ratingsByField[r.field_id] = { sum:0, count:0 };
+        ratingsByField[r.field_id].sum += r.rating;
+        ratingsByField[r.field_id].count += 1;
+      });
+    } catch(e){}
+
+    // اجلب معرض الصور لكل الملاعب بضربة واحدة (مرتبة حسب sort_order، والغلاف أولًا)
+    let imagesByField = {};
+    try {
+      const { data: imgRows } = await sb.from('field_images').select('field_id, image_url, is_cover').order('sort_order');
+      (imgRows||[]).forEach(img => {
+        if (!imagesByField[img.field_id]) imagesByField[img.field_id] = [];
+        imagesByField[img.field_id].push(img.image_url);
+      });
+    } catch(e){}
+
+    DATA.stadiums = data.map(f => {
+      const rv = ratingsByField[f.id];
+      return {
+        id: f.id,
+        name: f.name,
+        region: f.facilities.region || f.facilities.district || f.facilities.city,
+        city: f.facilities.city || f.facilities.district,
+        loc: f.facilities.district || f.facilities.city,
+        price: Number(f.price_per_hour),
+        lat: f.facilities.lat!=null ? Number(f.facilities.lat) : null,
+        lng: f.facilities.lng!=null ? Number(f.facilities.lng) : null,
+        rating: rv ? Math.round((rv.sum/rv.count)*10)/10 : 0,
+        reviewCount: rv ? rv.count : 0,
+        tags: [f.type === 'natural' ? 'عشب طبيعي' : f.type === 'indoor' ? 'مغلق' : 'عشب صناعي'],
+        icon: '🏟️',
+        image: f.image_url || null,
+        images: (imagesByField[f.id] && imagesByField[f.id].length) ? imagesByField[f.id] : (f.image_url ? [f.image_url] : []),
+        amenities: f.amenities || []
+      };
+    });
+    if (currentMod === 'stadiums') renderActive();
+    console.log(`✅ تم تحميل ${data.length} ملعب من قاعدة البيانات`);
+    renderMapMarkers();
+    loadRealTrustStats();
+    loadRealStarOfWeek();
+  }
+  window.loadRealFields = loadRealFields;
+}
+
+// ── تحميل الأكاديميات الحقيقية (تحل محل القائمة التجريبية) ──
+
+// ── تحميل البطولات الحقيقية (تحل محل القائمة التجريبية) ──
+
+function openSidebar() {
+  const u = window.currentUser;
+  const isOwnerOrAdmin = u && (u.role === 'owner' || u.role === 'staff' || u.role === 'super_admin');
+
+  if (!u) {
+    document.getElementById('sidebarContent').innerHTML = `
+      <div class="side-links">
+        <a class="side-link" onclick="sideGo('do-login')"><span class="si">🔑</span> تسجيل الدخول</a>
+        <div class="side-sep"></div>
+        <a class="side-link" onclick="sideGo('help')"><span class="si">🛟</span> مركز المساعدة</a>
+        <a class="side-link" onclick="sideGo('contact')"><span class="si">✉️</span> تواصل معنا</a>
+        <a class="side-link" onclick="sideGo('about')"><span class="si">ℹ️</span> عن الموقع</a>
+        <a class="side-link" onclick="sideGo('terms')"><span class="si">📄</span> الشروط والأحكام</a>
+      </div>`;
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('ov').classList.add('open');
+    return;
+  }
+
+  document.getElementById('sidebarContent').innerHTML = `
+    <div class="side-head">
+      ${avatarHtml(u.avatarUrl, u.initial, 'width:52px;height:52px;font-size:22px')}
+      <div>
+        <div style="font-size:16px;font-weight:800">${escapeHtml(u.name)}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(u.phone) || ''}</div>
+      </div>
+    </div>
+    <div class="side-links">
+      <a class="side-link" onclick="sideGo('profile')"><span class="si">👤</span> الملف الشخصي</a>
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('admin-panel')"><span class="si">🛡️</span> لوحة التحكم</a>` : ''}
+      ${isOwnerOrAdmin && u.role!=='super_admin' ? `
+        <a class="side-link" onclick="sideGo('owner-fields')"><span class="si">🏟️</span> الملاعب</a>
+      ` : ''}
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('seo')"><span class="si">📈</span> صحة السيو</a>` : ''}
+      ${u.role==='super_admin' ? `<a class="side-link" onclick="sideGo('analytics')"><span class="si">📊</span> إحصائيات الموقع</a>` : ''}
+      <a class="side-link" onclick="sideGo('notifications')"><span class="si">🔔</span> التنبيهات <span id="sideNotifBadge" class="side-badge" style="display:none">0</span></a>
+      <a class="side-link" onclick="sideGo('bookings')"><span class="si">🎽</span> ${isOwnerOrAdmin ? 'حجوزاتي كلاعب' : 'حجوزاتي'}</a>
+      <a class="side-link" onclick="sideGo('favorites')"><span class="si">⭐</span> ملاعبي المفضّلة</a>
+      <a class="side-link" onclick="sideGo('lookup')"><span class="si">🔍</span> استعلام عن حجز</a>
+      <div class="side-sep"></div>
+      <a class="side-link" onclick="sideGo('share')"><span class="si">📤</span> مشاركة الموقع</a>
+      <a class="side-link" onclick="sideGo('help')"><span class="si">🛟</span> مركز المساعدة</a>
+      <a class="side-link" onclick="sideGo('contact')"><span class="si">✉️</span> تواصل معنا</a>
+      <a class="side-link" onclick="sideGo('about')"><span class="si">ℹ️</span> عن الموقع</a>
+      <a class="side-link" onclick="sideGo('terms')"><span class="si">📄</span> الشروط والأحكام</a>
+      <div class="side-sep"></div>
+      <a class="side-link" onclick="sideGo('logout')" style="color:var(--danger)"><span class="si">🚪</span> تسجيل الخروج</a>
+    </div>`;
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+  refreshSideNotifBadge();
+}
+function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('ov').classList.remove('open'); }
+
+async function sideGo(where) {
+  closeSidebar();
+  switch(where) {
+    case 'do-login':         openAuth('login'); break;
+    case 'profile':       showProfile(); break;
+    case 'bookings':      playerGoTab('bookings'); break;
+    case 'favorites':     playerGoTab('favorites'); break;
+    case 'lookup':        playerGoTab('lookup'); break;
+    case 'notifications': showNotifications(); break;
+    case 'admin-panel':   openOwnerPanel('admin'); break;
+    case 'owner-fields':      ownerGoTab('fields', true); break;
+    case 'share':         shareSite(); break;
+    case 'help':           showHelpCenter(); break;
+    case 'seo':             showSeoHealth(); break;
+    case 'analytics':       showSiteAnalytics(); break;
+    case 'contact':       showContact(); break;
+    case 'about':         showAbout(); break;
+    case 'terms':         openLegal('terms'); break;
+    case 'logout':        doLogout(); break;
+  }
+}
+
+function openInfoModal(title, html) {
+  document.getElementById('ownerTitle').textContent = title;
+  document.getElementById('ownerBody').innerHTML = html;
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+
+function showProfile() {
+  const u = window.currentUser;
+  openInfoModal('👤 الملف الشخصي', `
+    <div style="text-align:center;margin-bottom:16px">
+      <div id="profileAvatarBox">${avatarHtml(u.avatarUrl, u.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto')}</div>
+    </div>
+    <div class="dlabel" style="justify-content:center">🖼️ الصورة الرمزية</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">
+      <button class="btn btn-soft btn-sm" onclick="setDefaultAvatar('default:male')">👨 افتراضية (ذكر)</button>
+      <button class="btn btn-soft btn-sm" onclick="setDefaultAvatar('default:female')">👩 افتراضية (أنثى)</button>
+    </div>
+    <label class="btn btn-ghost btn-block btn-sm" style="cursor:pointer;display:block;text-align:center">
+      📷 ارفع صورتك الشخصية
+      <input id="avatar-upload-input" type="file" accept="image/*" style="display:none" onchange="uploadPersonalAvatar(this)">
+    </label>
+
+    <div class="dlabel" style="margin-top:18px">✏️ بياناتك</div>
+    <div class="field"><label>الاسم</label><input id="profile-name-input" type="text" value="${escapeHtml(u.name)}" placeholder="اسمك الكامل"></div>
+    <div class="field">
+      <label>رقم الجوال</label>
+      <input type="text" value="${escapeHtml(u.phone)||'—'}" disabled style="opacity:.6;cursor:not-allowed">
+      <div class="legal-note" style="margin-top:4px">🔒 تغيير رقم الجوال سيكون متاحًا قريبًا عبر رمز تحقق (OTP)</div>
+    </div>
+    <button class="btn btn-brand btn-block" onclick="saveProfileName()">💾 حفظ التغييرات</button>
+
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px">
+      <div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--ink-dim)">نوع الحساب</span><b>${u.role==='super_admin'?'🛡️ مالك':u.role==='owner'?'🏟️ صاحب ملعب':'⚽ لاعب'}</b></div>
+    </div>`);
+}
+
+async function saveProfileName(){
+  const newName = document.getElementById('profile-name-input').value.trim();
+  if (!newName) { showToast('أدخل اسمًا صحيحًا','error'); return; }
+  const { error } = await sb.from('profiles').update({ name: newName }).eq('id', window.currentUser.id);
+  if (error) { showToast('تعذّر الحفظ: ' + error.message, 'error'); return; }
+  window.currentUser.name = newName;
+  showToast('تم حفظ التغييرات ✓');
+  if (typeof afterLogin === 'function') afterLogin();
+}
+
+async function setDefaultAvatar(kind){
+  const { error } = await sb.from('profiles').update({ avatar_url: kind }).eq('id', window.currentUser.id);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  window.currentUser.avatarUrl = kind;
+  document.getElementById('profileAvatarBox').innerHTML = avatarHtml(kind, window.currentUser.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto');
+  showToast('تم تحديث الصورة الرمزية ✓');
+  if (typeof afterLogin === 'function') afterLogin();
+}
+
+async function uploadPersonalAvatar(input){
+  const file = input.files?.[0];
+  if (!file) return;
+  showToast('جارٍ رفع الصورة...');
+  try {
+    const base64 = await fileToBase64(file);
+    const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
+    if (upErr || !uploadRes?.url) { showToast('تعذّر رفع الصورة: ' + (uploadRes?.error||'خطأ غير معروف'), 'error'); return; }
+    const { error } = await sb.from('profiles').update({ avatar_url: uploadRes.url }).eq('id', window.currentUser.id);
+    if (error) { showToast('تعذّر الحفظ: ' + error.message, 'error'); return; }
+    window.currentUser.avatarUrl = uploadRes.url;
+    document.getElementById('profileAvatarBox').innerHTML = avatarHtml(uploadRes.url, window.currentUser.initial, 'width:70px;height:70px;font-size:30px;margin:0 auto');
+    showToast('تم تحديث صورتك الشخصية ✓');
+    if (typeof afterLogin === 'function') afterLogin();
+  } catch(e) { showToast('تعذّر رفع الصورة', 'error'); }
+}
+
+// ملاحظة: showMyBookings/showMyRegistrations/showBookingLookup أصبحت أغلفة رقيقة (wrappers)
+// تفتح لوحة اللاعب الموحّدة الجديدة (playerGoTab) بدل المودال المستقل القديم — للحفاظ على توافق كل نقاط الاستدعاء القديمة.
+async function showMyBookings(highlightBookingId) {
+  await playerGoTab('bookings', highlightBookingId);
+}
+
+function shareBookingLink(token){
+  const url = window.location.origin + '?join=' + token;
+  if (navigator.share) { navigator.share({ title:'أكمل القطة', text:'ساعدني أكمل مبلغ حجز الملعب', url }).catch(()=>{}); }
+  else { navigator.clipboard.writeText(url).then(()=>showToast('تم نسخ الرابط ✓')).catch(()=>showToast(url)); }
+}
+
+// ── يكمل دفع حجز موجود مسبقًا لم يكتمل دفعه بعد — يجيب المتبقي الفعلي من قاعدة البيانات ويفتح نموذج الدفع المضمّن مباشرة ──
+async function resumeBookingPayment(bookingId){
+  showToast('جارٍ تجهيز نموذج الدفع...');
+  const { data: bk, error } = await sb.from('bookings').select('total_price, amount_paid, status').eq('id', bookingId).single();
+  if (error || !bk) { showToast('تعذّر تحميل بيانات الحجز','error'); return; }
+  if (bk.status !== 'pending') { showToast('هذا الحجز لم يعد بانتظار الدفع','error'); showMyBookings(); return; }
+  const remaining = Math.round((Number(bk.total_price) - Number(bk.amount_paid)) * 100) / 100;
+  if (remaining <= 0) { showToast('لا يوجد مبلغ متبقٍ على هذا الحجز','error'); showMyBookings(); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  await startRealPayment(bookingId, remaining, true, user?.user_metadata?.name || 'اللاعب', null);
+}
+
+// ── تقييم الملعب بعد اكتمال الحجز ──
+function openRateBooking(bookingId, fieldId) {
+  window._rateStars = 5;
+  openInfoModal('⭐ قيّم تجربتك', `
+    <div style="text-align:center;margin-bottom:16px">
+      <div id="starPicker" role="radiogroup" aria-label="تقييم من 5 نجوم" style="font-size:32px;letter-spacing:6px;cursor:pointer">★★★★★</div>
+      <div style="font-size:12px;color:var(--ink-dim);margin-top:6px">اضغط على النجوم لاختيار تقييمك</div>
+    </div>
+    <div class="field"><label>تعليقك (اختياري)</label><input id="rv-comment" type="text" placeholder="كيف كانت تجربتك في الملعب؟"></div>
+    <button class="btn btn-brand btn-block" onclick="submitReview(${bookingId},${fieldId})">إرسال التقييم</button>
+  `);
+  setupStarPicker();
+}
+function setupStarPicker(){
+  const el = document.getElementById('starPicker');
+  const paint = n => { el.textContent = '★★★★★'.slice(0,n) + '☆☆☆☆☆'.slice(0, 5-n); };
+  paint(5);
+  el.onclick = (e) => {
+    const rect = el.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const n = Math.max(1, Math.min(5, Math.ceil(ratio*5)));
+    window._rateStars = n; paint(n);
+  };
+}
+// ── عرض التقييمات الحقيقية لملعب عند الضغط على شارة التقييم ──
+async function showItemReviews(kind, itemId){
+  openInfoModal('⭐ التقييمات', '');
+  if (!window.sb) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--ink-dim);padding:14px">يتطلب اتصال قاعدة بيانات</div>'; return; }
+  const _lt = delayedLoading('ownerBody');
+  const { data, error } = await sb.from('reviews').select('rating, comment, created_at, owner_reply, owner_reply_at, profiles(name)').eq('field_id', itemId).order('created_at', { ascending:false });
+  clearTimeout(_lt);
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
+
+  const avg = Math.round((data.reduce((s,r)=>s+r.rating,0)/data.length)*10)/10;
+  document.getElementById('ownerBody').innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:28px;font-weight:900;color:var(--flood)">${avg} ⭐</div>
+      <div style="font-size:12px;color:var(--ink-dim)">${data.length} تقييم</div>
+    </div>
+    ${data.map(r=>`
+      <div style="padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:13px">${escapeHtml(r.profiles?.name) || 'لاعب'}</b>
+          <span style="color:var(--flood);font-size:13px">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
+        </div>
+        ${r.comment ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">${escapeHtml(r.comment)}</div>` : ''}
+        <div style="font-size:10.5px;color:var(--ink-dim);margin-top:6px">${new Date(r.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}</div>
+        ${r.owner_reply ? `
+          <div style="margin-top:8px;padding:9px;background:var(--bg-elev);border-radius:8px;border-right:3px solid var(--brand)">
+            <div style="font-size:10.5px;color:var(--brand);font-weight:700;margin-bottom:2px">رد صاحب الملعب</div>
+            <div style="font-size:12px;color:var(--ink-soft)">${escapeHtml(r.owner_reply)}</div>
+          </div>` : ''}
+      </div>`).join('')}
+  `;
+}
+
+// ── عرض رمز QR لتأكيد الحضور — صاحب الملعب يصوّره بكاميرا جواله العادية ──
+function showBookingQR(bookingId, token){
+  const verifyUrl = `https://malaebnaa.com/?verify=${token}`;
+  const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(verifyUrl)}`;
+  openInfoModal('📱 رمز الدخول', `
+    <div style="text-align:center;padding:10px">
+      <img src="${qrImg}" alt="رمز QR للحجز" style="width:220px;height:220px;border-radius:12px;border:1px solid var(--line);margin-bottom:14px">
+      <div style="font-size:13px;color:var(--ink-soft)">وريه لصاحب الملعب عند الوصول — يصوّره بكاميرا جواله العادية ويتأكد من حجزك فورًا.</div>
+    </div>`);
+}
+
+// ── صفحة التحقق من رمز QR (تفتح تلقائيًا لو الرابط فيه ?verify=) ──
+async function checkVerifyLink(){
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('verify');
+  if (!token) return;
+
+  openInfoModal('🔍 التحقق من الحجز', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحقق...</div>');
+  const { data, error } = await sb.rpc('get_booking_by_token', { p_token: token });
+  const b = data && data[0];
+  if (error || !b) {
+    document.getElementById('ownerBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">رمز غير صحيح أو الحجز غير موجود</div>';
+    return;
+  }
+
+  const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+
+  document.getElementById('ownerBody').innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:34px">${b.checked_in ? '✅' : '🎫'}</div>
+      <div style="font-size:18px;font-weight:900;margin-top:6px">${escapeHtml(b.field_name)}</div>
+      <div style="font-size:12.5px;color:var(--ink-dim)">${escapeHtml(b.facility_name)}</div>
+    </div>
+    <div class="summary" style="margin-bottom:16px">
+      <div class="srow"><span>اللاعب</span><span>${escapeHtml(b.player_name)}</span></div>
+      <div class="srow"><span>التاريخ</span><span>${b.booking_date}</span></div>
+      <div class="srow"><span>الوقت</span><span>${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</span></div>
+      <div class="srow"><span>عدد اللاعبين</span><span>${b.players_count}</span></div>
+      <div class="srow tot"><span>حالة الحجز</span><span class="amt">${bookingStatusLabel(b, statusMap)}</span></div>
+    </div>
+    ${b.checked_in
+      ? `<div class="legal-note">✅ تم تسجيل حضور هذا الحجز مسبقًا بتاريخ ${new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn')}</div>`
+      : (b.status==='confirmed'
+        ? `<button class="btn btn-brand btn-block" onclick="confirmCheckin(${b.id})">✅ تأكيد الحضور الآن</button>`
+        : `<div class="legal-note">⚠️ هذا الحجز مو مؤكد بعد — ما يمكن تسجيل الحضور له</div>`)}
+  `;
+}
+async function confirmCheckin(bookingId){
+  const { data, error } = await sb.from('bookings').update({ checked_in: true, checked_in_at: new Date().toISOString() }).eq('id', bookingId).select();
+  if (error || !data || !data.length) { showToast('ما عندك صلاحية تأكيد هذا الحجز — بس صاحب الملعب أو موظفه يقدر','error'); return; }
+  showToast('تم تأكيد الحضور ✓');
+  checkVerifyLink();
+}
+
+async function submitReview(bookingId, fieldId) {
+  const comment = document.getElementById('rv-comment').value.trim();
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('reviews').insert({
+    booking_id: bookingId, field_id: fieldId, user_id: user.id,
+    rating: window._rateStars || 5, comment: comment || null
+  });
+  if (error) { showToast('تعذّر إرسال التقييم: ' + error.message, 'error'); return; }
+  try {
+    const { data: fieldInfo } = await sb.from('fields').select('name, facilities(owner_id)').eq('id', fieldId).single();
+    const ownerId = fieldInfo?.facilities?.owner_id;
+    if (ownerId) {
+      await sb.rpc('send_notification', {
+        p_user_id: ownerId, p_title: 'تقييم جديد ⭐',
+        p_body: `حصل ${escapeHtml(fieldInfo.name)} على تقييم ${window._rateStars || 5} نجوم من لاعب`
+      });
+    }
+  } catch(e){}
+  showToast('شكراً على تقييمك ✓ ⭐');
+  closeAll();
+}
+
+async function cancelMyBooking(bookingId) {
+  const { data: bk } = await sb.from('bookings').select('booking_date, start_time, payment_status').eq('id', bookingId).single();
+  let refundNote = '';
+  const wasPaidAlready = bk?.payment_status === 'paid' || bk?.payment_status === 'partial';
+  if (bk && wasPaidAlready) {
+    try {
+      const { data: pct } = await sb.rpc('calc_refund_percent', { p_booking_date: bk.booking_date, p_start_time: bk.start_time });
+      refundNote = pct!=null ? ` (نسبة الاسترجاع المتوقعة: ${pct}%)` : '';
+    } catch(e){}
+  }
+  showConfirmDialog('هل تريد إلغاء هذا الحجز؟' + refundNote, 'نعم، ألغِ الحجز', () => _executeCancelMyBooking(bookingId, bk));
+}
+
+async function _executeCancelMyBooking(bookingId, bk) {
+  const wasPaid = bk?.payment_status === 'paid' || bk?.payment_status === 'partial';
+  const { error } = await sb.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+  if (error) { showToast('تعذّر الإلغاء','error'); return; }
+
+  if (wasPaid) {
+    try {
+      const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
+      else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
+    } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
+  } else {
+    showToast('تم إلغاء الحجز ✓');
+  }
+
+  try {
+    const { data: booking } = await sb.from('bookings')
+      .select('fields(name, facilities(owner_id))').eq('id', bookingId).single();
+    const ownerId = booking?.fields?.facilities?.owner_id;
+    if (ownerId) {
+      await sb.rpc('send_notification', {
+        p_user_id: ownerId, p_title: 'إلغاء حجز ❌',
+        p_body: `تم إلغاء حجز في ${escapeHtml(booking.fields.name)}`
+      });
+    }
+  } catch(e){}
+
+  showMyBookings();
+}
+
+function showBookingLookup() {
+  playerGoTab('lookup');
+}
+async function doLookup() {
+  const id = document.getElementById('lookup-id').value.trim();
+  if (!id) { showToast('أدخل رقم الحجز','error'); return; }
+  const { data, error } = await sb
+    .from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, payment_status, refunded_amount, fields(name, facilities(city))')
+    .eq('id', id).single();
+  const box = document.getElementById('lookupResult');
+  if (error || !data) { box.innerHTML = '<div style="color:var(--danger);text-align:center;padding:14px">لم يُعثر على حجز بهذا الرقم</div>'; return; }
+  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  box.innerHTML = `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);margin-bottom:4px"><span style="color:var(--ink-dim)">رقم الحجز</span><b class="mono" style="color:var(--brand)">#${data.id}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${escapeHtml(data.fields?.name)||'—'}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ</span><b>${data.booking_date}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الوقت</span><b>${formatTime12(data.start_time)} - ${formatTime12(data.end_time)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${bookingStatusLabel(data, statusMap)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">المبلغ</span><b style="color:var(--flood)">${data.total_price} ريال</b></div>
+    </div>`;
+}
+
+async function showNotifications() {
+  openInfoModal('🔔 التنبيهات', '');
+  const _lt = delayedLoading('ownerBody');
+  const { data, error } = await sb
+    .from('notifications').select('*').order('created_at', { ascending: false }).limit(30);
+  clearTimeout(_lt);
+  if (error) { document.getElementById('ownerBody').innerHTML = '<div style="color:var(--danger);padding:20px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) {
+    document.getElementById('ownerBody').innerHTML = `<div style="text-align:center;padding:30px"><div style="font-size:34px">🔔</div><div style="margin-top:8px;color:var(--ink-dim)">لا توجد تنبيهات</div></div>`;
+  } else {
+    document.getElementById('ownerBody').innerHTML = data.map(n=>`
+      <div style="padding:13px;background:${n.is_read?'var(--bg-soft)':'var(--brand-soft)'};border:1px solid var(--line);border-radius:11px;margin-bottom:8px">
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <span style="font-size:18px;flex-shrink:0">${notifIcon(n.title)}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px">${escapeHtml(n.title)}</div>
+            ${n.body?`<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${escapeHtml(n.body)}</div>`:''}
+            <div style="font-size:11px;color:var(--ink-dim);margin-top:5px">${new Date(n.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn')}</div>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+  await sb.from('notifications').update({ is_read: true }).eq('is_read', false);
+  refreshSideNotifBadge();
+}
+
+async function refreshSideNotifBadge() {
+  try {
+    const { count } = await sb.from('notifications').select('*', { count:'exact', head:true }).eq('is_read', false);
+    const sideBadge = document.getElementById('sideNotifBadge');
+    if (sideBadge) {
+      if (count && count>0) { sideBadge.textContent = count; sideBadge.style.display='inline-block'; }
+      else sideBadge.style.display='none';
+    }
+    const navBadge = document.getElementById('navNotifDot');
+    if (navBadge) navBadge.style.display = (count && count>0) ? 'block' : 'none';
+  } catch(e){}
+}
+
+// أيقونة مناسبة لكل نوع إشعار حسب كلمات مفتاحية بعنوانه (لتمييز بصري سريع بالقائمة)
+function notifIcon(title){
+  if (!title) return '🔔';
+  if (title.includes('تأكيد') || title.includes('مؤكد')) return '✅';
+  if (title.includes('إلغاء') || title.includes('ألغى')) return '❌';
+  if (title.includes('تحويل') || title.includes('دفع') || title.includes('مستحق')) return '💰';
+  if (title.includes('حجز جديد')) return '📅';
+  if (title.includes('ترقية') || title.includes('موظف')) return '👥';
+  return '🔔';
+}
+
+let notifTimer = null;
+let notifRealtimeChannel = null;
+function startNotificationsWatch(userId){
+  refreshSideNotifBadge();
+
+  // إشعارات لحظية حقيقية عبر Supabase Realtime — تظهر فورًا بدون انتظار أي تحديث دوري
+  if (notifRealtimeChannel) sb.removeChannel(notifRealtimeChannel);
+  notifRealtimeChannel = sb.channel('notifications-' + userId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
+      const n = payload.new;
+      showToast(`${notifIcon(n.title)} ${escapeHtml(n.title)}`);
+      refreshSideNotifBadge();
+    })
+    .subscribe();
+
+  // احتياط بسيط لو انقطع الاتصال اللحظي لأي سبب (شبكة ضعيفة، إلخ)
+  if (notifTimer) clearInterval(notifTimer);
+  notifTimer = setInterval(refreshSideNotifBadge, 60000);
+}
+
+function shareSite() {
+  const url = window.location.origin;
+  if (navigator.share) {
+    navigator.share({ title:'ملاعبنا', text:'احجز ملعبك عبر ملاعبنا', url }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(url).then(()=>showToast('تم نسخ رابط الموقع ✓')).catch(()=>showToast(url));
+  }
+}
+
+function showHelpCenter() {
+  const faqs = [
+    { q: 'كيف أحجز ملعب؟', a: 'اختر المدينة والملعب اللي يناسبك، حدد اليوم والوقت المتاح، وأكمل الدفع الإلكتروني — يتأكد حجزك فورًا بعد الدفع.' },
+    { q: 'كيف ألغي حجزي؟', a: 'من "حجوزاتي" بالقائمة الجانبية، اختر الحجز واضغط إلغاء. نسبة الاسترجاع تعتمد على وقت الإلغاء بالنسبة لموعد الحجز (راجع سياسة الاسترجاع بالشروط والأحكام).' },
+    { q: 'كيف تشتغل "القطة"؟', a: 'وقت الحجز، اختر وضع "قسّم مع فريقك"، وحدد عدد اللاعبين — تنشئ لك المنصة رابط مشاركة كل واحد يدفع نصيبه منه مباشرة.' },
+    { q: 'وش "أكمل الفريق"؟', a: 'حجوزات فتحها لاعبون ثانيون وناقصهم عدد، تقدر تتصفحها وتنضم لأي وحدة تناسب وقتك.' },
+    { q: 'كيف أسجّل ملعبي بالمنصة؟', a: 'اضغط "سجّل ملعبك" بالفوتر أو أنشئ حساب "صاحب ملعب"، وأضف بيانات منشأتك — تحتاج موافقة إدارية قبل ما تظهر للعامة.' },
+    { q: 'كيف أسجّل بأكاديمية أو بطولة؟', a: 'من الصفحة الرئيسية، اختر تبويب الأكاديميات أو البطولات، وسجّل مباشرة مع الدفع الإلكتروني.' },
+  ];
+  openInfoModal('🛟 مركز المساعدة', `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${faqs.map(f => `
+        <details style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+          <summary style="cursor:pointer;font-weight:700;font-size:13.5px">${f.q}</summary>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.8">${f.a}</div>
+        </details>`).join('')}
+    </div>
+    <div class="legal-note" style="margin-top:14px">ما لقيت إجابتك؟ <a onclick="showContact()" style="cursor:pointer;color:var(--brand);font-weight:700">تواصل معنا مباشرة</a>.</div>
+  `);
+}
+function showContact() {
+  openInfoModal('✉️ تواصل معنا', `
+    <div style="text-align:center;padding:10px">
+      <div style="font-size:40px;margin-bottom:12px">📞</div>
+      <div style="font-size:14px;color:var(--ink-soft);line-height:2">
+        نسعد بتواصلك معنا<br>
+        <b>البريد:</b> info@malaebnaa.com
+      </div>
+      <div onclick="window.open('https://wa.me/966559190868','_blank')" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;cursor:pointer;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;direction:ltr">
+        <span style="font-size:18px">📱</span>
+        <span style="font-weight:700;font-size:14.5px;direction:ltr">+966 55 919 0868</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-brand" style="flex:1" onclick="window.location.href='mailto:info@malaebnaa.com'">راسلنا بالإيميل</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="window.open('https://wa.me/966559190868','_blank')">💬 واتساب</button>
+      </div>
+    </div>`);
+}
+
+function showAbout() {
+  openInfoModal('ℹ️ عن ملاعبنا', `
+    <div style="text-align:center;padding:10px">
+      <div class="brand-logo" style="width:56px;height:56px;font-size:26px;margin:0 auto 14px"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22" stroke="#0a1408" stroke-width="1.4"/><circle cx="12" cy="12" r="5.2" stroke="#0a1408" stroke-width="1.4"/><circle cx="12" cy="12" r="1.4" fill="#0a1408"/></svg></div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:8px">ملاعبنا</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);line-height:1.9">
+        منصة سعودية لحجز الملاعب الرياضية والأكاديميات والبطولات.
+        احجز ملعبك، قسّم التكلفة بذكاء، وادفع بأمان.
+        <br><br>
+        نخدم جميع مناطق المملكة العربية السعودية 🌱
+        <br><br>
+        <span style="font-size:12px;color:var(--ink-dim)">يُدار هذا الموقع من قبل: علي بن محمد أحمد عسيري<br>خميس البحر، المملكة العربية السعودية</span>
+      </div>
+      <div style="margin-top:16px;font-size:12px;color:var(--ink-dim)">الإصدار 2.0 · 2026</div>
+    </div>`);
+}
+
+async function doLogout() {
+  if (!confirm('هل تريد تسجيل الخروج؟')) return;
+  if (notifTimer) clearInterval(notifTimer);
+  if (notifRealtimeChannel) { sb.removeChannel(notifRealtimeChannel); notifRealtimeChannel = null; }
+  await sb.auth.signOut();
+  window.currentUser = null;
+  loggedIn = false;
+  renderLoggedOutNav();
+  showToast('تم تسجيل الخروج ✓');
+}
+
+async function openOwnerPanel(kind) {
+  if (!window.sb) { showToast('يتطلب اتصال قاعدة البيانات','error'); return; }
+  await adminGoTab('overview', true);
+}
+
+// ════════════════ لوحة صاحب الملعب — نظام تبويبات منظّم ════════════════
+// ── تبويبات قسم "ملاعبي" فقط — نظرة عامة، الملاعب نفسها، الحجوزات، التقييمات، المالية، الفريق ──
+const OWNER_FIELDS_TABS = [
+  {key:'overview', label:'🏠 نظرة عامة'},
+  {key:'fields', label:'🏟️ قائمة الملاعب'},
+  {key:'bookings', label:'📅 الحجوزات', perm:'bookings'},
+  {key:'reviews', label:'⭐ التقييمات'},
+  {key:'finance', label:'💰 المالية', perm:'finance'},
+  {key:'team', label:'👥 الفريق'},
+];
+function visibleOwnerFieldsTabs(){
+  const u = window.currentUser;
+  const isTrueOwner = u && (u.role === 'owner' || u.role === 'super_admin');
+  if (isTrueOwner) return OWNER_FIELDS_TABS;
+  const perms = (u && u.staffPermissions) || [];
+  return OWNER_FIELDS_TABS.filter(t => t.key==='overview' || t.key==='fields' || (t.perm && perms.includes(t.perm)));
+}
+function ownerFieldsTabsHtml(active){
+  return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
+    ${visibleOwnerFieldsTabs().map(t=>`<button onclick="ownerGoTab('${t.key}', true)" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
+  </div>`;
+}
+// يبقى بنفس الاسم القديم للتوافق مع أي استدعاء قديم متبقٍ بالكود
+function visibleOwnerTabs(){ return visibleOwnerFieldsTabs(); }
+
+async function ownerGoTab(tab, isRoot){
+  // يمنع الموظف من فتح تبويب ما عنده صلاحية له (حتى لو حاول يستدعيه مباشرة)
+  if (!visibleOwnerFieldsTabs().some(t => t.key === tab)) { tab = 'overview'; showToast('ما عندك صلاحية لهذا القسم — تواصل مع صاحب الملعب','error'); }
+  window._ownerActiveTab = tab;
+  // لو فُتحت لأول مرة (من القائمة الجانبية، مو من زر تبويب داخلي)، نبدأ مكدس تنقل جديد من الصفر
+  if (isRoot || !window._ownerNavStack.length) {
+    window._ownerNavStack = [{ fn: 'ownerGoTab', args: [tab, true] }];
+    history.pushState({ _ownerPage: true, stackDepth: 1 }, '', window.location.href);
+  }
+  document.getElementById('ownerTitle').textContent = '🏟️ الملاعب';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+  document.getElementById('ownerBody').innerHTML = ownerFieldsTabsHtml(tab) + '<div id="ownerTabInner"></div>';
+  window._tabLoadTimer = delayedLoading('ownerTabInner');
+  switch(tab){
+    case 'overview':    await renderOwnerOverviewTab(); break;
+    case 'fields':      await renderOwnerFieldsTab(); break;
+    case 'bookings':    await renderOwnerBookingsTab(); break;
+    case 'reviews':     await renderFieldReviews(); break;
+    case 'finance':     await renderOwnerFinanceTab(); break;
+    case 'team':        await renderOwnerTeamTab(); break;
+  }
+}
+
+// ── قسم "الأكاديميات" — صفحة مستقلة تمامًا، بدون علاقة بالملاعب أو البطولات ──
+// ── تبويبات قسم "الأكاديميات" — قائمة الأكاديميات، ومالية إجمالية منفصلة تمامًا عن الملاعب والبطولات ──
+const OWNER_ACADEMIES_TABS = [
+  {key:'list', label:'🎓 قائمة الأكاديميات'},
+  {key:'reviews', label:'⭐ التقييمات'},
+  {key:'finance', label:'💰 ملخص المالية'},
+];
+
+
+// يجمع مالية كل أكاديميات صاحب الحساب سوا — منفصل تمامًا عن مالية الملاعب والبطولات
+
+// ── قسم "البطولات" — صفحة مستقلة تمامًا، بدون علاقة بالملاعب أو الأكاديميات ──
+// ── تبويبات قسم "البطولات" — قائمة البطولات، ومالية إجمالية منفصلة تمامًا عن الملاعب والأكاديميات ──
+const OWNER_TOURNAMENTS_TABS = [
+  {key:'list', label:'🏆 قائمة البطولات'},
+  {key:'reviews', label:'⭐ التقييمات'},
+  {key:'finance', label:'💰 ملخص المالية'},
+];
+
+
+// يجمع مالية كل بطولات صاحب الحساب سوا — منفصل تمامًا عن مالية الملاعب والأكاديميات
+
+// كل تبويب يكتب محتواه هنا فقط، وشريط التبويبات يبقى ثابتًا فوقه
+// ── يحوّل رقم جوال سعودي محلي (05xxxxxxxx) لصيغة دولية لواتساب، ويبني رابط wa.me جاهز ──
+function whatsappLink(phone){
+  if (!phone) return null;
+  let digits = String(phone).replace(/\D/g, '');
+  if (digits.startsWith('0')) digits = '966' + digits.slice(1);
+  else if (digits.startsWith('5') && digits.length === 9) digits = '966' + digits;
+  else if (!digits.startsWith('966')) digits = '966' + digits;
+  return `https://wa.me/${digits}`;
+}
+
+// ── بلوك تواصل فوري يظهر مباشرة عند فشل تأكيد دفع — حتى لا يبقى المستخدم قلقًا بدون طريقة تواصل واضحة أمامه ──
+function paymentFailureHelpHtml(refLabel, refValue){
+  const supportWhatsapp = 'https://wa.me/966559190868';
+  const refText = refValue ? `${refLabel}: ${refValue}` : '';
+  const waMessage = encodeURIComponent(`مرحبًا، واجهت مشكلة في تأكيد دفع بعد خصم المبلغ من حسابي.${refText ? ' ' + refText : ''}`);
+  return `
+    <div style="text-align:center;padding:20px 16px;background:var(--danger-soft);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent);border-radius:14px">
+      <div style="font-size:36px;margin-bottom:8px">⚠️</div>
+      <div style="font-weight:800;color:var(--danger);margin-bottom:6px">تعذّر تأكيد الدفع</div>
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:4px">لا تقلق — لو تم خصم مبلغ من حسابك، تواصل معنا فورًا وسنحل الأمر بأسرع وقت.</div>
+      ${refValue ? `<div style="font-size:12px;color:var(--ink-dim);margin-bottom:14px" class="mono">${escapeHtml(refText)}</div>` : '<div style="margin-bottom:14px"></div>'}
+      <a href="${supportWhatsapp}?text=${waMessage}" target="_blank" class="btn btn-brand btn-block" style="text-decoration:none;margin-bottom:8px">💬 تواصل معنا عبر واتساب الآن</a>
+      <a href="mailto:info@malaebnaa.com" class="btn btn-ghost btn-block" style="text-decoration:none">✉️ راسلنا بالإيميل</a>
+    </div>`;
+}
+
+function ownerInner(){ return document.getElementById('ownerTabInner'); }
+
+// ── يتحقق هل المستخدم الحالي يملك صلاحية معيّنة — المالك الحقيقي يملك كل الصلاحيات دائمًا، الموظف يُقيَّد بما مُنح له فقط ──
+function hasStaffPermission(key){
+  if (window._isTrueOwner) return true;
+  return (window.currentUser?.staffPermissions || []).includes(key);
+}
+
+// ── يسجّل نشاطًا مهمًا لموظف/مالك على منشأة معيّنة — يُستخدم لتتبع مين سوى وش عند وجود عدة موظفين ──
+async function logStaffActivity(facilityId, action, details){
+  if (!facilityId) return;
+  try {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    await sb.from('staff_activity_log').insert({ facility_id: facilityId, user_id: user.id, action, details: details || null });
+  } catch(e){ /* لا نوقف العملية الأساسية بسبب فشل التسجيل */ }
+}
+
+async function getMyFacilitiesData(){
+  const { data: { user } } = await sb.auth.getUser();
+  const [{ data: ownFac }, { data: staffFac }] = await Promise.all([
+    sb.from('facilities').select('id').eq('owner_id', user.id),
+    sb.from('facility_staff').select('facility_id').eq('user_id', user.id)
+  ]);
+  const ownFacIds = (ownFac||[]).map(f=>f.id);
+  const allFacIds = [...new Set([...ownFacIds, ...(staffFac||[]).map(f=>f.facility_id)])];
+  window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
+  const { data: myFacilities } = allFacIds.length ? await sb
+    .from('facilities')
+    .select('id, name, city, district, approved, fields(id, name, price_per_hour, status, is_deleted)')
+    .in('id', allFacIds) : { data: [] };
+  // ملاحظة: myFieldIds يشمل كل الملاعب (حتى المحذوفة) عمدًا — حتى تبقى حساباتك المالية وسجل حجوزاتك دقيقة.
+  // الملاعب المحذوفة تُخفى فقط من قائمة "ملاعبي" النشطة، لا من حساباتك.
+  return { user, myFacilities: myFacilities||[], myFieldIds: (myFacilities||[]).flatMap(f => (f.fields||[]).map(fd => fd.id)) };
+}
+
+async function renderOwnerOverviewTab(){
+  const { myFieldIds } = await getMyFacilitiesData();
+  let pendingCount = 0, totalRevenue = 0, netOwed = 0, nextPayoutDate = '—';
+
+  const [{ data: commSetting }, pendingRes, earnRes, paidOutRes] = await Promise.all([
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
+    myFieldIds.length ? sb.from('bookings').select('*', { count:'exact', head:true }).in('field_id', myFieldIds).eq('status', 'pending') : Promise.resolve({ count:0 }),
+    myFieldIds.length ? sb.from('bookings').select('total_price, refunded_amount').in('field_id', myFieldIds).in('status', ['confirmed','completed','cancelled']).neq('payment_status','unpaid') : Promise.resolve({ data:[] }),
+    myFieldIds.length ? sb.from('payouts').select('net_amount').eq('owner_id', window.currentUser.id) : Promise.resolve({ data:[] })
+  ]);
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  if (myFieldIds.length) {
+    pendingCount = pendingRes.count || 0;
+    totalRevenue = (earnRes.data||[]).reduce((sum,b) => sum + (Number(b.total_price||0) - Number(b.refunded_amount||0)), 0);
+    const alreadyPaidOut = (paidOutRes.data||[]).reduce((s,p)=>s+Number(p.net_amount||0), 0);
+    const grossNet = totalRevenue * (1 - commissionPct/100);
+    netOwed = Math.max(0, Math.round((grossNet - alreadyPaidOut) * 100) / 100);
+    const now = riyadhNow(); const day = now.getUTCDay();
+    const daysToNext = [ (3-day+7)%7 || 7, (0-day+7)%7 || 7 ].sort((a,b)=>a-b)[0];
+    const nd = new Date(now); nd.setUTCDate(now.getUTCDate() + daysToNext);
+    nextPayoutDate = nd.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday:'long', day:'numeric', month:'long', timeZone:'UTC' });
+  }
+
+  clearTimeout(window._tabLoadTimer);
+
+  // لو ما عنده أي ملعب مسجّل بعد، نعرض رسالة ترحيبية توجيهية بدل أرقام مالية مضلّلة (رصيد 0، موعد تحويل قادم) توحي بنشاط تجاري فعلي
+  if (!myFieldIds.length) {
+    ownerInner().innerHTML = `
+      <div style="text-align:center;padding:32px 16px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:14px">
+        <div style="font-size:40px;margin-bottom:10px">🏟️</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px">مرحبًا بك في لوحة الملاعب</div>
+        <div style="font-size:13px;color:var(--ink-dim);margin-bottom:16px">أضف أول ملعب لك لتبدأ استقبال الحجوزات ومتابعة أرباحك من هنا</div>
+        <button class="btn btn-brand btn-block" onclick="pushOwnerPage('showAddStadiumForm',)">+ إضافة أول ملعب</button>
+      </div>
+    `;
+    return;
+  }
+
+  ownerInner().innerHTML = `
+    <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">الرصيد المستحق لك حاليًا (بعد عمولة المنصة ${commissionPct}%)</div>
+      <div style="font-size:32px;font-weight:900;color:var(--brand-deep)">${netOwed} <span style="font-size:16px">ريال</span></div>
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">أقرب تحويل: ${nextPayoutDate}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="stat-click" onclick="ownerGoTab('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:var(--brand)">${pendingCount}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">حجز قيد الانتظار الآن</div>
+      </div>
+      <div class="stat-click" onclick="ownerGoTab('finance')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">إجمالي الحجوزات <span style="opacity:.75">(كل الوقت، قبل العمولة)</span></div>
+      </div>
+    </div>
+    <div class="legal-note">💡 هذي أرقام إجمالية منذ بداية حسابك. لتفاصيل هذا الشهر تحديدًا (مصاريف، تقارير)، افتح تبويب "المالية" فوق.</div>
+  `;
+}
+
+async function renderOwnerFieldsTab(){
+  const { myFacilities } = await getMyFacilitiesData();
+  // اعرض فقط الملاعب غير المحذوفة في هذي القائمة النشطة (الملاعب المحذوفة تبقى في السجلات المالية فقط)
+  const visibleFacilities = myFacilities.map(f => ({ ...f, fields: (f.fields||[]).filter(fd => !fd.is_deleted) }));
+  const statusLabel = { available:'متاح', closed:'مغلق', maintenance:'صيانة' };
+  const statusClass  = { available:'available', closed:'closed', maintenance:'pending' };
+
+  clearTimeout(window._tabLoadTimer);
+  ownerInner().innerHTML = `
+    ${(visibleFacilities&&visibleFacilities.length)? visibleFacilities.map(f=>`
+      <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><b style="font-size:15px">${escapeHtml(f.name)}</b><div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${escapeHtml(f.district)}، ${escapeHtml(f.city)}</div></div>
+          <span class="badge ${f.approved?'available':'pending'}" style="font-size:11px">${f.approved? (f.fields||[]).length+' ملعب' : 'بانتظار الموافقة'}</span>
+        </div>
+        ${(f.fields||[]).map(fd=>`
+          <div style="margin-top:8px;padding:10px;background:var(--bg-elev);border-radius:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+              <span>${escapeHtml(fd.name)}</span>
+              <span style="display:flex;align-items:center;gap:6px">
+                <span style="color:var(--flood);font-weight:700">${fd.price_per_hour} ر/ساعة</span>
+                <span class="badge ${statusClass[fd.status]||'available'}" style="font-size:10px">${statusLabel[fd.status]||fd.status}</span>
+              </span>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              ${hasStaffPermission('schedule') ? `<button class="btn btn-soft btn-sm" style="flex:1" onclick="editStadiumForm(${fd.id})">✏️ تعديل</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="toggleFieldStatus(${fd.id}, '${fd.status}')">${fd.status==='available' ? '⛔ إغلاق' : '✅ فتح'}</button>` : `<div style="flex:1;font-size:11px;color:var(--ink-dim);align-self:center">لا تملك صلاحية التعديل</div>`}
+              ${window._isTrueOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteField(${fd.id})">🗑️</button>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              ${hasStaffPermission('schedule') ? `<button class="btn btn-ghost btn-sm" style="flex:1" onclick="openWorkingHours(${fd.id})">⏰ أوقات العمل</button>` : ''}
+              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openFieldGallery(${fd.id})">🖼️ معرض الصور</button>
+            </div>
+          </div>`).join('')}
+      </div>`).join('') : `
+      <div style="text-align:center;padding:24px;background:var(--bg-soft);border:1px dashed var(--line);border-radius:12px">
+        <div style="font-size:32px;margin-bottom:8px">🏟️</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">لا توجد ملاعب بعد</div>
+        <div style="font-size:12px;color:var(--ink-dim)">أضف أول ملعب لك لتبدأ استقبال الحجوزات</div>
+      </div>`}
+    ${window._isTrueOwner ? `<button class="btn btn-brand btn-block" style="margin-top:8px" onclick="pushOwnerPage('showAddStadiumForm',)">+ إضافة ملعب جديد</button>` : ''}
+  `;
+}
+
+// ── شاشة صاحب الملعب لمراجعة طلبات الشراكة الواردة من أصحاب أكاديميات/بطولات لا يملكون ملاعبهم الخاصة ──
+
+
+
+
+// ── يعرض تقييمات ملاعب صاحب الحساب مع إمكانية الرد على كل تقييم مرة واحدة ──
+async function renderFieldReviews(){
+  const fieldIds = await getMyFieldIds();
+  clearTimeout(window._tabLoadTimer);
+  if (!fieldIds.length) { ownerInner().innerHTML = `<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعبًا أولاً لتظهر لك تقييماته هنا</div>`; return; }
+
+  const { data: reviews } = await sb.from('reviews')
+    .select('id, rating, comment, created_at, owner_reply, owner_reply_at, profiles(name), fields(name)')
+    .in('field_id', fieldIds).order('created_at', { ascending: false });
+
+  if (!reviews || !reviews.length) { ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تقييمات بعد</div>'; return; }
+
+  const avg = (reviews.reduce((s,r)=>s+r.rating,0) / reviews.length).toFixed(1);
+  ownerInner().innerHTML = `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center;margin-bottom:16px">
+      <div style="font-size:28px;font-weight:900;color:var(--flood)">⭐ ${avg}</div>
+      <div style="font-size:12px;color:var(--ink-dim)">متوسط تقييمك من ${reviews.length} تقييم</div>
+    </div>
+    ${reviews.map(r => {
+      const targetName = r.fields?.name;
+      return `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><b>${escapeHtml(targetName)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(r.profiles?.name)||'مستخدم'}</div></div>
+          <span style="color:var(--flood);font-weight:800">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
+        </div>
+        ${r.comment ? `<div style="font-size:13px;color:var(--ink-soft);margin-top:6px">"${escapeHtml(r.comment)}"</div>` : ''}
+
+        ${r.owner_reply ? `
+          <div style="margin-top:10px;padding:10px;background:var(--bg-elev);border-radius:8px;border-right:3px solid var(--brand)">
+            <div style="font-size:11px;color:var(--brand);font-weight:700;margin-bottom:3px">ردّك ${r.owner_reply_at ? '· ' + new Date(r.owner_reply_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn') : ''}</div>
+            <div style="font-size:12.5px;color:var(--ink-soft)">${escapeHtml(r.owner_reply)}</div>
+          </div>
+        ` : `
+          <div id="reply-form-${r.id}" style="margin-top:10px">
+            <button class="btn btn-soft btn-sm" onclick="pushOwnerPage('showReplyForm',${r.id}, '', 'renderFieldReviews')">💬 الرد على هذا التقييم</button>
+          </div>
+        `}
+      </div>`;
+    }).join('')}
+  `;
+}
+
+// ── يعرض/يخفي نموذج الرد على تقييم معيّن داخل مكانه بالبطاقة نفسها ──
+function showReplyForm(reviewId, existingText, reloadFn){
+  const container = document.getElementById('reply-form-' + reviewId);
+  if (!container) return;
+  container.innerHTML = `
+    <textarea id="reply-text-${reviewId}" placeholder="اكتب ردك هنا... (يظهر للاعبين تحت التقييم)" style="width:100%;min-height:70px;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;resize:vertical">${escapeHtml(existingText)}</textarea>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn btn-brand btn-sm" style="flex:1" onclick="submitOwnerReply(${reviewId},'${reloadFn}')">إرسال الرد</button>
+      <button class="btn btn-ghost btn-sm" onclick="window['${reloadFn}']()">إلغاء</button>
+    </div>
+  `;
+}
+
+async function submitOwnerReply(reviewId, reloadFn){
+  const text = document.getElementById('reply-text-' + reviewId)?.value.trim();
+  if (!text) { showToast('اكتب ردًا أولًا', 'error'); return; }
+  // نتأكد إن ما فيه رد سابق قبل الحفظ — يمنع أي محاولة تعديل رد مُرسل مسبقًا حتى لو عبر استدعاء مباشر
+  const { data: existing } = await sb.from('reviews').select('owner_reply').eq('id', reviewId).maybeSingle();
+  if (existing?.owner_reply) { showToast('تم الرد على هذا التقييم مسبقًا ولا يمكن تعديله', 'error'); window[reloadFn](); return; }
+  const { error } = await sb.from('reviews').update({ owner_reply: text, owner_reply_at: new Date().toISOString() }).eq('id', reviewId).is('owner_reply', null);
+  if (error) { showToast('تعذّر إرسال الرد: ' + error.message, 'error'); return; }
+  showToast('تم إرسال الرد ✓ — لا يمكن تعديله لاحقًا');
+  window[reloadFn]();
+}
+
+async function renderOwnerFinanceTab(){
+  clearTimeout(window._tabLoadTimer);
+  const { myFieldIds } = await getMyFacilitiesData();
+  let monthGrossRevenue = 0, monthExpenses = 0, commissionPct = 20;
+  if (myFieldIds.length) {
+    const firstOfMonth = riyadhTodayStr().slice(0,7) + '-01';
+    const { data: { user } } = await sb.auth.getUser();
+    const [{ data: earnRows }, { data: expRows }, { data: commSetting }] = await Promise.all([
+      sb.from('bookings').select('total_price, refunded_amount').in('field_id', myFieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').gte('booking_date', firstOfMonth),
+      sb.from('facility_expenses').select('amount').eq('owner_id', user.id).gte('expense_date', firstOfMonth),
+      sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
+    ]);
+    monthGrossRevenue = (earnRows||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+    monthExpenses = (expRows||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+    commissionPct = commSetting ? Number(commSetting.value) : 20;
+  }
+  const monthCommission = Math.round(monthGrossRevenue * (commissionPct/100) * 100) / 100;
+  const monthNetRevenue = Math.round((monthGrossRevenue - monthCommission) * 100) / 100;
+  const netThisMonth = Math.round((monthNetRevenue - monthExpenses) * 100) / 100;
+
+  ownerInner().innerHTML = `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:8px">لمحة هذا الشهر (بعد خصم عمولة المنصة ${commissionPct}%)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+        <div><div style="font-size:17px;font-weight:900;color:var(--brand)">${monthNetRevenue}</div><div style="font-size:10.5px;color:var(--ink-dim)">إيرادات صافية لك</div></div>
+        <div><div style="font-size:17px;font-weight:900;color:var(--danger)">${monthExpenses}</div><div style="font-size:10.5px;color:var(--ink-dim)">مصاريف</div></div>
+        <div><div style="font-size:17px;font-weight:900;color:var(--flood)">${netThisMonth}</div><div style="font-size:10.5px;color:var(--ink-dim)">صافي تقريبي</div></div>
+      </div>
+      <div style="text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+        <span style="font-size:11px;color:var(--ink-dim)">إجمالي الحجوزات ${monthGrossRevenue} ريال، منها ${monthCommission} ريال عمولة المنصة</span>
+      </div>
+    </div>
+
+    <div class="dlabel">📊 التحليلات والتوقعات</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showOwnerAnalytics',)">📈 تحليلات الإيرادات</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showRevenueForecast',)">🔮 توقّع إيرادات الشهر القادم</button>
+    ${myFieldIds.length > 1 ? `<button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="pushOwnerPage('showFieldsComparison',)">⚖️ مقارنة أداء ملاعبي</button>` : '<div style="margin-bottom:12px"></div>'}
+
+    <div class="dlabel">💸 المصاريف والتقارير</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showFacilityExpenses',)">📋 تسجيل ومتابعة المصاريف</button>
+    <button class="btn btn-brand btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showOwnerMonthlyReports',)">📊 التقرير المالي الشامل</button>
+    <button class="btn btn-ghost btn-block" style="margin-bottom:20px" onclick="exportAccountingReport()">📄 تصدير كل السجل (كل الوقت) كملف CSV</button>
+
+    <div class="dlabel">💰 التحويلات والحساب البنكي</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showOwnerPayouts',)">📥 سجل التحويلات المستلمة</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="pushOwnerPage('showBankDetailsForm',)">🏦 بيانات الحساب البنكي</button>
+
+    <div class="dlabel">🎟️ العروض والخصومات</div>
+    <button class="btn btn-soft btn-block" onclick="pushOwnerPage('showOwnerCoupons',)">🎟️ كوبوناتي</button>
+  `;
+}
+
+// ── مقارنة أداء الملاعب المتعددة لنفس المالك: إيرادات، عدد حجوزات، ومتوسط تقييم لكل ملعب ──
+async function showFieldsComparison(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '⚖️ مقارنة أداء ملاعبي';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  const { myFacilities } = await getMyFacilitiesData();
+  const allFields = myFacilities.flatMap(f => (f.fields||[]).filter(fd=>!fd.is_deleted).map(fd => ({...fd, facilityName: f.name})));
+  if (!allFields.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد ملاعب بعد</div>'; return; }
+
+  const fieldIds = allFields.map(f=>f.id);
+  const firstOfMonth = riyadhTodayStr().slice(0,7) + '-01';
+  const [{ data: bookingsRows }, { data: reviewRows }] = await Promise.all([
+    sb.from('bookings').select('field_id, total_price, refunded_amount, status, payment_status, booking_date').in('field_id', fieldIds).gte('booking_date', firstOfMonth),
+    sb.from('reviews').select('field_id, rating').in('field_id', fieldIds)
+  ]);
+  clearTimeout(_lt);
+
+  const statsByField = {};
+  fieldIds.forEach(id => statsByField[id] = { revenue:0, count:0, ratingSum:0, ratingCount:0 });
+  (bookingsRows||[]).forEach(b => {
+    const st = statsByField[b.field_id]; if (!st) return;
+    if (['confirmed','completed','cancelled'].includes(b.status) && b.payment_status !== 'unpaid') {
+      st.revenue += (Number(b.total_price||0) - Number(b.refunded_amount||0));
+    }
+    if (b.status !== 'cancelled') st.count++;
+  });
+  (reviewRows||[]).forEach(r => { const st = statsByField[r.field_id]; if (!st) return; st.ratingSum += r.rating; st.ratingCount++; });
+
+  const rows = allFields.map(f => {
+    const st = statsByField[f.id];
+    return { ...f, revenue: Math.round(st.revenue*100)/100, count: st.count, avgRating: st.ratingCount ? Math.round((st.ratingSum/st.ratingCount)*10)/10 : null };
+  }).sort((a,b) => b.revenue - a.revenue);
+
+  const maxRevenue = Math.max(1, ...rows.map(r=>r.revenue));
+
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">📊 مقارنة إيرادات الشهر الحالي وعدد الحجوزات لكل ملعب — الملعب الأعلى إيرادًا بالأعلى.</div>
+    ${rows.map((r,i) => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div>${i===0 && r.revenue>0 ? '🥇 ' : ''}<b>${escapeHtml(r.name)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(r.facilityName)}</div></div>
+          <div style="text-align:left">
+            <div style="font-weight:900;color:var(--brand)">${r.revenue} ريال</div>
+            <div style="font-size:11px;color:var(--ink-dim)">${r.count} حجز${r.avgRating!=null?` · ⭐ ${r.avgRating}`:''}</div>
+          </div>
+        </div>
+        <div style="background:var(--bg-elev);border-radius:8px;height:8px;overflow:hidden">
+          <div style="height:100%;width:${Math.round((r.revenue/maxRevenue)*100)}%;background:var(--brand)"></div>
+        </div>
+      </div>`).join('')}
+  `;
+}
+
+async function renderOwnerTeamTab(){
+  window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
+  clearTimeout(window._tabLoadTimer);
+  ownerInner().innerHTML = `
+    ${window._isTrueOwner ? `<button class="btn btn-soft btn-block" onclick="pushOwnerPage('showStaffManagement',)">🧑‍💼 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف — إدارة الموظفين تخص المالك الحقيقي فقط.</div>`}
+  `;
+}
+
+async function renderOwnerBookingsTab(){
+  const myFieldIds = await getMyFieldIds();
+  if (!myFieldIds.length) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك الحجوزات هنا</div>'; return; }
+  window._ownerBookingsPageSize = 100;
+  await loadOwnerBookingsPage();
+}
+
+// ── يحمّل حجوزات صاحب الملعب بحد أقصى معقول لكل دفعة، بدل جلب آلاف الحجوزات دفعة واحدة على منشأة نشطة منذ فترة طويلة ──
+async function loadOwnerBookingsPage(){
+  const myFieldIds = await getMyFieldIds();
+  const pageSize = window._ownerBookingsPageSize || 100;
+  const { data, error } = await sb.from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, players_count, guest_name, guest_phone, payment_status, amount_paid, verify_token, checked_in, checked_in_at, created_at, profiles(name, phone), fields(name, price_per_hour, facilities(name, city, district))')
+    .in('field_id', myFieldIds).order('booking_date', { ascending: false }).limit(pageSize);
+  if (error) { clearTimeout(window._tabLoadTimer); ownerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  clearTimeout(window._tabLoadTimer);
+  window._ownerBookingsCache = data || [];
+  window._ownerBookingsHasMore = (data || []).length === pageSize; // لو رجعت الدفعة كاملة، غالبًا فيه المزيد
+  window._ownerBookingsView = window._ownerBookingsView || 'list';
+  renderOwnerBookingsView();
+}
+
+function loadMoreOwnerBookings(){
+  window._ownerBookingsPageSize = (window._ownerBookingsPageSize || 100) + 100;
+  const _lt = delayedLoading('ownerTabInner');
+  loadOwnerBookingsPage().then(() => clearTimeout(_lt));
+}
+
+function ownerBookingsToggleHtml(){
+  const v = window._ownerBookingsView || 'list';
+  return `<div style="display:flex;gap:6px;margin-bottom:14px">
+    <button class="btn ${v==='list'?'btn-brand':'btn-ghost'} btn-sm" style="flex:1" onclick="setOwnerBookingsView('list')">📋 قائمة</button>
+    <button class="btn ${v==='calendar'?'btn-brand':'btn-ghost'} btn-sm" style="flex:1" onclick="setOwnerBookingsView('calendar')">🗓️ تقويم الأسبوع</button>
+  </div>`;
+}
+function setOwnerBookingsView(v){ window._ownerBookingsView = v; window._ownerCalendarWeekOffset = 0; renderOwnerBookingsView(); }
+
+function renderOwnerBookingsView(){
+  const data = window._ownerBookingsCache || [];
+  if (!data.length) {
+    ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="pushOwnerPage('showManualBookingForm',)">➕ إضافة حجز يدوي (هاتفي/حضوري)</button><div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>`;
+    return;
+  }
+  const view = window._ownerBookingsView || 'list';
+  ownerInner().innerHTML = `<button class="btn btn-brand btn-block" style="margin-bottom:14px" onclick="pushOwnerPage('showManualBookingForm',)">➕ إضافة حجز يدوي (هاتفي/حضوري)</button>`
+    + ownerBookingsToggleHtml()
+    + (view === 'calendar' ? ownerBookingsCalendarHtml(data) : data.map(ownerBookingCardHtml).join(''))
+    + (view === 'list' && window._ownerBookingsHasMore ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="loadMoreOwnerBookings()">تحميل المزيد من الحجوزات</button>` : '');
+}
+
+function ownerBookingCardHtml(b){
+  const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+  const paymentStatusMap = { unpaid:'غير مدفوع', partial:'مدفوع جزئيًا', paid:'مدفوع بالكامل', refunded:'مسترجع' };
+  return `
+    <div id="owner-booking-card-${b.id}" style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="toggleBookingDetails(${b.id})">
+        <div><b>${escapeHtml(b.fields?.name)||'—'}</b> <span class="mono" style="font-size:12px;color:var(--ink-dim)">#${b.id}</span><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+          <span id="chevron-${b.id}" style="color:var(--ink-dim);font-size:13px;transition:transform .2s">▾</span>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''} - ${b.end_time?formatTime12(b.end_time):''} · 👥 ${b.players_count||''} لاعب</div>
+
+      <div id="details-${b.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المنشأة</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.name)||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">الموقع</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.district)||''}، ${escapeHtml(b.fields?.facilities?.city)||''}</b></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">جوال المتصل</span>
+          <span style="display:flex;align-items:center;gap:8px">
+            <b style="font-size:12.5px" class="mono">${escapeHtml(b.profiles?.phone || b.guest_phone)||'—'}</b>
+            ${(b.profiles?.phone || b.guest_phone) ? `<a href="${whatsappLink(b.profiles?.phone || b.guest_phone)}" target="_blank" class="btn btn-soft btn-sm" style="padding:4px 10px;font-size:11px;text-decoration:none">💬 واتساب</a>` : ''}
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">حالة الدفع</span><b style="font-size:12.5px">${paymentStatusMap[b.payment_status]||b.payment_status||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المدفوع</span><b style="font-size:12.5px">${b.amount_paid||0} من ${b.total_price} ريال</b></div>
+        ${Number(b.refunded_amount||0)>0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المسترجع</span><b style="font-size:12.5px;color:var(--danger)">${b.refunded_amount} ريال</b></div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تسجيل الحضور</span><b style="font-size:12.5px">${b.checked_in ? ('✅ ' + (b.checked_in_at ? new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '')) : '⏳ لم يسجّل بعد'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تاريخ إنشاء الحجز</span><b style="font-size:12.5px">${b.created_at ? new Date(b.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px">
+        <span style="color:var(--flood);font-weight:700">
+          ${Number(b.refunded_amount||0) > 0
+            ? `${Math.round((b.total_price - b.refunded_amount)*100)/100} ريال <span style="font-size:10.5px;color:var(--ink-dim);font-weight:400">(استُرجع ${b.refunded_amount} من ${b.total_price})</span>`
+            : `${b.total_price} ريال`}
+        </span>
+        <div style="display:flex;gap:6px">
+          ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="ownerSetBookingStatus(${b.id},'cancelled')">إلغاء</button>` : ''}
+          ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="ownerSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── عرض تقويم أسبوعي: يجمّع حجوزات صاحب الملعب حسب اليوم، مع تنقّل بين الأسابيع ──
+function ownerBookingsCalendarHtml(data){
+  window._ownerCalendarWeekOffset = window._ownerCalendarWeekOffset || 0;
+  const byDate = {};
+  data.forEach(b => { (byDate[b.booking_date] = byDate[b.booking_date] || []).push(b); });
+
+  const today = riyadhNow();
+  const weekStart = new Date(today);
+  weekStart.setUTCDate(today.getUTCDate() - today.getUTCDay() + (window._ownerCalendarWeekOffset * 7));
+
+  const statusDot = { pending:'var(--flood)', confirmed:'var(--brand)', cancelled:'var(--danger)', completed:'var(--ink-dim)' };
+  let daysHtml = '';
+  for (let i=0;i<7;i++){
+    const d = new Date(weekStart); d.setUTCDate(weekStart.getUTCDate()+i);
+    const dStr = d.toISOString().split('T')[0];
+    const dayBookings = (byDate[dStr]||[]).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+    const isToday = dStr === riyadhTodayStr();
+    daysHtml += `
+      <div style="background:var(--bg-soft);border:1px solid ${isToday?'var(--brand)':'var(--line)'};border-radius:10px;padding:10px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:800;margin-bottom:6px;color:${isToday?'var(--brand)':'var(--ink)'}">${dayNames[d.getUTCDay()]} ${d.getUTCDate()}/${d.getUTCMonth()+1}${isToday?' · اليوم':''}</div>
+        ${dayBookings.length ? dayBookings.map(b => `
+          <div style="display:flex;align-items:center;gap:7px;padding:6px 0;border-top:1px solid var(--line-soft);cursor:pointer" onclick="ownerBookingsJumpToCard(${b.id})">
+            <span style="width:8px;height:8px;border-radius:50%;background:${statusDot[b.status]||'var(--ink-dim)'};flex-shrink:0"></span>
+            <span style="font-size:11.5px;color:var(--ink-soft);flex-shrink:0">${formatTime12(b.start_time)}</span>
+            <span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(b.fields?.name)||''} <span style="font-weight:400;color:var(--ink-dim)">· ${escapeHtml(b.profiles?.name || b.guest_name)||''}</span></span>
+          </div>`).join('') : '<div style="font-size:11.5px;color:var(--ink-dim);padding:4px 0">لا حجوزات</div>'}
+      </div>`;
+  }
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" onclick="shiftOwnerCalendarWeek(-1)">→ الأسبوع السابق</button>
+      <button class="btn btn-ghost btn-sm" onclick="shiftOwnerCalendarWeek(1)">الأسبوع القادم ←</button>
+    </div>
+    ${daysHtml}
+  `;
+}
+function shiftOwnerCalendarWeek(delta){
+  window._ownerCalendarWeekOffset = (window._ownerCalendarWeekOffset||0) + delta;
+  renderOwnerBookingsView();
+}
+function ownerBookingsJumpToCard(bookingId){
+  setOwnerBookingsView('list');
+  // ننتظر لحظة قصيرة حتى ينتهي renderOwnerBookingsView من رسم القائمة، ثم نمرّر للبطاقة المطلوبة ونفتح تفاصيلها ونبرزها مؤقتًا
+  setTimeout(() => {
+    const card = document.getElementById('owner-booking-card-' + bookingId);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const details = document.getElementById('details-' + bookingId);
+    if (details && details.style.display === 'none') toggleBookingDetails(bookingId);
+    card.style.transition = 'box-shadow .3s';
+    card.style.boxShadow = '0 0 0 2px var(--brand)';
+    setTimeout(() => { card.style.boxShadow = ''; }, 2000);
+  }, 150);
+}
+
+// ── حجز يدوي (هاتفي/حضوري) — يحجز الخانة فورًا، لكن ما يتأكد إلا بدفع إلكتروني حقيقي عبر المنصة ──
+async function showManualBookingForm(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '➕ حجز يدوي';
+  const _lt = delayedLoading(bodyEl.id);
+  const fieldOpts = await myFieldsOptionsHtml();
+  clearTimeout(_lt);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('bookings')" style="margin-bottom:14px">→ رجوع</button>`;
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">🔒 هذا الحجز يقفل الخانة فورًا لمنع التعارض مع حجوزات المنصة، لكن **لازم يكتمل بدفع إلكتروني حقيقي** — ما فيه خيار "استلمت الفلوس نقدًا" لضمان احتساب عمولة المنصة بشكل صحيح على كل حجز.</div>
+    <div class="field"><label>اسم اللاعب *</label><input id="mb-name" type="text" placeholder="مثال: خالد العتيبي"></div>
+    <div class="field"><label>رقم جوال اللاعب *</label><input id="mb-phone" type="tel" placeholder="05xxxxxxxx"></div>
+    <div class="legal-note" style="margin-bottom:14px">💡 ما يحتاج يكون عنده حساب مسبقًا — لو عنده حساب بنفس الرقم بنربطه تلقائيًا، ولو لا بنسجّله كحجز ضيف.</div>
+    <div class="field">
+      <label>الملعب *</label>
+      <select id="mb-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        ${fieldOpts}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>التاريخ *</label><input id="mb-date" type="date" value="${riyadhTodayStr()}" min="${riyadhTodayStr()}"></div>
+      <div class="field" style="flex:1"><label>وقت البداية *</label><input id="mb-start" type="time"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>وقت النهاية *</label><input id="mb-end" type="time"></div>
+      <div class="field" style="flex:1"><label>عدد اللاعبين</label><input id="mb-players" type="number" value="6" min="1"></div>
+    </div>
+    <div class="field"><label>السعر الإجمالي (ريال) *</label><input id="mb-price" type="number" placeholder="150"></div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="mb-recurring" onchange="document.getElementById('mb-weeks-wrap').style.display=this.checked?'block':'none'">
+        🔁 عميل دائم — يتكرر أسبوعيًا (نفس اليوم والوقت)
+      </label>
+    </div>
+    <div id="mb-weeks-wrap" style="display:none">
+      <div class="field"><label>عدد الأسابيع</label><input id="mb-weeks" type="number" value="4" min="2" max="12"></div>
+      <div class="legal-note" style="margin-bottom:14px">📌 كل أسبوع يصير له رابط دفع منفصل — تقدر ترسلها كلها دفعة وحدة، أو أسبوعيًا حسب راحتك.</div>
+    </div>
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="createManualBooking()">🔒 احجز الخانة وجهّز رابط الدفع</button>
+  `;
+}
+async function createManualBooking(){
+  const name = document.getElementById('mb-name').value.trim();
+  const phone = document.getElementById('mb-phone').value.trim();
+  const fieldId = document.getElementById('mb-field').value;
+  const date = document.getElementById('mb-date').value;
+  const start = document.getElementById('mb-start').value;
+  const end = document.getElementById('mb-end').value;
+  const players = parseInt(document.getElementById('mb-players').value) || 1;
+  const price = parseFloat(document.getElementById('mb-price').value);
+  const isRecurring = document.getElementById('mb-recurring').checked;
+  const weeks = isRecurring ? (parseInt(document.getElementById('mb-weeks').value) || 4) : 1;
+  if (!name || !phone || !fieldId || !date || !start || !end || !price || price<=0) { showToast('املأ كل الحقول الإلزامية (*)','error'); return; }
+  if (date < riyadhTodayStr()) { showToast('لا يمكن اختيار تاريخ سابق لليوم','error'); return; }
+  if (end <= start) { showToast('وقت النهاية يجب أن يكون بعد وقت البداية','error'); return; }
+
+  // لو عنده حساب مسجّل بنفس الرقم نربطه تلقائيًا، ولو ما عنده نسجّله كحجز ضيف بدون أي عائق
+  const { data: prof } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
+  const { data: { user: currentOwner } } = await sb.auth.getUser();
+
+  showToast(isRecurring ? `جارٍ حجز ${weeks} أسابيع...` : 'جارٍ قفل الخانة...');
+  const results = []; // { date, ok, join_url?, reason? }
+  for (let w = 0; w < weeks; w++) {
+    const d = new Date(date + 'T00:00:00');
+    d.setDate(d.getDate() + (w * 7));
+    const weekDate = d.toISOString().split('T')[0];
+
+    const payload = {
+      field_id: fieldId, booking_date: weekDate, start_time: start, end_time: end,
+      players_count: players, total_price: price, status: 'pending', payment_status: 'unpaid',
+      created_by: currentOwner?.id || null,
+      // نترك share_link_token فارغًا هنا عمدًا — قاعدة البيانات تولّده تلقائيًا بعشوائية آمنة تشفيريًا (gen_random_bytes)
+    };
+    if (prof) { payload.user_id = prof.id; } else { payload.guest_name = name; payload.guest_phone = phone; }
+
+    const { data: booking, error } = await sb.from('bookings').insert(payload).select().single();
+    if (error) {
+      results.push({ date: weekDate, ok: false, reason: (error.code === '23514' || error.message?.includes('conflict')) ? 'الوقت متعارض مع حجز آخر' : error.message });
+      continue;
+    }
+    // رابط داخلي بالكامل — يفتح نموذج الدفع المضمّن بنفس الموقع (بدون أي تحويل خارجي)، باستخدام التوكن الفعلي المولَّد من قاعدة البيانات
+    results.push({ date: weekDate, ok: true, join_url: window.location.origin + '?join=' + booking.share_link_token });
+  }
+
+  const successCount = results.filter(r=>r.ok).length;
+  document.getElementById('ownerTitle').textContent = isRecurring ? '✅ نتيجة الحجز المتكرر' : '✅ الخانة محجوزة';
+  document.getElementById('ownerBody').innerHTML = `
+    <div class="legal-note" style="margin-bottom:14px">✅ تم حجز ${successCount} من ${weeks} — أرسل رابط كل أسبوع للاعب. الحجز ما يتأكد نهائيًا إلا بعد الدفع منه، والدفع يتم بالكامل داخل الموقع.</div>
+    ${results.map(r => `
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:13px">${r.date}</b>
+          <span class="badge ${r.ok?'available':'closed'}" style="font-size:10px">${r.ok?'جاهز':'فشل'}</span>
+        </div>
+        ${r.ok ? `
+          <div style="word-break:break-all;font-size:11.5px;direction:ltr;text-align:left;color:var(--ink-dim);margin-bottom:6px">${r.join_url}</div>
+          <button class="btn btn-soft btn-sm btn-block" onclick="navigator.clipboard.writeText('${r.join_url}');showToast('تم نسخ رابط ${r.date} ✓')">📋 نسخ الرابط</button>
+        ` : `<div style="font-size:11.5px;color:var(--danger)">⚠️ ${escapeHtml(r.reason)}</div>`}
+      </div>`).join('')}
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="ownerGoTab('bookings')">رجوع لقائمة الحجوزات</button>
+  `;
+}
+
+
+// ── إدارة الموظفين (للمالك الحقيقي فقط) ──
+// ── سجل نشاط الموظفين: يعرض آخر الإجراءات المهمة (إلغاء/إنهاء حجز) مع اسم من نفّذها ووقتها ──
+async function showStaffActivityLog(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📜 سجل نشاط الموظفين';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="pushOwnerPage('showStaffManagement',)" style="margin-bottom:14px">→ رجوع</button>`;
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: ownFac } = await sb.from('facilities').select('id').eq('owner_id', user.id);
+  const facIds = (ownFac||[]).map(f=>f.id);
+  if (!facIds.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد منشآت بعد</div>'; return; }
+
+  const { data, error } = await sb.from('staff_activity_log')
+    .select('action, details, created_at, profiles(name)')
+    .in('facility_id', facIds).order('created_at', { ascending:false }).limit(100);
+  clearTimeout(_lt);
+  if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا يوجد نشاط مسجّل بعد</div>'; return; }
+
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">📜 يعرض آخر 100 إجراء مهم قام به الموظفون (تغييرات حالة الحجوزات) — يساعدك تتابع من فعل ماذا.</div>
+    ${data.map(a => `
+      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="font-size:13px"><b>${escapeHtml(a.profiles?.name)||'مستخدم'}</b> — ${escapeHtml(a.action)}</div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-top:3px">${new Date(a.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn')}</div>
+      </div>`).join('')}
+  `;
+}
+
+async function showStaffManagement(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '👥 إدارة الموظفين';
+const _lt = delayedLoading(bodyEl.id);
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: ownFac } = await sb.from('facilities').select('id, name').eq('owner_id', user.id);
+  const facIds = (ownFac||[]).map(f=>f.id);
+  const { data: staffRows } = facIds.length ? await sb
+    .from('facility_staff').select('id, facility_id, user_id, permissions, profiles(name, phone)').in('facility_id', facIds) : { data: [] };
+
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('team')" style="margin-bottom:14px">→ رجوع للوحة</button>`;
+  const facOptions = (ownFac||[]).map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+
+  clearTimeout(_lt);
+
+  bodyEl.innerHTML = backBtn + `
+    ${facIds.length ? `<button class="btn btn-soft btn-block" style="margin-bottom:16px" onclick="pushOwnerPage('showStaffActivityLog',)">📜 سجل نشاط الموظفين</button>` : ''}
+    <div class="dlabel">➕ إضافة موظف</div>
+    <div class="field"><label>رقم جوال الموظف *</label><input id="staff-phone" type="tel" placeholder="05xxxxxxxx"></div>
+    <div class="field">
+      <label>المنشأة *</label>
+      <select id="staff-facility" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        ${facOptions}
+      </select>
+    </div>
+    <div class="field">
+      <label>صلاحياته <span style="color:var(--ink-dim);font-weight:400">(تعديل الملاعب وإدارة الموظفين تبقى لك أنت فقط دائمًا)</span></label>
+      ${staffPermissionCheckboxesHtml('new', ['bookings','schedule'])}
+    </div>
+    <div class="legal-note">⚠️ الموظف لازم يكون سجّل حساب في المنصة برقم جواله هذا مسبقاً (أي نوع حساب).</div>
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="addStaffMember()">إضافة الموظف</button>
+
+    <div class="dlabel" style="margin-top:22px">👥 الموظفون الحاليون</div>
+    ${(staffRows&&staffRows.length)? staffRows.map(s=>`
+      <div style="padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div><b style="font-size:13px">${escapeHtml(s.profiles?.name)||'—'}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(s.profiles?.phone)||''}</div></div>
+          <button class="btn btn-danger btn-sm" onclick="removeStaffMember(${s.id})">إزالة</button>
+        </div>
+        <div class="dlabel" style="font-size:11px;margin:6px 0">صلاحياته</div>
+        ${staffPermissionCheckboxesHtml(s.id, s.permissions||[])}
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="updateStaffPermissions(${s.id})">💾 حفظ الصلاحيات</button>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا يوجد موظفون بعد</div>'}
+  `;
+}
+
+// ── قائمة صلاحيات قابلة للتقييد لكل موظف ──
+const STAFF_PERMISSIONS = [
+  { key:'bookings', label:'إدارة الحجوزات' },
+  { key:'schedule', label:'الجدولة (أوقات العمل والتسعير)' },
+  { key:'finance', label:'الاطّلاع على التحليلات والكوبونات' },
+];
+function staffPermissionCheckboxesHtml(rowKey, selected){
+  selected = selected || [];
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+    ${STAFF_PERMISSIONS.map(p=>`
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);cursor:pointer;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:7px 9px">
+        <input type="checkbox" class="staff-perm-${rowKey}" value="${p.key}" ${selected.includes(p.key)?'checked':''}>
+        <span>${escapeHtml(p.label)}</span>
+      </label>`).join('')}
+  </div>`;
+}
+function collectStaffPermissions(rowKey){
+  return Array.from(document.querySelectorAll(`.staff-perm-${rowKey}:checked`)).map(el=>el.value);
+}
+async function updateStaffPermissions(staffRowId){
+  const perms = collectStaffPermissions(staffRowId);
+  const { error } = await sb.from('facility_staff').update({ permissions: perms }).eq('id', staffRowId);
+  if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
+  showToast('تم حفظ الصلاحيات ✓');
+}
+
+async function addStaffMember(){
+  const phone = document.getElementById('staff-phone').value.trim();
+  const facilityId = document.getElementById('staff-facility').value;
+  const permissions = collectStaffPermissions('new');
+  if (!phone || !facilityId) { showToast('أدخل رقم الجوال واختر المنشأة','error'); return; }
+
+  const { data: prof, error: findErr } = await sb.from('profiles').select('id, name').eq('phone', phone).maybeSingle();
+  if (findErr || !prof) {
+    showStaffInviteHelp(phone);
+    return;
+  }
+  const { data: { user: currentUser } } = await sb.auth.getUser();
+  if (prof.id === currentUser.id) { showToast('لا يمكنك إضافة نفسك كموظف — تأكد من رقم الجوال المدخل','error'); return; }
+
+  const { error } = await sb.from('facility_staff').insert({ facility_id: facilityId, user_id: prof.id, added_by: currentUser.id, permissions });
+  if (error) {
+    if (error.code === '23505') { showToast('هذا الموظف مضاف مسبقاً لهذه المنشأة','error'); return; }
+    showToast('تعذّرت الإضافة: ' + error.message,'error'); return;
+  }
+  try {
+    await sb.rpc('send_notification', { p_user_id: prof.id, p_title:'تمت إضافتك كموظف 👥', p_body:'أصبح بإمكانك إدارة منشأة عبر لوحة ملاعبي' });
+  } catch(e){}
+  showToast(`تمت إضافة ${escapeHtml(prof.name)||'الموظف'} ✓`);
+  showStaffManagement();
+}
+
+// ── يظهر مساعدة سريعة لدعوة موظف غير مسجّل بعد، مع زر واتساب جاهز برسالة دعوة مباشرة ──
+function showStaffInviteHelp(phone){
+  const inviteMessage = encodeURIComponent(`مرحبًا، أبي أضيفك كموظف بمنصة ملاعبنا لإدارة الحجوزات معي. سجّل حساب جديد من هذا الرابط أول: ${window.location.origin}`);
+  const waLink = whatsappLink(phone);
+  openInfoModal('👥 دعوة موظف', `
+    <div style="text-align:center;padding:10px">
+      <div style="font-size:36px;margin-bottom:10px">📱</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px">هذا الرقم ما عنده حساب بالمنصة بعد. أرسل له دعوة تسجيل مباشرة عبر واتساب، وبعد ما يسجّل ارجع أضِفه من نفس الشاشة.</div>
+      ${waLink ? `<a href="${waLink}?text=${inviteMessage}" target="_blank" class="btn btn-brand btn-block" style="text-decoration:none">💬 أرسل دعوة عبر واتساب</a>` : ''}
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="pushOwnerPage('showStaffManagement',)">رجوع</button>
+    </div>`);
+}
+
+function removeStaffMember(staffRowId){
+  showConfirmDialog('إزالة هذا الموظف من المنشأة؟', 'نعم، أزِله', () => _executeRemoveStaffMember(staffRowId));
+}
+async function _executeRemoveStaffMember(staffRowId){
+  const { error } = await sb.from('facility_staff').delete().eq('id', staffRowId);
+  if (error) { showToast('تعذّرت الإزالة: ' + error.message,'error'); return; }
+  showToast('تمت الإزالة ✓');
+  showStaffManagement();
+}
+
+// ── إدارة أكاديميات وبطولات صاحب الملعب ──
+// ── قائمة ملاعب المالك (لاختيارها عند الجدولة) ──
+async function myFieldsOptionsHtml(){
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: ownData } = await sb.from('facilities').select('name, fields(id,name)').eq('owner_id', user.id);
+  const opts = [];
+  (ownData||[]).forEach(f => (f.fields||[]).forEach(fd => opts.push(`<option value="${fd.id}">${escapeHtml(f.name)} — ${escapeHtml(fd.name)}</option>`)));
+  return opts.join('') || '<option value="">لا توجد ملاعب متاحة</option>';
+}
+
+// ── طلب شراكة مع منشأة/ملعب لا يملكه صاحب الأكاديمية/البطولة — يحتاج موافقة صاحب الملعب أولاً قبل الظهور بقائمة اختياراته ──
+
+
+
+const WD_NAMES = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+
+// ── شاشة إدارة طلاب الأكاديمية — عرض المسجّلين، تأكيد/رفض، تواصل واتساب مباشر، وإحصائيات سريعة ──
+
+
+
+// ── مالية الأكاديمية — منفصلة تمامًا عن مالية الملاعب، تعتمد على الاشتراكات المدفوعة فعليًا لهذي الأكاديمية بالذات ──
+// ── إدارة باقات اشتراك الأكاديمية — كل باقة لها مدة وسعر ومميزات خاصة، بدل سعر شهري ثابت وحيد ──
+
+
+
+
+
+// ── نظام الميزات المدفوعة — يغلّف أي محتوى ببلور + زر تفعيل، يختفي تلقائيًا فور نجاح الاشتراك ──
+
+
+
+
+
+
+
+// ── تسجيل الحضور والغياب — لكل مناسبة فعلية من الموعد الأسبوعي بتاريخ محدد، لكل الطلاب النشطين بالأكاديمية ──
+
+
+// ── شاشة إدارة البطولة الشاملة — توليد الجدول تلقائيًا حسب النظام المختار، إدخال نتائج، ترتيب تلقائي، ورابط متابعة عام ──
+
+
+
+
+
+// ── حذف مباراة واحدة (فريق انسحب، خطأ بالجدولة، إلخ) — بدون المساس بباقي الجدول ──
+
+// ── حذف الجدول كاملاً وإعادة توليده من الصفر — متاح فقط لو ما فيه أي نتيجة مسجّلة، حماية من فقدان بيانات نتائج حقيقية ──
+
+
+// ── إدارة المشرفين المساعدين — صاحب البطولة الأصلي فقط يقدر يضيف/يحذف ──
+
+
+
+
+// ── يعرض رابط مشاركة مباشر لصفحة الأكاديمية — يفتحها أي شخص مباشرة داخل التطبيق، وصالح للاستخدام في قوقل مابس أو أي مكان آخر ──
+
+
+// ── يبدّل اختيار نمط سياسة الإيقاف بصريًا، ويظهر/يخفي الحقول المناسبة لكل نمط ──
+function setPausePolicyType(type){
+  document.getElementById('ac-pause-policy-type').value = type;
+  ['count_days','percent_duration'].forEach(t => {
+    document.getElementById(`pause-policy-${t}`).style.borderColor = (t===type) ? 'var(--brand)' : 'var(--line)';
+    document.getElementById(`pause-fields-${t}`).style.display = (t===type) ? (t==='count_days'?'flex':'block') : 'none';
+  });
+}
+
+
+
+
+// ── حجوزات ملاعب صاحب الملعب (يشوف حجوزات ملاعبه هو فقط، ويتحكم فيها) ──
+async function ownerSetBookingStatus(bookingId, newStatus) {
+  const msgs = { confirmed:'تأكيد هذا الحجز؟', cancelled:'إلغاء هذا الحجز؟', completed:'تحديد هذا الحجز كمكتمل؟' };
+
+  let refundNote = '', bkInfo = null;
+  const { data: bkFull } = await sb.from('bookings').select('booking_date, start_time, payment_status, fields(facility_id)').eq('id', bookingId).single();
+  bkInfo = bkFull;
+  if (newStatus === 'cancelled' && bkFull) {
+    try {
+      const { data: pct } = await sb.rpc('calc_refund_percent', { p_booking_date: bkFull.booking_date, p_start_time: bkFull.start_time });
+      refundNote = pct!=null ? `\n\nحسب سياسة الإلغاء، نسبة الاسترجاع المتوقعة: ${pct}%` : '';
+    } catch(e){}
+  }
+  if (!confirm((msgs[newStatus] || 'تأكيد العملية؟') + refundNote)) return;
+
+  const { error } = await sb.from('bookings').update({ status: newStatus }).eq('id', bookingId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+
+  logStaffActivity(bkInfo?.fields?.facility_id, `تغيير حالة حجز #${bookingId} إلى ${newStatus}`, null);
+
+  const wasPaid = bkInfo?.payment_status === 'paid' || bkInfo?.payment_status === 'partial';
+  if (newStatus === 'cancelled' && wasPaid) {
+    try {
+      const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
+      else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
+    } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
+  }
+
+  try {
+    const { data: booking } = await sb.from('bookings').select('user_id, fields(name)').eq('id', bookingId).single();
+    if (booking?.user_id) {
+      const titles = { confirmed:'تم تأكيد حجزك ✅', cancelled:'تم إلغاء حجزك ❌', completed:'انتهت مباراتك 🏁' };
+      await sb.rpc('send_notification', {
+        p_user_id: booking.user_id, p_title: titles[newStatus] || 'تحديث على حجزك',
+        p_body: `تحديث بخصوص حجزك في ${escapeHtml(booking.fields?.name) || 'الملعب'}`
+      });
+    }
+  } catch(e){}
+
+  if (!(newStatus === 'cancelled' && wasPaid)) showToast('تم التحديث ✓');
+  renderOwnerBookingsTab();
+}
+
+// ── فتح/إغلاق ملعب فورياً ──
+function toggleFieldStatus(fieldId, currentStatus) {
+  if (!hasStaffPermission('schedule')) { showToast('ما عندك صلاحية لهذا الإجراء — تواصل مع صاحب الملعب', 'error'); return; }
+  const newStatus = currentStatus === 'available' ? 'closed' : 'available';
+  // فتح ملعب مغلق إجراء آمن ومرغوب فورًا — بدون تأكيد. إغلاق ملعب متاح يوقف حجوزات محتملة، فيحتاج تأكيد صريح لمنع ضغطة خاطئة
+  if (newStatus === 'closed') {
+    showConfirmDialog('هل تريد إغلاق هذا الملعب؟ لن يظهر للاعبين ولن يقدروا يحجزونه حتى تفتحه مرة أخرى.', 'نعم، أغلق الملعب', () => _executeToggleFieldStatus(fieldId, newStatus));
+  } else {
+    _executeToggleFieldStatus(fieldId, newStatus);
+  }
+}
+async function _executeToggleFieldStatus(fieldId, newStatus) {
+  const { error } = await sb.from('fields').update({ status: newStatus }).eq('id', fieldId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  showToast(newStatus === 'available' ? 'تم فتح الملعب ✓' : 'تم إغلاق الملعب ✓');
+  if (window.loadRealFields) window.loadRealFields();
+  ownerGoTab('fields');
+}
+
+// ── حذف ملعب — حصري للمالك الحقيقي دائمًا (عملية لا رجعة فيها) ──
+function deleteField(fieldId) {
+  if (!window._isTrueOwner) { showToast('حذف الملاعب متاح لصاحب الملعب فقط', 'error'); return; }
+  showConfirmDialog('حذف هذا الملعب؟ لو كان له حجوزات سابقة، سيُحفظ سجله (باسم مُعلَّم "محذوف") للحماية القانونية والمالية، ويختفي فورًا من لوحتك ومن الموقع.', 'نعم، احذف الملعب', () => _executeDeleteField(fieldId));
+}
+async function _executeDeleteField(fieldId) {
+  const { error } = await sb.from('fields').delete().eq('id', fieldId);
+  if (!error) {
+    showToast('تم حذف الملعب نهائيًا ✓ (لا سجلات سابقة عليه)');
+    if (window.loadRealFields) window.loadRealFields();
+    ownerGoTab('fields');
+    return;
+  }
+
+  if (error.code === '23503' || error.message.includes('bookings_field_id_fkey')) {
+    // حذف آمن: يبقى السجل موثّقًا للحجوزات/الإيرادات القديمة، لكنه يختفي من كل مكان فعّال
+    const { data: current } = await sb.from('fields').select('name').eq('id', fieldId).single();
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${escapeHtml(current?.name)||'ملعب'} (محذوف)`;
+    const { error: softErr } = await sb.from('fields')
+      .update({ name: markedName, status: 'closed', is_deleted: true })
+      .eq('id', fieldId);
+    if (softErr) { showToast('تعذّر الحذف: ' + softErr.message, 'error'); return; }
+    showToast('تم حذف الملعب ✓ — سجل حجوزاته السابقة محفوظ للحماية المالية والقانونية');
+    if (window.loadRealFields) window.loadRealFields();
+    ownerGoTab('fields');
+    return;
+  }
+  showToast('تعذّر الحذف: ' + error.message, 'error');
+}
+
+// ── تعديل بيانات ملعب موجود ──
+let editingFieldId = null;
+async function editStadiumForm(fieldId) {
+  if (!hasStaffPermission('schedule')) { showToast('ما عندك صلاحية لتعديل الملاعب — تواصل مع صاحب الملعب', 'error'); return; }
+  editingFieldId = fieldId;
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '✏️ تعديل الملعب';
+const _lt = delayedLoading(bodyEl.id);
+
+  const { data: fd, error } = await sb.from('fields')
+    .select('id, name, type, price_per_hour, image_url, amenities, facilities(id, name, city, district, region, lat, lng)')
+    .eq('id', fieldId).single();
+  if (error || !fd) { clearTimeout(_lt); showToast('تعذّر تحميل بيانات الملعب', 'error'); ownerGoTab('fields'); return; }
+
+  newFieldType = fd.type;
+  clearTimeout(_lt);
+  bodyEl.innerHTML = `
+    <div class="field"><label>اسم الملعب *</label><input id="st-name" type="text" value="${escapeHtml(fd.name)}"></div>
+    <div class="field"><label>المدينة *</label><input id="st-city" type="text" value="${escapeHtml(fd.facilities?.city)||''}"></div>
+    <div class="field"><label>الحي *</label><input id="st-district" type="text" value="${escapeHtml(fd.facilities?.district)||''}"></div>
+    <div class="field">
+      <label>المنطقة</label>
+      <select id="st-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        ${saudiRegionOptionsHtml(fd.facilities?.region)}
+      </select>
+    </div>
+    <div class="field">
+      <label>نوع الأرضية</label>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <div class="pay ${fd.type==='artificial'?'sel':''}" id="type-artificial" onclick="selFieldType('artificial')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌿</div>عشب صناعي</div>
+        <div class="pay ${fd.type==='natural'?'sel':''}" id="type-natural" onclick="selFieldType('natural')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌱</div>عشب طبيعي</div>
+        <div class="pay ${fd.type==='indoor'?'sel':''}" id="type-indoor" onclick="selFieldType('indoor')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🏛️</div>مغلق</div>
+      </div>
+    </div>
+    <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" value="${fd.price_per_hour}"></div>
+    <div class="field">
+      <label>مميزات الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — تظهر للاعب وقت الحجز)</span></label>
+      ${amenitiesCheckboxesHtml(fd.amenities)}
+    </div>
+    <div class="field">
+      <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(اضغط لتحديث الموقع)</span></label>
+      <div id="pickerMap" style="height:220px;border-radius:12px;overflow:hidden;border:1px solid var(--line)"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <span id="pickerCoords" style="font-size:11.5px;color:var(--ink-dim)">${fd.facilities?.lat!=null ? `📍 الموقع المحدَّد: ${fd.facilities.lat}, ${fd.facilities.lng}` : 'لم يُحدَّد موقع بعد'}</span>
+        <button class="btn btn-soft btn-sm" onclick="useMyLocationForField()" type="button">📍 استخدم موقعي الآن</button>
+      </div>
+      <input id="st-lat" type="hidden" value="${fd.facilities?.lat ?? ''}">
+      <input id="st-lng" type="hidden" value="${fd.facilities?.lng ?? ''}">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('fields')">إلغاء</button>
+      <button class="btn btn-brand" style="flex:2" onclick="updateStadium(${fd.facilities?.id})">💾 حفظ التعديلات</button>
+    </div>
+  `;
+  initLocationPicker('pickerMap', fd.facilities?.lat ?? null, fd.facilities?.lng ?? null);
+}
+
+async function updateStadium(facilityId) {
+  const name     = document.getElementById('st-name').value.trim();
+  const city     = document.getElementById('st-city').value.trim();
+  const district = document.getElementById('st-district').value.trim();
+  const region   = document.getElementById('st-region').value;
+  const price    = parseFloat(document.getElementById('st-price').value);
+  const latVal   = parseFloat(document.getElementById('st-lat')?.value);
+  const lngVal   = parseFloat(document.getElementById('st-lng')?.value);
+
+  if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
+  if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
+
+  // تحذير غير قاطع (مو رفض) لسعر غير واقعي — يحمي من خطأ كتابة رقم إضافي بالغلط، مع بقاء الخيار متاحًا لو كان مقصودًا فعلاً
+  if (price > 2000) {
+    showConfirmDialog(`السعر المدخل ${price} ريال/ساعة يبدو مرتفعًا جدًا — هل أنت متأكد إن هذا هو السعر الصحيح؟`, 'نعم، هذا صحيح', () => _executeUpdateStadium(facilityId, name, city, district, region, price, latVal, lngVal));
+    return;
+  }
+  await _executeUpdateStadium(facilityId, name, city, district, region, price, latVal, lngVal);
+}
+
+async function _executeUpdateStadium(facilityId, name, city, district, region, price, latVal, lngVal) {
+  showToast('جارٍ الحفظ...');
+
+  const facUpdate = { city, district, region };
+  if (!isNaN(latVal)) facUpdate.lat = latVal;
+  if (!isNaN(lngVal)) facUpdate.lng = lngVal;
+  const { error: facErr } = await sb.from('facilities').update(facUpdate).eq('id', facilityId);
+  if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
+
+  const fldUpdate = { name, type: newFieldType, price_per_hour: price, amenities: collectCheckedAmenities() };
+  const { error: fldErr } = await sb.from('fields')
+    .update(fldUpdate)
+    .eq('id', editingFieldId);
+  if (fldErr) { showToast('تعذّر الحفظ: ' + fldErr.message,'error'); return; }
+
+  showToast('تم حفظ التعديلات ✓ 🏟️');
+  editingFieldId = null;
+  if (window.loadRealFields) window.loadRealFields();
+  ownerGoTab('fields');
+}
+
+// ── أوقات العمل وأيام الإغلاق لكل ملعب ──
+const WEEKDAY_NAMES = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+let whFieldId = null;
+
+// ── معرض صور الملعب: رفع متعدد، حذف، وتحديد صورة الغلاف — كل الصور تُستضاف على imgbb عبر نفس دالة الرفع الموجودة ──
+async function openFieldGallery(fieldId){
+  if (!hasStaffPermission('schedule')) { showToast('ما عندك صلاحية لإدارة صور الملاعب — تواصل مع صاحب الملعب', 'error'); return; }
+  window._galleryFieldId = fieldId;
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🖼️ معرض صور الملعب';
+  const _lt = delayedLoading(bodyEl.id);
+
+  const { data: images } = await sb.from('field_images').select('id, image_url, is_cover, sort_order').eq('field_id', fieldId).order('sort_order');
+  clearTimeout(_lt);
+  renderFieldGalleryList(images || []);
+}
+
+function renderFieldGalleryList(images){
+  const bodyEl = document.getElementById('ownerBody');
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('fields')" style="margin-bottom:14px">→ رجوع للوحة</button>
+
+    <div class="legal-note" style="margin-bottom:14px">🖼️ أضف صور متعددة لملعبك من زوايا مختلفة (الأرضية، الإضاءة، المرافق) — هذا يزيد ثقة اللاعب قبل الحجز. حدّد صورة الغلاف التي تظهر أولًا للاعبين.</div>
+
+    <div class="field">
+      <label>إضافة صور جديدة</label>
+      <input id="gallery-upload-input" type="file" accept="image/*" multiple onchange="handleGalleryUpload(this)" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-family:inherit;font-size:13px">
+    </div>
+    <div id="gallery-upload-status"></div>
+
+    <div class="dlabel">الصور الحالية (${images.length})</div>
+    <div id="gallery-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${images.length ? images.map(img => `
+        <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid ${img.is_cover ? 'var(--brand)' : 'var(--line)'}">
+          <img src="${img.image_url}" style="width:100%;height:110px;object-fit:cover;display:block">
+          ${img.is_cover ? `<span style="position:absolute;top:6px;right:6px;background:var(--brand);color:#0a1408;font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px">الغلاف</span>` : ''}
+          <div style="display:flex;gap:4px;padding:6px;background:var(--bg-soft)">
+            ${!img.is_cover ? `<button class="btn btn-soft btn-sm" style="flex:1;font-size:11px;padding:6px" onclick="setFieldCoverImage(${img.id})">تعيين كغلاف</button>` : `<div style="flex:1"></div>`}
+            <button class="btn btn-danger btn-sm" style="font-size:11px;padding:6px 10px" onclick="deleteFieldImage(${img.id})">🗑️</button>
+          </div>
+        </div>`).join('') : '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--ink-dim);font-size:12.5px">لا توجد صور بعد — أضف أول صورة لملعبك</div>'}
+    </div>
+  `;
+}
+
+async function handleGalleryUpload(input){
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  const statusEl = document.getElementById('gallery-upload-status');
+  const { data: existing } = await sb.from('field_images').select('id').eq('field_id', window._galleryFieldId);
+  let nextSort = (existing||[]).length;
+  const hasNoCoverYet = (existing||[]).length === 0;
+
+  let uploaded = 0, failed = 0;
+  for (let i=0; i<files.length; i++){
+    statusEl.innerHTML = `<div class="legal-note">جارٍ رفع الصورة ${i+1} من ${files.length}...</div>`;
+    const url = await uploadImageToImgbb(files[i]);
+    if (!url) { failed++; continue; }
+    const { error } = await sb.from('field_images').insert({
+      field_id: window._galleryFieldId,
+      image_url: url,
+      sort_order: nextSort++,
+      is_cover: hasNoCoverYet && uploaded === 0
+    });
+    if (!error) uploaded++; else failed++;
+  }
+  statusEl.innerHTML = '';
+  if (uploaded) showToast(`تم رفع ${uploaded} صورة ✓`);
+  if (failed) showToast(`تعذّر رفع ${failed} صورة`, 'error');
+
+  const { data: images } = await sb.from('field_images').select('id, image_url, is_cover, sort_order').eq('field_id', window._galleryFieldId).order('sort_order');
+  renderFieldGalleryList(images || []);
+}
+
+async function setFieldCoverImage(imageId){
+  await sb.from('field_images').update({ is_cover: false }).eq('field_id', window._galleryFieldId);
+  const { error } = await sb.from('field_images').update({ is_cover: true }).eq('id', imageId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  // نزامن أيضًا عمود image_url الرئيسي بالملعب حتى تظهر صورة الغلاف بكل مكان بالتطبيق (البحث، البطاقات، إلخ)
+  const { data: img } = await sb.from('field_images').select('image_url').eq('id', imageId).maybeSingle();
+  if (img?.image_url) await sb.from('fields').update({ image_url: img.image_url }).eq('id', window._galleryFieldId);
+  showToast('تم تعيين صورة الغلاف ✓');
+  const { data: images } = await sb.from('field_images').select('id, image_url, is_cover, sort_order').eq('field_id', window._galleryFieldId).order('sort_order');
+  renderFieldGalleryList(images || []);
+}
+
+async function deleteFieldImage(imageId){
+  if (!confirm('حذف هذه الصورة نهائيًا؟')) return;
+  const { data: img } = await sb.from('field_images').select('is_cover').eq('id', imageId).maybeSingle();
+  const { error } = await sb.from('field_images').delete().eq('id', imageId);
+  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  // لو كانت هي صورة الغلاف المحذوفة، نعيّن أقدم صورة متبقية كغلاف جديد تلقائيًا
+  if (img?.is_cover) {
+    const { data: remaining } = await sb.from('field_images').select('id, image_url').eq('field_id', window._galleryFieldId).order('sort_order').limit(1);
+    if (remaining && remaining.length) {
+      await sb.from('field_images').update({ is_cover: true }).eq('id', remaining[0].id);
+      await sb.from('fields').update({ image_url: remaining[0].image_url }).eq('id', window._galleryFieldId);
+    } else {
+      await sb.from('fields').update({ image_url: null }).eq('id', window._galleryFieldId);
+    }
+  }
+  showToast('تم الحذف ✓');
+  const { data: images } = await sb.from('field_images').select('id, image_url, is_cover, sort_order').eq('field_id', window._galleryFieldId).order('sort_order');
+  renderFieldGalleryList(images || []);
+}
+
+async function openWorkingHours(fieldId) {
+  whFieldId = fieldId;
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '⏰ أوقات العمل وأيام الإغلاق';
+const _lt = delayedLoading(bodyEl.id);
+
+  const [{ data: hours }, { data: blackouts }, { data: pricing }] = await Promise.all([
+    sb.from('field_working_hours').select('weekday, open_time, close_time, is_closed').eq('field_id', fieldId),
+    sb.from('field_blackouts').select('id, blackout_date, reason').eq('field_id', fieldId).gte('blackout_date', new Date().toISOString().split('T')[0]).order('blackout_date'),
+    sb.from('field_weekday_pricing').select('weekday, price').eq('field_id', fieldId)
+  ]);
+  const hoursByDay = {};
+  (hours||[]).forEach(h => hoursByDay[h.weekday] = h);
+  const pricingByDay = {};
+  (pricing||[]).forEach(p => pricingByDay[p.weekday] = p.price);
+
+  clearTimeout(_lt);
+
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('fields')" style="margin-bottom:14px">→ رجوع للوحة</button>
+
+    <div class="dlabel">🕐 أوقات العمل الأسبوعية</div>
+    ${WEEKDAY_NAMES.map((name,i)=>{
+      const h = hoursByDay[i] || { open_time:'14:00:00', close_time:'24:00:00', is_closed:false };
+      return `
+      <div style="display:flex;align-items:center;gap:8px;padding:9px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:6px">
+        <span style="width:70px;font-size:13px;font-weight:700">${name}</span>
+        <input type="time" id="wh-open-${i}" value="${(h.open_time||'14:00').slice(0,5)}" style="flex:1;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink);font-size:12px" ${h.is_closed?'disabled':''}>
+        <span style="font-size:12px;color:var(--ink-dim)">إلى</span>
+        <input type="time" id="wh-close-${i}" value="${(h.close_time||'23:59').slice(0,5)}" style="flex:1;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink);font-size:12px" ${h.is_closed?'disabled':''}>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-dim);white-space:nowrap">
+          <input type="checkbox" id="wh-closed-${i}" ${h.is_closed?'checked':''} onchange="document.getElementById('wh-open-${i}').disabled=this.checked;document.getElementById('wh-close-${i}').disabled=this.checked">
+          مغلق
+        </label>
+      </div>`;
+    }).join('')}
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="saveWorkingHours()">💾 حفظ أوقات العمل</button>
+
+    <div class="dlabel" style="margin-top:26px">💰 تسعير حسب يوم الأسبوع (ذروة/خارج الذروة)</div>
+    <div class="legal-note" style="margin-bottom:10px">اترك الحقل فارغًا لاستخدام السعر الأساسي لليوم. مثال: ضع سعرًا أعلى للجمعة والسبت.</div>
+    ${WEEKDAY_NAMES.map((name,i)=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:6px">
+        <span style="width:70px;font-size:13px;font-weight:700">${name}</span>
+        <input type="number" id="wp-price-${i}" value="${pricingByDay[i] ?? ''}" placeholder="السعر الأساسي" style="flex:1;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px;color:var(--ink);font-size:12px">
+        <span style="font-size:11px;color:var(--ink-dim)">ريال</span>
+      </div>`).join('')}
+    <button class="btn btn-brand btn-block" style="margin-top:6px" onclick="saveWeekdayPricing()">💾 حفظ التسعير</button>
+
+    <div class="dlabel" style="margin-top:26px">🚫 إغلاق تواريخ (صيانة / مناسبة)</div>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <input type="date" id="bo-date" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
+      <span style="align-self:center;font-size:12px;color:var(--ink-dim)">إلى (اختياري)</span>
+      <input type="date" id="bo-date-end" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="text" id="bo-reason" placeholder="السبب (اختياري)" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:9px;color:var(--ink);font-size:13px">
+      <button class="btn btn-soft btn-sm" onclick="addBlackout()">إضافة</button>
+    </div>
+    ${(blackouts&&blackouts.length)? blackouts.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--danger-soft);border-radius:9px;margin-bottom:6px">
+        <span style="font-size:13px"><b>${b.blackout_date}</b>${b.reason? ' — '+escapeHtml(b.reason) : ''}</span>
+        <button class="btn btn-ghost btn-sm" onclick="removeBlackout(${b.id})">إلغاء</button>
+      </div>`).join('') : '<div style="font-size:12.5px;color:var(--ink-dim);padding:6px">لا توجد أيام إغلاق مجدولة</div>'}
+  `;
+}
+
+// ════════════════ لوحة اللاعب — نظام تبويبات موحّد ════════════════
+const PLAYER_TABS = [
+  {key:'overview', label:'🏠 نظرة عامة'},
+  {key:'bookings', label:'📅 حجوزاتي'},
+  {key:'favorites', label:'⭐ المفضّلة'},
+  {key:'lookup', label:'🔍 استعلام'},
+];
+function playerTabsHtml(active){
+  return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
+    ${PLAYER_TABS.map(t=>`<button onclick="playerGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
+  </div>`;
+}
+async function playerGoTab(tab, highlightBookingId){
+  window._playerActiveTab = tab;
+  const isOwnerOrAdmin = window.currentUser && (window.currentUser.role==='owner'||window.currentUser.role==='staff'||window.currentUser.role==='super_admin');
+  document.getElementById('ownerTitle').textContent = isOwnerOrAdmin ? '🎽 حجوزاتي كلاعب' : '⚽ حسابي';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+  document.getElementById('ownerBody').innerHTML = playerTabsHtml(tab) + '<div id="playerTabInner"></div>';
+  window._tabLoadTimer = delayedLoading('playerTabInner');
+  switch(tab){
+    case 'overview':      await renderPlayerOverviewTab(); break;
+    case 'bookings':      await renderPlayerBookingsTab(highlightBookingId); break;
+    case 'favorites':     await renderPlayerFavoritesTab(); break;
+    case 'lookup':        await renderPlayerLookupTab(); break;
+  }
+}
+function playerInner(){ return document.getElementById('playerTabInner'); }
+
+async function renderPlayerOverviewTab(){
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: bookings } = await sb.from('bookings')
+    .select('id, field_id, booking_date, start_time, status, payment_status, amount_paid, total_price, fields(name)')
+    .order('booking_date', { ascending: false });
+  clearTimeout(window._tabLoadTimer);
+
+  const all = bookings || [];
+  const today = riyadhTodayStr();
+  const upcoming = all.filter(b => (b.status==='pending'||b.status==='confirmed') && b.booking_date >= today);
+  const needsPayment = upcoming.filter(b => b.payment_status !== 'paid');
+  const completed = all.filter(b => b.status==='completed');
+
+  // الملعب الأكثر حجزًا (مفضّل ضمنيًا) — نحسبها فقط من الحجوزات الفعلية (مكتملة أو مؤكدة)، مو الملغاة
+  const fieldCounts = {};
+  all.filter(b => b.status==='completed' || b.status==='confirmed').forEach(b => { const n = b.fields?.name; if (n) fieldCounts[n] = (fieldCounts[n]||0) + 1; });
+  const topField = Object.entries(fieldCounts).sort((a,b)=>b[1]-a[1])[0];
+
+  playerInner().innerHTML = `
+    <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:800">أهلاً ${escapeHtml(window.currentUser?.name||'')} 👋</div>
+      <div style="font-size:12px;color:var(--ink-dim);margin-top:4px">${upcoming.length ? `عندك ${upcoming.length} حجز قادم` : 'ما عندك حجوزات قادمة حاليًا'}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="stat-click" onclick="playerGoTab('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:var(--brand)">${upcoming.length}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">حجز قادم</div>
+      </div>
+      <div class="stat-click" onclick="playerGoTab('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:var(--flood)">${completed.length}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">حجز مكتمل</div>
+      </div>
+    </div>
+    ${needsPayment.length ? `
+      <div style="background:var(--danger-soft);border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);border-radius:12px;padding:13px;margin-bottom:14px;cursor:pointer" onclick="playerGoTab('bookings')">
+        <b style="color:var(--danger);font-size:13px">⚠️ ${needsPayment.length} حجز بانتظار إكمال الدفع</b>
+      </div>` : ''}
+    ${topField ? `
+      <div class="dlabel">⭐ ملعبك المفضّل</div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px">
+        <b>${escapeHtml(topField[0])}</b>
+        <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">حجزته ${topField[1]} ${topField[1]===1?'مرة':'مرات'}</div>
+      </div>` : ''}
+    <div class="dlabel">⚡ اختصارات</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="playerGoTab('favorites')">⭐ ملاعبي المفضّلة</button>
+    <button class="btn btn-soft btn-block" onclick="playerGoTab('lookup')">🔍 استعلام عن حجز</button>
+  `;
+}
+
+async function renderPlayerBookingsTab(highlightBookingId){
+  const { data, error } = await sb
+    .from('bookings')
+    .select('id, field_id, booking_date, start_time, end_time, status, total_price, amount_paid, payment_status, is_split, share_link_token, verify_token, checked_in, checked_in_at, players_count, refunded_amount, created_at, fields(name, price_per_hour, facilities(name, city, district))')
+    .order('id', { ascending: false });
+  clearTimeout(window._tabLoadTimer);
+  if (error) { playerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) { playerInner().innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد حجوزات بعد</div>'; return; }
+
+  let reviewedBookingIds = new Set();
+  try {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data: myReviews } = await sb.from('reviews').select('booking_id').eq('user_id', user.id);
+    reviewedBookingIds = new Set((myReviews||[]).map(r => r.booking_id));
+  } catch(e){}
+
+  const today = riyadhTodayStr();
+  const upcoming = data.filter(b => (b.status==='pending'||b.status==='confirmed') && b.booking_date >= today);
+  const past = data.filter(b => !upcoming.includes(b));
+
+  const statusMap = { pending:'بانتظار الدفع', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+
+  const cardHtml = (b) => {
+    const pct = b.total_price>0 ? Math.min(100, Math.round((b.amount_paid/b.total_price)*100)) : 0;
+    const needsMore = b.is_split && b.status==='pending' && b.payment_status!=='paid';
+    const isHighlighted = highlightBookingId && String(b.id) === String(highlightBookingId);
+    const paymentStatusMap = { unpaid:'غير مدفوع', partial:'مدفوع جزئيًا', paid:'مدفوع بالكامل', refunded:'مسترجع' };
+    return `
+    <div id="booking-card-${b.id}" style="padding:14px;background:var(--bg-soft);border:1px solid ${isHighlighted ? 'var(--brand)' : 'var(--line)'};border-radius:12px;margin-bottom:10px${isHighlighted ? ';box-shadow:0 0 0 2px var(--brand)' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;cursor:pointer" onclick="toggleBookingDetails(${b.id})">
+        <div><b>${escapeHtml(b.fields?.name)||'ملعب'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.fields?.facilities?.city)||''} · <span class="mono">#${b.id}</span></div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+          <span id="chevron-${b.id}" style="color:var(--ink-dim);font-size:13px;transition:transform .2s">▾</span>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--ink-soft)">📅 ${b.booking_date} · ⏱️ ${formatTime12(b.start_time)} - ${formatTime12(b.end_time)}</div>
+
+      <div id="details-${b.id}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المنشأة</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.name)||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">الحي</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.district)||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">عدد اللاعبين</span><b style="font-size:12.5px">${b.players_count||'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">سعر الساعة</span><b style="font-size:12.5px">${b.fields?.price_per_hour||'—'} ريال</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">حالة الدفع</span><b style="font-size:12.5px">${paymentStatusMap[b.payment_status]||b.payment_status}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المدفوع</span><b style="font-size:12.5px">${b.amount_paid||0} من ${b.total_price} ريال</b></div>
+        ${Number(b.refunded_amount||0)>0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المسترجع</span><b style="font-size:12.5px;color:var(--danger)">${b.refunded_amount} ريال</b></div>` : ''}
+        ${b.checked_in ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">وقت تسجيل الحضور</span><b style="font-size:12.5px">${b.checked_in_at ? new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تاريخ إنشاء الحجز</span><b style="font-size:12.5px">${b.created_at ? new Date(b.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>
+      </div>
+
+      ${b.status==='confirmed' ? `
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:8px" onclick="pushOwnerPage('showBookingQR',${b.id},'${b.verify_token}')">
+          ${b.checked_in ? '✅ تم تسجيل الحضور' : '📱 عرض رمز الدخول'}
+        </button>` : ''}
+      ${(!b.is_split && b.status==='pending' && b.payment_status==='unpaid') ? `
+        <div style="font-size:11px;color:var(--danger);margin-top:5px">⚠️ لم يكتمل الدفع بعد — سيُلغى الحجز تلقائيًا عند بداية وقت التمرين إذا لم يتم الدفع</div>
+      ` : ''}
+      ${b.is_split ? `
+        <div style="background:var(--bg-elev);border-radius:8px;height:8px;overflow:hidden;margin-top:9px">
+          <div style="height:100%;width:${pct}%;background:var(--brand)"></div>
+        </div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">تم دفع ${b.amount_paid} من ${b.total_price} ريال (${pct}%)</div>
+        ${(b.status==='pending' && b.payment_status!=='paid') ? `<div style="font-size:11px;color:var(--danger);margin-top:3px">⚠️ يُلغى الحجز تلقائيًا ويُسترجع المدفوع بالكامل إذا لم يكتمل قبل بداية وقت التمرين</div>` : ''}
+      ` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <span style="color:var(--flood);font-weight:800">${b.total_price} ريال</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${(b.status==='pending' && b.payment_status!=='paid') ? `<button class="btn btn-brand btn-sm" onclick="resumeBookingPayment(${b.id})">💳 أكمل الدفع</button>` : ''}
+          ${needsMore ? `<button class="btn btn-soft btn-sm" onclick="shareBookingLink('${b.share_link_token}')">📤 شارك الرابط</button>` : ''}
+          ${(b.status==='pending'||b.status==='confirmed')? `<button class="btn btn-danger btn-sm" onclick="cancelMyBooking(${b.id})">إلغاء الحجز</button>`:''}
+          ${(b.status==='completed'||b.status==='cancelled') ? `<button class="btn btn-soft btn-sm" onclick="rebookSameField(${b.field_id},${b.players_count||6})">🔁 كرر الحجز</button>` : ''}
+          ${(b.status==='completed' && !reviewedBookingIds.has(b.id)) ? `<button class="btn btn-soft btn-sm" onclick="openRateBooking(${b.id},${b.field_id})">⭐ قيّم تجربتك</button>` : ''}
+          ${(b.status==='completed' && reviewedBookingIds.has(b.id)) ? `<span style="font-size:12px;color:var(--ink-dim)">✓ تم تقييمه</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  };
+
+  playerInner().innerHTML = `
+    <div class="dlabel">📅 القادمة (${upcoming.length})</div>
+    ${upcoming.length ? upcoming.map(cardHtml).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px 0 16px">لا توجد حجوزات قادمة</div>'}
+    <div class="dlabel">🗂️ السابقة (${past.length})</div>
+    ${past.length ? past.map(cardHtml).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px 0">لا توجد حجوزات سابقة</div>'}
+  `;
+
+  if (highlightBookingId) {
+    setTimeout(() => {
+      const el = document.getElementById('booking-card-' + highlightBookingId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  }
+}
+
+// ── يجدّد اشتراك أكاديمية بنفس الباقة السابقة بضغطة واحدة، بدون إعادة إدخال بيانات اللاعب من الصفر ──
+
+// ── يعرض لولي الأمر سجل حضور ابنه ونسبة الحضور الإجمالية ──
+
+
+// ── يلغي تسجيل اللاعب بأكاديمية أو فريق بطولة — الاسترجاع (لو دُفع مسبقًا) يحتاج مراجعة يدوية من صاحب الأكاديمية/البطولة ──
+// ── يعرض نموذج طلب إيقاف مؤقت للاشتراك — التحقق والتنفيذ يتمّان تلقائيًا بالكامل بدون أي وسيط بشري ──
+
+
+
+async function renderPlayerFavoritesTab(){
+  const { data: { user } } = await sb.auth.getUser();
+  const { data, error } = await sb.from('favorite_fields')
+    .select('id, field_id, fields(id, name, price_per_hour, status, image_url, facilities(name, city, district))')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+  clearTimeout(window._tabLoadTimer);
+  if (error) { playerInner().innerHTML = '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) {
+    playerInner().innerHTML = `<div style="text-align:center;padding:24px;color:var(--ink-dim)">
+      <div style="font-size:32px;margin-bottom:8px">⭐</div>
+      لا توجد ملاعب مفضّلة بعد<br>
+      <span style="font-size:12px">اضغط ♡ على أي ملعب لإضافته هنا</span>
+    </div>`;
+    return;
+  }
+  playerInner().innerHTML = data.map(f => f.fields ? `
+    <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;display:flex;gap:10px;align-items:center">
+      ${f.fields.image_url ? `<img src="${f.fields.image_url}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;${f.fields.status!=='available'?'filter:grayscale(1);opacity:.6':''}">` : ''}
+      <div style="flex:1;min-width:0">
+        <b style="font-size:13px">${escapeHtml(f.fields.name)}</b>
+        <div style="font-size:11.5px;color:var(--ink-dim)">${escapeHtml(f.fields.facilities?.city)||''} · ${f.fields.price_per_hour} ر/ساعة</div>
+        ${f.fields.status!=='available' ? `<div style="font-size:11px;color:var(--danger);font-weight:700;margin-top:2px">⛔ مغلق مؤقتًا</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${f.fields.status==='available'
+          ? `<button class="btn btn-brand btn-sm" onclick="closeAll(); openItem('stadiums', ${f.field_id})">احجز</button>`
+          : `<button class="btn btn-ghost btn-sm" disabled style="opacity:.5;cursor:not-allowed">غير متاح</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="toggleFavoriteField(${f.field_id}, true)">🗑️</button>
+      </div>
+    </div>` : '').join('');
+}
+
+async function toggleFavoriteField(fieldId, isCurrentlyFavorite){
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { showToast('سجّل الدخول أولًا','error'); return; }
+  if (isCurrentlyFavorite) {
+    await sb.from('favorite_fields').delete().eq('user_id', user.id).eq('field_id', fieldId);
+    showToast('تمت الإزالة من المفضّلة');
+  } else {
+    const { error } = await sb.from('favorite_fields').insert({ user_id: user.id, field_id: fieldId });
+    if (error && !error.message.includes('duplicate')) { showToast('تعذّر الإضافة','error'); return; }
+    showToast('أُضيف للمفضّلة ⭐');
+  }
+  if (typeof refreshFavoriteButton === 'function') refreshFavoriteButton(fieldId, !isCurrentlyFavorite);
+  if (window._playerActiveTab === 'favorites') renderPlayerFavoritesTab();
+}
+
+async function isFieldFavorited(fieldId){
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return false;
+  const { data } = await sb.from('favorite_fields').select('id').eq('user_id', user.id).eq('field_id', fieldId).maybeSingle();
+  return !!data;
+}
+
+function refreshFavoriteButton(fieldId, isFavorited){
+  const btn = document.getElementById('favHeartBtn-' + fieldId);
+  if (!btn) return;
+  btn.textContent = isFavorited ? '♥' : '♡';
+  btn.style.color = isFavorited ? 'var(--danger)' : '';
+}
+
+async function handleFavHeartClick(fieldId){
+  const btn = document.getElementById('favHeartBtn-' + fieldId);
+  const currentlyFav = btn && btn.textContent.trim() === '♥';
+  await toggleFavoriteField(fieldId, currentlyFav);
+  refreshFavoriteButton(fieldId, !currentlyFav);
+}
+
+async function renderPlayerLookupTab(){
+  clearTimeout(window._tabLoadTimer);
+  playerInner().innerHTML = `
+    <div class="field"><label>رقم الحجز</label><input id="lookup-id" type="number" placeholder="مثال: 1024"></div>
+    <button class="btn btn-brand btn-block" onclick="doLookup()">استعلام</button>
+    <div id="lookupResult" style="margin-top:16px"></div>
+  `;
+}
+
+// ── يفتح/يقفل قسم التفاصيل الموسّعة داخل بطاقة الحجز نفسها (بدون تنقل لصفحة أخرى) — مستخدمة من اللاعب وصاحب الملعب والأدمن ──
+function toggleBookingDetails(bookingId){
+  const details = document.getElementById('details-' + bookingId);
+  const chevron = document.getElementById('chevron-' + bookingId);
+  if (!details) return;
+  const isOpen = details.style.display !== 'none';
+  details.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+// ── تحليلات صاحب الملعب (لملاعبه فقط) ──
+async function getMyFieldIds(){
+  const { data: { user } } = await sb.auth.getUser();
+  const [{ data: ownFac }, { data: staffFac }] = await Promise.all([
+    sb.from('facilities').select('id').eq('owner_id', user.id),
+    sb.from('facility_staff').select('facility_id').eq('user_id', user.id)
+  ]);
+  const facIds = [...new Set([...(ownFac||[]).map(f=>f.id), ...(staffFac||[]).map(f=>f.facility_id)])];
+  if (!facIds.length) return [];
+  const { data: fields } = await sb.from('fields').select('id').in('facility_id', facIds);
+  return (fields||[]).map(f=>f.id);
+}
+
+async function showOwnerAnalytics(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📈 تحليلاتي';
+const _lt = delayedLoading(bodyEl.id);
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+
+  const fieldIds = await getMyFieldIds();
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+  if (!fieldIds.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">أضف ملعباً أولاً لتظهر لك التحليلات</div>'; return; }
+
+  const since = new Date(riyadhNow().getTime() - 13*24*60*60*1000).toISOString().split('T')[0];
+  const [{ data: recentBookings }, { data: allBookings }] = await Promise.all([
+    sb.from('bookings').select('booking_date').in('field_id', fieldIds).gte('booking_date', since),
+    sb.from('bookings').select('start_time, status, total_price, refunded_amount').in('field_id', fieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid')
+  ]);
+
+  const dayCounts = {};
+  for (let i=0;i<14;i++){ const d=riyadhNow(); d.setUTCDate(d.getUTCDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
+  (recentBookings||[]).forEach(b=>{ if (dayCounts[b.booking_date]!==undefined) dayCounts[b.booking_date]++; });
+  const days = Object.keys(dayCounts).sort();
+  const maxCount = Math.max(1, ...days.map(d=>dayCounts[d]));
+  const barsHtml = days.map(d=>{
+    const h = Math.round((dayCounts[d]/maxCount)*60)+4;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="width:100%;max-width:16px;height:${h}px;background:var(--brand);border-radius:3px 3px 0 0" title="${d}: ${dayCounts[d]}"></div>
+      <span style="font-size:8px;color:var(--ink-dim)">${d.slice(8,10)}</span>
+    </div>`;
+  }).join('');
+
+  const hourCounts = {};
+  (allBookings||[]).forEach(b=>{ const h = (b.start_time||'').slice(0,2); if (h) hourCounts[h]=(hourCounts[h]||0)+1; });
+  const busiestHour = Object.entries(hourCounts).sort((a,b)=>b[1]-a[1])[0];
+  const totalRevenue = (allBookings||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+
+  clearTimeout(_lt);
+
+  bodyEl.innerHTML = backBtn + `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">إجمالي الإيرادات</div>
+      </div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:var(--brand)">${busiestHour ? busiestHour[0]+':00' : '—'}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">أكثر وقت ازدحامًا</div>
+      </div>
+    </div>
+    <div class="dlabel">📅 الحجوزات آخر 14 يوم</div>
+    <div style="display:flex;align-items:flex-end;gap:4px;height:80px;background:var(--bg-soft);border-radius:10px;padding:10px 8px">${barsHtml}</div>
+  `;
+}
+
+async function saveWeekdayPricing(){
+  const rows = [];
+  WEEKDAY_NAMES.forEach((_,i)=>{
+    const val = document.getElementById(`wp-price-${i}`).value;
+    if (val !== '' && !isNaN(parseFloat(val))) rows.push({ field_id: whFieldId, weekday: i, price: parseFloat(val) });
+  });
+  // احذف القديم غير المحدد حديثاً ثم أدرج الجديد (استبدال كامل بسيط وآمن)
+  await sb.from('field_weekday_pricing').delete().eq('field_id', whFieldId);
+  if (rows.length) {
+    const { error } = await sb.from('field_weekday_pricing').insert(rows);
+    if (error) { showToast('تعذّر حفظ التسعير: '+error.message,'error'); return; }
+  }
+  showToast('تم حفظ التسعير ✓ 💰');
+}
+
+async function saveWorkingHours() {
+  const rows = WEEKDAY_NAMES.map((_,i) => ({
+    field_id: whFieldId,
+    weekday: i,
+    open_time: document.getElementById(`wh-open-${i}`).value || '14:00',
+    close_time: document.getElementById(`wh-close-${i}`).value || '23:59',
+    is_closed: document.getElementById(`wh-closed-${i}`).checked
+  }));
+  const { error } = await sb.from('field_working_hours').upsert(rows, { onConflict: 'field_id,weekday' });
+  if (error) { showToast('تعذّر الحفظ: ' + error.message, 'error'); return; }
+  showToast('تم حفظ أوقات العمل ✓');
+}
+
+async function addBlackout() {
+  const dateStart = document.getElementById('bo-date').value;
+  const dateEnd = document.getElementById('bo-date-end').value || dateStart;
+  const reason = document.getElementById('bo-reason').value.trim();
+  if (!dateStart) { showToast('اختر تاريخاً','error'); return; }
+  if (dateEnd < dateStart) { showToast('تاريخ النهاية لازم يكون بعد تاريخ البداية','error'); return; }
+
+  const rows = [];
+  let d = new Date(dateStart);
+  const end = new Date(dateEnd);
+  let guard = 0;
+  while (d <= end && guard < 366) {
+    rows.push({ field_id: whFieldId, blackout_date: d.toISOString().split('T')[0], reason: reason || null });
+    d.setDate(d.getDate()+1); guard++;
+  }
+  const { error } = await sb.from('field_blackouts').upsert(rows, { onConflict: 'field_id,blackout_date' });
+  if (error) { showToast('تعذّر الإضافة: ' + error.message, 'error'); return; }
+  showToast(rows.length>1 ? `تم إغلاق ${rows.length} يومًا ✓` : 'تم إغلاق هذا التاريخ ✓');
+  openWorkingHours(whFieldId);
+}
+
+async function removeBlackout(id) {
+  const { error } = await sb.from('field_blackouts').delete().eq('id', id);
+  if (error) { showToast('تعذّر الإلغاء', 'error'); return; }
+  showToast('تم إلغاء الإغلاق ✓');
+  openWorkingHours(whFieldId);
+}
+
+// ════════════════ لوحة المالك — نظام تبويبات منظّم ════════════════
+const ADMIN_TABS = [
+  {key:'overview', label:'🏠 نظرة عامة'},
+  {key:'users', label:'👥 المستخدمون'},
+  {key:'facilities', label:'🏟️ المنشآت'},
+  {key:'bookings', label:'📅 الحجوزات'},
+  {key:'finance', label:'💰 المالية'},
+  {key:'reviews', label:'⭐ التقييمات'},
+  {key:'integrations', label:'🔌 التكاملات'},
+];
+function adminTabsHtml(active){
+  return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--line)">
+    ${ADMIN_TABS.map(t=>`<button onclick="adminGoTab('${t.key}')" style="white-space:nowrap;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1px solid var(--line);background:${active===t.key?'var(--brand)':'var(--bg-soft)'};color:${active===t.key?'#fff':'var(--ink-soft)'}">${escapeHtml(t.label)}</button>`).join('')}
+  </div>`;
+}
+async function adminGoTab(tab, isRoot){
+  if (isRoot || !window._ownerNavStack.length) {
+    window._ownerNavStack = [{ fn: 'adminGoTab', args: [tab, true] }];
+    history.pushState({ _ownerPage: true, stackDepth: 1 }, '', window.location.href);
+  }
+  document.getElementById('ownerTitle').textContent = '🛡️ لوحة تحكم المالك';
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+  document.getElementById('ownerBody').innerHTML = adminTabsHtml(tab) + '<div id="adminTabInner"></div>';
+  window._tabLoadTimer = delayedLoading('adminTabInner');
+  switch(tab){
+    case 'overview':     await renderAdminOverviewTab(); break;
+    case 'users':        await adminView('users'); break;
+    case 'facilities':   await adminView('facilities'); break;
+    case 'bookings':     await adminView('bookings'); break;
+    case 'reviews':      await adminView('reviews'); break;
+    case 'finance':      await renderAdminFinanceTab(); break;
+    case 'integrations': await renderAdminIntegrationsTab(); break;
+  }
+}
+
+async function renderAdminOverviewTab(){
+  const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  const today = riyadhNow();
+  const weekAgo = new Date(today); weekAgo.setUTCDate(today.getUTCDate()-7);
+  const twoWeeksAgo = new Date(today); twoWeeksAgo.setUTCDate(today.getUTCDate()-14);
+  const weekAgoIso = weekAgo.toISOString();
+  const twoWeeksAgoIso = twoWeeksAgo.toISOString();
+
+  const [{ count: usersCount }, { count: facCount }, { count: bookCount }, { count: pendingFacCount }, { data: earnRows }, { data: pubKeySetting }, { data: latestSmsLog }, { count: usersThisWeek }, { count: usersPrevWeek }, { count: bookingsThisWeek }, { count: bookingsPrevWeek }, { data: oldestPendingFac }] = await Promise.all([
+    sb.from('profiles').select('*', { count: 'exact', head: true }),
+    sb.from('facilities').select('*', { count: 'exact', head: true }),
+    sb.from('bookings').select('*', { count: 'exact', head: true }),
+    sb.from('facilities').select('*', { count: 'exact', head: true }).eq('approved', false),
+    sb.from('bookings').select('total_price, refunded_amount').in('status', ['confirmed','completed','cancelled']).neq('payment_status','unpaid'),
+    sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
+    sb.from('sms_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
+    sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', twoWeeksAgoIso).lt('created_at', weekAgoIso),
+    sb.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', weekAgoIso),
+    sb.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', twoWeeksAgoIso).lt('created_at', weekAgoIso),
+    sb.from('facilities').select('name, created_at').eq('approved', false).order('created_at', { ascending: true }).limit(1),
+  ]);
+  const totalPending = (pendingFacCount||0);
+  const totalRevenue = (earnRows||[]).reduce((sum,b) => sum + (Number(b.total_price||0) - Number(b.refunded_amount||0)), 0);
+  const commissionEarned = Math.round(totalRevenue * (commissionPct/100) * 100) / 100;
+  // "مفعّلة" تعني الإعداد موجود فعليًا — لا نعتمد على وجود استخدام ناجح سابق، لأن منصة جديدة كليًا تكون بلا أي استخدام بعد رغم إعدادها الصحيح
+  const paymentActive = !!pubKeySetting?.value;
+  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key';
+
+  const growthPct = (curr, prev) => prev>0 ? Math.round(((curr-prev)/prev)*100) : (curr>0 ? 100 : 0);
+  const usersGrowth = growthPct(usersThisWeek||0, usersPrevWeek||0);
+  const bookingsGrowth = growthPct(bookingsThisWeek||0, bookingsPrevWeek||0);
+  const growthBadge = (pct) => `<span style="font-size:11px;font-weight:700;color:${pct>=0?'var(--brand)':'var(--danger)'}">${pct>=0?'▲':'▼'} ${Math.abs(pct)}%</span>`;
+
+  let oldestPendingDays = null, oldestPendingName = null;
+  if (oldestPendingFac && oldestPendingFac.length) {
+    oldestPendingName = oldestPendingFac[0].name;
+    oldestPendingDays = Math.floor((today - new Date(oldestPendingFac[0].created_at)) / (1000*60*60*24));
+  }
+
+  clearTimeout(window._tabLoadTimer);
+
+  document.getElementById('adminTabInner').innerHTML = `
+    <div class="dlabel">📈 النمو الأسبوعي</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:20px;font-weight:900">${usersThisWeek||0}</div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">مستخدم جديد هذا الأسبوع</div>
+        ${growthBadge(usersGrowth)}
+      </div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:20px;font-weight:900">${bookingsThisWeek||0}</div>
+        <div style="font-size:11px;color:var(--ink-dim);margin-bottom:4px">حجز جديد هذا الأسبوع</div>
+        ${growthBadge(bookingsGrowth)}
+      </div>
+    </div>
+
+    <div class="dlabel">📊 الأرقام الأساسية</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+      <div class="stat-click" onclick="adminGoTab('users')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--brand)">${usersCount||0}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">مستخدم</div></div>
+      <div class="stat-click" onclick="adminGoTab('facilities')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--flood)">${facCount||0}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">منشأة</div></div>
+      <div class="stat-click" onclick="adminGoTab('bookings')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--brand)">${bookCount||0}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">حجز</div></div>
+    </div>
+
+    ${totalPending>0 ? `
+    <div class="dlabel">⏳ يحتاج انتباهك</div>
+    <div class="stat-click" onclick="adminView('approvals')" style="background:var(--flood-soft);border:1px solid color-mix(in srgb,var(--flood) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;font-weight:700">⏳ ${totalPending} عنصر بانتظار موافقتك</span>
+      <span style="font-size:12px">راجع الآن ←</span>
+    </div>
+    ${(oldestPendingDays!=null && oldestPendingDays>=3) ? `
+    <div class="stat-click" onclick="adminGoTab('facilities')" style="background:var(--danger-soft);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent);border-radius:12px;padding:12px 16px;margin-bottom:16px">
+      <span style="font-size:12.5px;font-weight:700;color:var(--danger)">⚠️ منشأة "${escapeHtml(oldestPendingName)}" بانتظار الموافقة منذ ${oldestPendingDays} يوم</span>
+    </div>` : ''}` : ''}
+
+    <div class="dlabel">💰 لمحة مالية</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:20px;font-weight:900;color:var(--flood)">${totalRevenue}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">إجمالي حجوزات المنصة (ريال)</div>
+      </div>
+      <div class="stat-click" onclick="adminGoTab('finance')" style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:20px;font-weight:900;color:var(--brand-deep)">${commissionEarned}</div>
+        <div style="font-size:11px;color:var(--ink-dim)">عمولتك (${commissionPct}%)</div>
+      </div>
+    </div>
+
+    <div class="dlabel">🔌 حالة التكاملات</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <div class="stat-click" onclick="adminGoTab('integrations')" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:12px">${paymentActive?'✅':'⚠️'} الدفع الإلكتروني</div>
+      </div>
+      <div class="stat-click" onclick="adminGoTab('integrations')" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:12px">${smsActive?'✅':'⚠️'} الرسائل النصية</div>
+      </div>
+    </div>
+
+    <div class="dlabel">🎯 إجراءات سريعة</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="pushOwnerPage('showBroadcastForm',)">📢 إرسال إشعار جماعي</button>
+    <button class="btn btn-soft btn-block" onclick="adminGoTab('reviews')">⭐ مراجعة التقييمات</button>
+  `;
+}
+
+// ── تقرير محاسبي شامل للمنصة: يفصّل الإيرادات والعمولة المستحقة لكل منشأة على حدة، مع تقدير ضريبي ──
+async function renderAdminFinanceTab(){
+  const { data: commSetting } = await sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle();
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+  const [{ data: earnRows }, { data: payoutRows }] = await Promise.all([
+    sb.from('bookings').select('total_price, refunded_amount').in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid'),
+    sb.from('payouts').select('net_amount'),
+  ]);
+  const totalRevenue = (earnRows||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+  const commissionEarned = Math.round(totalRevenue * (commissionPct/100) * 100) / 100;
+  const totalPaidOut = (payoutRows||[]).reduce((s,p)=>s+Number(p.net_amount||0),0);
+
+  clearTimeout(window._tabLoadTimer);
+  document.getElementById('adminTabInner').innerHTML = `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-bottom:8px">لمحة مالية عامة</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+        <div><div style="font-size:17px;font-weight:900;color:var(--flood)">${totalRevenue}</div><div style="font-size:10.5px;color:var(--ink-dim)">إجمالي الحجوزات</div></div>
+        <div><div style="font-size:17px;font-weight:900;color:var(--brand)">${commissionEarned}</div><div style="font-size:10.5px;color:var(--ink-dim)">عمولتك (${commissionPct}%)</div></div>
+        <div><div style="font-size:17px;font-weight:900;color:var(--ink-soft)">${totalPaidOut}</div><div style="font-size:10.5px;color:var(--ink-dim)">تم تحويله للملاك</div></div>
+      </div>
+    </div>
+
+    <div class="dlabel">📈 التحليلات</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="adminView('analytics')">تحليلات الإيرادات التفصيلية</button>
+
+    <div class="dlabel">📄 التقارير المحاسبية</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:8px" onclick="exportAdminAccountingReport()">تصدير تقرير محاسبي شامل للمنصة (CSV)</button>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="pushOwnerPage('showAdminMonthlyReports',)">🗓️ الأرشيف الشهري (يُنشأ تلقائيًا)</button>
+
+    <div class="dlabel">⚙️ الإعدادات</div>
+    <button class="btn btn-soft btn-block" style="margin-bottom:20px" onclick="adminView('commission')">نسبة عمولة المنصة</button>
+
+    <div class="dlabel">💸 التحويلات</div>
+    <button class="btn btn-brand btn-block" onclick="adminView('payouts')">تنفيذ التحويلات المستحقة لأصحاب الملاعب</button>
+  `;
+}
+
+// ── الأرشيف الشهري للمنصة: يعرض التقارير المُنشأة تلقائيًا كل يوم 1 ميلادي عن الشهر السابق ──
+async function showAdminMonthlyReports(){
+  const titleEl = document.getElementById('ownerTitle');
+  const bodyEl = document.getElementById('adminTabInner') || document.getElementById('ownerBody');
+  titleEl.textContent = '🗓️ الأرشيف الشهري';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="adminGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  const { data, error } = await sb.from('monthly_accounting_reports')
+    .select('id, month_label, report_year, report_month, generated_at')
+    .eq('scope', 'platform')
+    .order('report_year', { ascending:false }).order('report_month', { ascending:false });
+  clearTimeout(_lt);
+  if (error) { bodyEl.innerHTML = backBtn + '<div style="color:var(--danger);padding:14px">تعذّر التحميل</div>'; return; }
+  if (!data || !data.length) {
+    bodyEl.innerHTML = backBtn + `
+      <div style="text-align:center;padding:24px;color:var(--ink-dim)">
+        <div style="font-size:32px;margin-bottom:8px">🗓️</div>
+        لا توجد تقارير شهرية بعد<br>
+        <span style="font-size:12px">يُنشأ تقرير جديد تلقائيًا في اليوم الأول من كل شهر ميلادي عن الشهر السابق</span>
+      </div>`;
+    return;
+  }
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">🗓️ تقرير شامل للمنصة يُنشأ تلقائيًا كل يوم 1 ميلادي عن الشهر الذي فات.</div>
+    ${data.map(r => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div><b style="font-size:14px">تقرير شهر ${escapeHtml(r.month_label)}</b><div style="font-size:11px;color:var(--ink-dim)">أُنشئ بتاريخ ${new Date(r.generated_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}</div></div>
+        <button class="btn btn-brand btn-sm" onclick="downloadAdminMonthlyReport(${r.id}, '${escapeHtml(r.month_label)}')">📥 تحميل</button>
+      </div>`).join('')}
+  `;
+}
+
+async function downloadAdminMonthlyReport(reportId, monthLabel){
+  showToast('جارٍ التحميل...');
+  const { data, error } = await sb.from('monthly_accounting_reports').select('csv_content').eq('id', reportId).maybeSingle();
+  if (error || !data) { showToast('تعذّر تحميل التقرير', 'error'); return; }
+  const blob = new Blob([data.csv_content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-المنصة-${monthLabel}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم التحميل ✓');
+}
+
+async function exportAdminAccountingReport(){
+  showToast('جارٍ تجهيز التقرير...');
+  const [{ data: commSetting }, { data: bookings }, { data: payoutRows }] = await Promise.all([
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
+    sb.from('bookings').select('booking_date, total_price, refunded_amount, status, fields(name, facilities(name, owner_id, profiles(name)))').in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').order('booking_date'),
+    sb.from('payouts').select('net_amount, facility_id, facilities(name)')
+  ]);
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  // تجميع حسب المنشأة
+  const byFacility = {};
+  (bookings||[]).forEach(b => {
+    const facName = b.fields?.facilities?.name || 'غير محدد';
+    const ownerName = b.fields?.facilities?.profiles?.name || '—';
+    if (!byFacility[facName]) byFacility[facName] = { ownerName, gross: 0, count: 0 };
+    byFacility[facName].gross += (Number(b.total_price||0) - Number(b.refunded_amount||0));
+    byFacility[facName].count += 1;
+  });
+  const payoutsByFacility = {};
+  (payoutRows||[]).forEach(p => {
+    const facName = p.facilities?.name || 'غير محدد';
+    payoutsByFacility[facName] = (payoutsByFacility[facName]||0) + Number(p.net_amount||0);
+  });
+
+  let csv = '\uFEFF'; // BOM لدعم العربي بإكسل
+  csv += 'المنشأة,المالك,عدد الحجوزات,إجمالي الحجوزات (ريال),عمولة المنصة (ريال),صافي مستحق للمالك (ريال),تم تحويله فعليًا (ريال)\n';
+
+  let grandTotalGross = 0, grandTotalCommission = 0, grandTotalNet = 0, grandTotalPaid = 0;
+  Object.entries(byFacility).sort((a,b) => b[1].gross - a[1].gross).forEach(([facName, d]) => {
+    const gross = Math.round(d.gross * 100) / 100;
+    const commission = Math.round(gross * (commissionPct/100) * 100) / 100;
+    const net = Math.round((gross - commission) * 100) / 100;
+    const paid = Math.round((payoutsByFacility[facName]||0) * 100) / 100;
+    csv += `${escapeHtml(facName)},${escapeHtml(d.ownerName)},${d.count},${gross},${commission},${net},${paid}\n`;
+    grandTotalGross += gross; grandTotalCommission += commission; grandTotalNet += net; grandTotalPaid += paid;
+  });
+
+  grandTotalGross = Math.round(grandTotalGross*100)/100;
+  grandTotalCommission = Math.round(grandTotalCommission*100)/100;
+  grandTotalNet = Math.round(grandTotalNet*100)/100;
+  grandTotalPaid = Math.round(grandTotalPaid*100)/100;
+  const outstandingPayouts = Math.round((grandTotalNet - grandTotalPaid)*100)/100;
+
+  csv += `\nملخص,,,${grandTotalGross},${grandTotalCommission},${grandTotalNet},${grandTotalPaid}\n`;
+  csv += `\nبند,,,,,,القيمة (ريال)\n`;
+  csv += `إجمالي حجوزات المنصة,,,,,,${grandTotalGross}\n`;
+  csv += `إجمالي عمولة المنصة (إيراد المنصة) (${commissionPct}%),,,,,,${grandTotalCommission}\n`;
+  csv += `إجمالي مستحق لأصحاب الملاعب,,,,,,${grandTotalNet}\n`;
+  csv += `إجمالي ما تم تحويله فعليًا,,,,,,${grandTotalPaid}\n`;
+  csv += `تحويلات معلّقة لم تُنفَّذ بعد,,,,,,${outstandingPayouts}\n`;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-المنصة-${riyadhTodayStr()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم تحميل التقرير ✓');
+}
+
+function showSiteAnalytics(){
+  openInfoModal('📊 إحصائيات الموقع', `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:24px">✅</span>
+      <div>
+        <div style="font-weight:800;font-size:13.5px">Google Analytics مفعّل</div>
+        <div style="font-size:11.5px;color:var(--ink-dim)">يجمع بيانات الزوار تلقائيًا منذ التركيب</div>
+      </div>
+    </div>
+    <div class="dlabel">📈 وش تقدر تشوفه</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px">
+      ${['عدد الزوار اليومي والشهري','من أي مدينة/دولة يجونك','من أي جهاز (جوال/حاسوب)','أكثر الأقسام زيارة بالموقع','مصدر الزيارة (بحث، رابط مباشر، سوشيال ميديا)']
+        .map(item=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--bg-soft);border-radius:8px;padding:8px 12px"><span style="color:var(--brand)">📌</span> ${item}</div>`).join('')}
+    </div>
+    <a href="https://analytics.google.com" target="_blank" style="text-decoration:none">
+      <button class="btn btn-brand btn-block">فتح لوحة Google Analytics الكاملة ↗</button>
+    </a>
+    <div class="legal-note" style="margin-top:12px">📌 البيانات التفصيلية الحيّة تُعرض حاليًا بموقع Google Analytics نفسه (بحسابك الشخصي) — عرضها مباشرة داخل هذي اللوحة يحتاج ربط تقني إضافي (نفس خطوات Google Cloud اللي ناقشناها لصحة السيو).</div>
+  `);
+}
+
+async function showSeoHealth(){
+  openInfoModal('📈 صحة السيو', '<div style="text-align:center;padding:30px;color:var(--ink-dim)">جارٍ التحميل...</div>');
+  const [{ count: fieldsCount }, { count: reviewsCount }, { data: avgData }] = await Promise.all([
+    sb.from('fields').select('*', { count:'exact', head:true }).eq('approved', true).eq('is_deleted', false),
+    sb.from('reviews').select('*', { count:'exact', head:true }),
+    sb.from('reviews').select('rating'),
+  ]);
+  const avgRating = (avgData && avgData.length) ? (avgData.reduce((s,r)=>s+r.rating,0)/avgData.length).toFixed(1) : '—';
+
+  let sitemapLastmod = '—';
+  try {
+    const res = await fetch('https://lsgakyydqomzntoebqep.supabase.co/functions/v1/dynamic-sitemap');
+    const xml = await res.text();
+    const match = xml.match(/<lastmod>(.*?)<\/lastmod>/);
+    if (match) sitemapLastmod = match[1];
+  } catch(e){}
+
+  document.getElementById('ownerBody').innerHTML = `
+    <div class="dlabel">📊 حجم المحتوى الحقيقي (يفيد السيو)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center">
+        <div style="font-size:18px;font-weight:900;color:var(--brand)">${fieldsCount||0}</div><div style="font-size:10px;color:var(--ink-dim)">ملعب</div></div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center">
+        <div style="font-size:18px;font-weight:900;color:var(--flood)">${avgRating}</div><div style="font-size:10px;color:var(--ink-dim)">متوسط تقييم (${reviewsCount||0})</div></div>
+    </div>
+
+    <div class="dlabel">🗺️ خارطة الموقع</div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>آخر تحديث حقيقي مسجّل</span><b>${sitemapLastmod}</b></div>
+      <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">تتحدث تلقائيًا لحظة اعتماد أي منشأة/أكاديمية/بطولة جديدة</div>
+    </div>
+
+    <div class="dlabel">✅ العناصر التقنية المطبّقة</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+      ${[
+        'خارطة موقع ديناميكية (sitemap.xml)',
+        'ملف توجيه الزحف (robots.txt)',
+        'بيانات مهيكلة (Schema.org)',
+        'ملف llms.txt للذكاء الاصطناعي',
+        'عنوان ووصف الصفحة (title + meta description)',
+        'رابط أساسي لمنع تكرار المحتوى (canonical)',
+        'إعداد العرض للجوال (viewport)',
+        'لغة واتجاه الصفحة (lang="ar" + RTL)',
+        'عناوين ووصف Open Graph (Facebook/WhatsApp)',
+        'صورة معاينة عند المشاركة (og:image)',
+        'بطاقة معاينة تويتر/X (Twitter Card)',
+        'نص بديل لكل صورة (alt text)',
+        'أسماء وصفية لكل عنصر تفاعلي (aria-label)',
+        'اتصال آمن مشفّر (HTTPS)',
+        'تحقق ملكية Google Search Console'
+      ].map(item=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--bg-soft);border-radius:8px;padding:8px 12px"><span style="color:var(--brand)">✅</span> ${item}</div>`).join('')}
+    </div>
+
+    <div class="legal-note">📌 لمتابعة الترتيب الفعلي بنتائج البحث وعدد الظهور، هذي بيانات حيّة تتطلب حسابك الشخصي — راجعها مباشرة عبر <a href="https://search.google.com/search-console" target="_blank" style="color:var(--brand);font-weight:700">Google Search Console</a>.</div>
+  `;
+}
+
+async function renderAdminIntegrationsTab(){
+  const [{ data: pubKeySetting }, { data: latestSmsLog }] = await Promise.all([
+    sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
+    sb.from('sms_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const paymentActive = !!pubKeySetting?.value;
+  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key';
+
+  clearTimeout(window._tabLoadTimer);
+  document.getElementById('adminTabInner').innerHTML = `
+    <div class="dlabel">💳 الدفع الإلكتروني</div>
+    <div class="stat-click" onclick="adminView('payment')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px">${paymentActive?'✅ مفعّلة':'⚠️ غير مفعّلة بعد'}</span>
+      <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
+    </div>
+
+    <div class="dlabel">📱 الرسائل النصية</div>
+    <div class="stat-click" onclick="adminView('sms')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px">${smsActive?'✅ مفعّلة':'⚠️ غير مفعّلة بعد'}</span>
+      <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
+    </div>
+  `;
+}
+
+// ── يفلتر قائمة المستخدمين المخزّنة بالذاكرة حسب الاسم أو رقم الجوال، بدون إعادة استعلام قاعدة البيانات لكل حرف يُكتب ──
+function renderAdminUsersList(){
+  const listEl = document.getElementById('admin-users-list');
+  if (!listEl) return;
+  const q = normalizeArabicText((document.getElementById('admin-users-search')?.value || '').trim());
+  const all = window._adminUsersCache || [];
+  const filtered = q ? all.filter(u =>
+    normalizeArabicText(u.name || '').includes(q) || String(u.phone || '').includes(q)
+  ) : all;
+  const roleLabel = { customer:'⚽ لاعب', owner:'🏟️ صاحب ملعب', staff:'🏟️ موظف', super_admin:'🛡️ مالك' };
+
+  if (!filtered.length) { listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا يوجد مستخدمون مطابقون</div>'; return; }
+
+  listEl.innerHTML = filtered.map(u => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;gap:8px">
+      <div style="flex:1;min-width:0">
+        <b>${escapeHtml(u.name)||'—'}</b>
+        <div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(u.phone)||''} · ${roleLabel[u.role]||u.role}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${u.role==='customer' ? `<button class="btn btn-soft btn-sm" onclick="ownerControl('${u.id}','owner')">ترقية لصاحب ملعب</button>` : ''}
+        ${u.role==='owner' ? `<button class="btn btn-danger btn-sm" onclick="ownerControl('${u.id}','customer')">إلغاء صفة صاحب ملعب</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function adminView(kind) {
+  const titleEl = document.getElementById('ownerTitle');
+  const bodyEl = document.getElementById('adminTabInner') || document.getElementById('ownerBody');
+  const _lt = delayedLoading(bodyEl.id);
+
+  const parentTabOf = { users:'users', facilities:'facilities', bookings:'bookings', reviews:'reviews',
+    sms:'integrations', payment:'integrations', analytics:'finance', commission:'finance', payouts:'finance', approvals:'facilities' };
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="adminGoTab('${parentTabOf[kind]||'overview'}')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  if (kind === 'users') {
+    titleEl.textContent = '👥 المستخدمون';
+    const { data, error } = await sb.from('profiles').select('id, name, phone, role').order('name');
+    if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    clearTimeout(_lt);
+    window._adminUsersCache = data;
+    bodyEl.innerHTML = backBtn + `
+      <div class="field" style="margin-bottom:14px"><input id="admin-users-search" type="text" placeholder="ابحث بالاسم أو رقم الجوال..." oninput="renderAdminUsersList()" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px"></div>
+      <div id="admin-users-list"></div>
+    `;
+    renderAdminUsersList();
+  }
+
+  else if (kind === 'facilities') {
+    titleEl.textContent = '🏟️ المنشآت';
+    const { data: rawData, error } = await sb.from('facilities').select('id, name, city, district, is_deleted, profiles(name, phone), fields(price_per_hour, status)');
+    const data = (rawData||[]).filter(f => !f.is_deleted);
+    if (error) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد منشآت بعد</div>'; return; }
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn + data.map(f => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between"><b>${escapeHtml(f.name)}</b><span class="badge available" style="font-size:11px">${(f.fields||[]).length} ملعب</span></div>
+        <div style="font-size:12px;color:var(--ink-dim);margin-top:3px">📍 ${escapeHtml(f.district)||''}، ${escapeHtml(f.city)||''}</div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:3px">👤 المالك: ${escapeHtml(f.profiles?.name)||'—'} · ${escapeHtml(f.profiles?.phone)||''}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-danger btn-sm" onclick="adminDeleteFacility(${f.id})">🗑️ حذف المنشأة وكل ملاعبها</button>
+        </div>
+      </div>`).join('');
+  }
+
+  else if (kind === 'bookings') {
+    titleEl.textContent = '📅 الحجوزات';
+    const { data, error } = await sb.from('bookings')
+      .select('id, booking_date, start_time, end_time, status, total_price, refunded_amount, payment_status, amount_paid, players_count, checked_in, checked_in_at, created_at, guest_name, guest_phone, profiles(name, phone), fields(name, price_per_hour, facilities(name, city, district, owner_id))')
+      .order('booking_date', { ascending:false }).limit(50);
+    if (error || !data) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--danger)">تعذّر التحميل</div>'; return; }
+    if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد حجوزات بعد</div>'; return; }
+    const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+    const statusCls = { pending:'pending', confirmed:'available', cancelled:'closed', completed:'available' };
+    const paymentStatusMap = { unpaid:'غير مدفوع', partial:'مدفوع جزئيًا', paid:'مدفوع بالكامل', refunded:'مسترجع' };
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn + `
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input id="admin-booking-search" type="number" placeholder="ابحث برقم الحجز #..." onkeydown="if(event.key==='Enter')adminSearchBookingById()" style="flex:1;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        <button class="btn btn-soft btn-sm" onclick="adminSearchBookingById()">بحث</button>
+      </div>
+      <div id="admin-bookings-list">` + data.map(b => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="toggleBookingDetails(${b.id})">
+          <div><b>${escapeHtml(b.fields?.name)||'—'}</b> <span class="mono" style="font-size:12px;color:var(--ink-dim)">#${b.id}</span><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(b.profiles?.name || b.guest_name)||''}${b.guest_name?' (ضيف)':''} · ${escapeHtml(b.profiles?.phone || b.guest_phone)||''}</div></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge ${statusCls[b.status]||'pending'}" style="font-size:11px">${bookingStatusLabel(b, statusMap)}</span>
+            <span id="chevron-${b.id}" style="color:var(--ink-dim);font-size:13px;transition:transform .2s">▾</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:5px">📅 ${b.booking_date} · ⏱️ ${b.start_time?formatTime12(b.start_time):''}</div>
+        ${b.status==='pending' ? `<div style="font-size:11px;color:var(--ink-dim);margin-top:4px">⏳ بانتظار اكتمال الدفع الإلكتروني — يتأكد تلقائيًا فور الدفع</div>` : ''}
+
+        <div id="details-${b.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المنشأة</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.name)||'—'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">الموقع</span><b style="font-size:12.5px">${escapeHtml(b.fields?.facilities?.district)||''}، ${escapeHtml(b.fields?.facilities?.city)||''}</b></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">جوال العميل</span>
+            <span style="display:flex;align-items:center;gap:8px">
+              <b style="font-size:12.5px" class="mono">${escapeHtml(b.profiles?.phone || b.guest_phone)||'—'}</b>
+              ${(b.profiles?.phone || b.guest_phone) ? `<a href="${whatsappLink(b.profiles?.phone || b.guest_phone)}" target="_blank" class="btn btn-soft btn-sm" style="padding:4px 10px;font-size:11px;text-decoration:none">💬 واتساب</a>` : ''}
+            </span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">عدد اللاعبين</span><b style="font-size:12.5px">${b.players_count||'—'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">حالة الدفع</span><b style="font-size:12.5px">${paymentStatusMap[b.payment_status]||b.payment_status||'—'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المدفوع</span><b style="font-size:12.5px">${b.amount_paid||0} من ${b.total_price} ريال</b></div>
+          ${Number(b.refunded_amount||0)>0 ? `<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">المبلغ المسترجع</span><b style="font-size:12.5px;color:var(--danger)">${b.refunded_amount} ريال</b></div>` : ''}
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تسجيل الحضور</span><b style="font-size:12.5px">${b.checked_in ? ('✅ ' + (b.checked_in_at ? new Date(b.checked_in_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '')) : '⏳ لم يسجّل بعد'}</b></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink-dim);font-size:12.5px">تاريخ إنشاء الحجز</span><b style="font-size:12.5px">${b.created_at ? new Date(b.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn') : '—'}</b></div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <span style="color:var(--flood);font-weight:700">
+            ${Number(b.refunded_amount||0) > 0
+              ? `${Math.round((b.total_price - b.refunded_amount)*100)/100} ريال <span style="font-size:10.5px;color:var(--ink-dim);font-weight:400">(استُرجع ${b.refunded_amount} من ${b.total_price})</span>`
+              : `${b.total_price} ريال`}
+          </span>
+          <div style="display:flex;gap:6px">
+            ${(b.status==='pending'||b.status==='confirmed') ? `<button class="btn btn-danger btn-sm" onclick="adminCancelBooking(${b.id})">إلغاء</button>` : ''}
+            ${b.status==='confirmed' ? `<button class="btn btn-ghost btn-sm" onclick="adminSetBookingStatus(${b.id},'completed')">إنهاء</button>` : ''}
+          </div>
+        </div>
+      </div>`).join('') + `</div>`;
+  }
+
+  else if (kind === 'reviews') {
+    titleEl.textContent = '⭐ إشراف على التقييمات';
+    const { data: fieldRevs } = await sb.from('reviews').select('id, rating, comment, created_at, profiles(name), fields(name)').not('field_id','is',null).order('created_at', { ascending:false }).limit(30);
+    let data = (fieldRevs||[]).map(r => ({...r, targetName: r.fields?.name, kind: 'ملعب'}))
+      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (!data.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="color:var(--ink-dim);padding:14px">لا توجد تقييمات بعد</div>'; return; }
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn + data.map(r => `
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><span class="badge available" style="font-size:9.5px;margin-left:6px">${r.kind}</span><b>${escapeHtml(r.targetName)||'—'}</b><div style="font-size:12px;color:var(--ink-dim)">${escapeHtml(r.profiles?.name)||'مستخدم'}</div></div>
+          <span style="color:var(--flood);font-weight:800">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
+        </div>
+        ${r.comment? `<div style="font-size:13px;color:var(--ink-soft);margin-top:6px">"${escapeHtml(r.comment)}"</div>` : ''}
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-danger btn-sm" onclick="adminDeleteReview(${r.id})">🗑️ حذف التقييم</button>
+        </div>
+      </div>`).join('');
+  }
+
+  else if (kind === 'sms') {
+    titleEl.textContent = '📱 بوابة الرسائل النصية';
+    const { data: logs } = await sb.from('sms_logs').select('*').order('created_at',{ascending:false}).limit(30);
+    // نفحص أحدث سجل فقط لتحديد الحالة الحقيقية الحالية، بدل "هل صار إرسال ناجح أي وقت بالماضي" —
+    // هذا يفرّق بوضوح بين "غير مفعّلة أصلًا" (no_api_key) و"مفعّلة وتعمل" و"مفعّلة لكن تواجه خطأ حاليًا"
+    const latestLog = (logs||[])[0];
+    const neverConfigured = !latestLog || latestLog.status === 'no_api_key';
+    const activated = !neverConfigured;
+    const workingNow = latestLog?.status === 'sent';
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn + `
+      <div class="legal-note">
+        ${neverConfigured ? '⚠️ الدالة الخلفية منشورة وجاهزة — بس تحتاج تضيف مفتاحك كـ Secret باسم <code>TAQNYAT_API_KEY</code> من Project Settings → Edge Functions (سجّل حساب أول في <b>taqnyat.sa</b>).' : workingNow ? '✅ البوابة مفعّلة وتعمل فعليًا (تقنيات Taqnyat).' : '⚠️ البوابة مفعّلة (المفتاح مضاف) لكن آخر محاولة إرسال فشلت — تحقق من صلاحية المفتاح أو رصيدك عند تقنيات.'}
+      </div>
+      <div class="dlabel">🧪 اختبار الإرسال</div>
+      <div class="field"><label>رقم الجوال</label><input id="sms-test-phone" type="tel" placeholder="05xxxxxxxx"></div>
+      <div class="field"><label>نص الرسالة</label><input id="sms-test-msg" type="text" value="رسالة تجريبية من ملاعبنا"></div>
+      <button class="btn btn-brand btn-block" onclick="sendTestSms()">إرسال تجريبي</button>
+
+      <div class="dlabel" style="margin-top:18px">📋 آخر الرسائل المرسلة</div>
+      ${(logs&&logs.length)? logs.map(l=>`
+        <div style="padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
+          <div style="display:flex;justify-content:space-between"><b>${escapeHtml(l.phone)}</b><span class="badge ${l.status==='sent'?'available':'closed'}" style="font-size:10px">${l.status}</span></div>
+          <div style="color:var(--ink-dim);margin-top:3px">${escapeHtml(l.message)}</div>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد رسائل بعد</div>'}
+    `;
+  }
+
+  else if (kind === 'payment') {
+    titleEl.textContent = '💳 بوابة الدفع الإلكتروني';
+    const [{ data: payRows }, { data: pubKeySetting }] = await Promise.all([
+      sb.from('booking_payments').select('*').order('created_at',{ascending:false}).limit(30),
+      sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle()
+    ]);
+    // نتحقق من وجود المفتاح القابل للنشر فعليًا بالإعدادات — هذا يعكس "هل البوابة مفعّلة" بدقة، بغض النظر هل صار دفع ناجح سابقًا أو لا (منصة جديدة كليًا تبقى بدون أي دفع لفترة، وهذا طبيعي)
+    const isConfigured = !!pubKeySetting?.value;
+    const recentFailure = isConfigured && payRows && payRows.length > 0 && payRows[0].status !== 'paid';
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn + `
+      <div class="legal-note">
+        ${!isConfigured ? '⚠️ غير مفعّلة بعد. لتفعيلها: أنشئ حساب تاجر في <b>moyasar.com</b>، وأضف مفتاحك كـ Secret باسم <code>MOYASAR_SECRET_KEY</code> في Project Settings → Edge Functions.' : recentFailure ? '⚠️ البوابة مفعّلة (المفتاح مضاف) لكن آخر عملية دفع لم تكتمل بنجاح — تحقق من إعدادات حسابك عند ميسر.' : '✅ البوابة مفعّلة وجاهزة لاستقبال المدفوعات (Moyasar).'}
+      </div>
+      <div class="dlabel">📋 آخر عمليات الدفع</div>
+      ${(payRows&&payRows.length)? payRows.map(p=>`
+        <div style="display:flex;justify-content:space-between;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px;font-size:12px">
+          <span>حجز #${p.booking_id} — ${p.amount} ر ${p.is_organizer?'(منظّم)':'(مشارك)'}</span>
+          <span class="badge ${p.status==='paid'?'available':p.status==='failed'?'closed':'pending'}" style="font-size:10px">${p.status}</span>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:6px">لا توجد عمليات دفع بعد</div>'}
+    `;
+  }
+
+  else if (kind === 'analytics') {
+    titleEl.textContent = '📈 تحليلات المنصة';
+    const since = new Date(riyadhNow().getTime() - 13*24*60*60*1000).toISOString().split('T')[0];
+    const [{ data: recentBookings }, { data: fieldStats }] = await Promise.all([
+      sb.from('bookings').select('booking_date').gte('booking_date', since),
+      sb.from('bookings').select('field_id, total_price, refunded_amount, fields(name, facilities(city))').in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid')
+    ]);
+    // حجوزات آخر 14 يوم
+    const dayCounts = {};
+    for (let i=0;i<14;i++){ const d=riyadhNow(); d.setUTCDate(d.getUTCDate()-i); dayCounts[d.toISOString().split('T')[0]]=0; }
+    (recentBookings||[]).forEach(b=>{ if (dayCounts[b.booking_date]!==undefined) dayCounts[b.booking_date]++; });
+    const days = Object.keys(dayCounts).sort();
+    const maxCount = Math.max(1, ...days.map(d=>dayCounts[d]));
+    const barsHtml = days.map(d=>{
+      const h = Math.round((dayCounts[d]/maxCount)*60)+4;
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="width:100%;max-width:16px;height:${h}px;background:var(--brand);border-radius:3px 3px 0 0" title="${d}: ${dayCounts[d]}"></div>
+        <span style="font-size:8px;color:var(--ink-dim)">${d.slice(8,10)}</span>
+      </div>`;
+    }).join('');
+
+    // أكثر الملاعب حجزاً وأعلاها إيراداً
+    const byField = {};
+    (fieldStats||[]).forEach(b=>{
+      const key = b.field_id;
+      if (!byField[key]) byField[key] = { name: b.fields?.name||'—', city: b.fields?.facilities?.city||'', count:0, revenue:0 };
+      byField[key].count++; byField[key].revenue += Number(b.total_price||0);
+    });
+    const topFields = Object.values(byField).sort((a,b)=>b.revenue-a.revenue).slice(0,5);
+
+    // الإيراد حسب المدينة
+    const byCity = {};
+    (fieldStats||[]).forEach(b=>{
+      const city = b.fields?.facilities?.city || 'غير محدد';
+      byCity[city] = (byCity[city]||0) + Number(b.total_price||0);
+    });
+    const cityRows = Object.entries(byCity).sort((a,b)=>b[1]-a[1]);
+    const maxCity = Math.max(1, ...cityRows.map(r=>r[1]));
+
+    clearTimeout(_lt);
+
+    bodyEl.innerHTML = backBtn + `
+      <div class="dlabel">📅 الحجوزات آخر 14 يوم</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:80px;background:var(--bg-soft);border-radius:10px;padding:10px 8px;margin-bottom:20px">${barsHtml}</div>
+
+      <div class="dlabel">🏆 الأعلى إيرادًا</div>
+      ${topFields.length ? topFields.map((f,i)=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
+          <span style="font-size:12.5px"><b>${i+1}.</b> ${escapeHtml(f.name)} <span style="color:var(--ink-dim);font-size:11px">${escapeHtml(f.city)}</span></span>
+          <span style="font-size:12px"><b style="color:var(--flood)">${f.revenue} ر</b> · ${f.count} حجز</span>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:8px">لا توجد بيانات كافية بعد</div>'}
+
+      <div class="dlabel" style="margin-top:18px">🗺️ الإيراد حسب المدينة</div>
+      ${cityRows.length ? cityRows.map(([city,rev])=>`
+        <div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${city}</span><b style="color:var(--flood)">${rev} ر</b></div>
+          <div style="height:6px;background:var(--bg-soft);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(rev/maxCity*100)}%;background:var(--brand)"></div></div>
+        </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12px;padding:8px">لا توجد بيانات كافية بعد</div>'}
+    `;
+  }
+
+  else if (kind === 'commission') {
+    titleEl.textContent = '⚙️ نسبة عمولة المنصة';
+    const { data: settings } = await sb.from('platform_settings').select('key, value').in('key', ['commission_percent','gateway_fee_percent','gateway_fee_fixed']);
+    const current = settings?.find(s=>s.key==='commission_percent')?.value ?? '20';
+    const feePct = settings?.find(s=>s.key==='gateway_fee_percent')?.value ?? '2';
+    const feeFixed = settings?.find(s=>s.key==='gateway_fee_fixed')?.value ?? '1';
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn + `
+      <div style="text-align:center;background:var(--bg-soft);border-radius:12px;padding:20px;margin-bottom:16px">
+        <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">النسبة الحالية</div>
+        <div style="font-size:38px;font-weight:900;color:var(--brand)">${current}%</div>
+      </div>
+      <div class="field"><label>النسبة الجديدة (%)</label><input id="commission-input" type="number" min="0" max="100" value="${current}"></div>
+      <div class="legal-note">⚠️ هذي النسبة تُخصم من كل حجز جديد يُدفع من الآن فصاعدًا. الحجوزات السابقة لا تتأثر.</div>
+      <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="saveCommissionRate()">💾 حفظ النسبة</button>
+
+      <div class="dlabel" style="margin-top:24px">💳 رسوم بوابة الدفع (غير قابلة للاسترجاع)</div>
+      <div class="legal-note" style="margin-bottom:12px">تُخصم هذي الرسوم تلقائيًا من أي مبلغ يُسترجع للاعب — عدّلها لما توصلك نسبتك الفعلية من جيديا.</div>
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1"><label>النسبة (%)</label><input id="fee-pct-input" type="number" min="0" max="100" step="0.01" value="${feePct}"></div>
+        <div class="field" style="flex:1"><label>الرسم الثابت (ريال)</label><input id="fee-fixed-input" type="number" min="0" step="0.01" value="${feeFixed}"></div>
+      </div>
+      <button class="btn btn-soft btn-block" onclick="saveGatewayFeeSettings()">💾 حفظ رسوم البوابة</button>
+    `;
+  }
+
+  else if (kind === 'payouts') {
+    titleEl.textContent = '💸 تنفيذ التحويلات المستحقة';
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:20px;color:var(--ink-dim)">جارٍ حساب المستحقات...</div>';
+
+    // نجيب كل البيانات اللازمة بضربات موازية قليلة، ونجمّعها بالذاكرة بدل استعلام منفصل متسلسل لكل صاحب ملعب —
+    // هذا يقلّل عدد استعلامات قاعدة البيانات من (owners × 3) إلى 4 فقط، بغض النظر عن عدد أصحاب الملاعب
+    const [{ data: commSetting }, { data: owners }, { data: allFacilities }, { data: allFields }, { data: allPaidBookings }, { data: allPayouts }] = await Promise.all([
+      sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
+      sb.from('profiles').select('id, name, phone, iban, bank_account_name').eq('role','owner'),
+      sb.from('facilities').select('id, owner_id'),
+      sb.from('fields').select('id, facility_id'),
+      sb.from('bookings').select('field_id, total_price, refunded_amount').in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid'),
+      sb.from('payouts').select('owner_id, net_amount'),
+    ]);
+    const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+    // خرائط سريعة بالذاكرة بدل استعلامات متكررة: منشأة → مالك، ملعب → منشأة
+    const facilityOwnerMap = {};
+    (allFacilities||[]).forEach(f => { facilityOwnerMap[f.id] = f.owner_id; });
+    const fieldFacilityMap = {};
+    (allFields||[]).forEach(f => { fieldFacilityMap[f.id] = f.facility_id; });
+
+    // إجمالي الإيرادات الفعلي لكل مالك (بربط الحجز → الملعب → المنشأة → المالك)
+    const grossByOwner = {};
+    (allPaidBookings||[]).forEach(b => {
+      const facilityId = fieldFacilityMap[b.field_id];
+      const ownerId = facilityId ? facilityOwnerMap[facilityId] : null;
+      if (!ownerId) return;
+      grossByOwner[ownerId] = (grossByOwner[ownerId] || 0) + (Number(b.total_price||0) - Number(b.refunded_amount||0));
+    });
+    const paidOutByOwner = {};
+    (allPayouts||[]).forEach(p => { paidOutByOwner[p.owner_id] = (paidOutByOwner[p.owner_id] || 0) + Number(p.net_amount||0); });
+
+    const rows = [];
+    for (const o of (owners||[])) {
+      const gross = grossByOwner[o.id] || 0;
+      if (gross <= 0) continue;
+      const alreadyPaidOut = paidOutByOwner[o.id] || 0;
+      const grossNet = gross * (1 - commissionPct/100);
+      const netOwed = Math.round((grossNet - alreadyPaidOut) * 100) / 100;
+      if (netOwed > 0) rows.push({ owner: o, gross, commissionPct, netOwed });
+    }
+
+    clearTimeout(_lt);
+
+    bodyEl.innerHTML = backBtn + (rows.length ? rows.map(r=>`
+      <div style="padding:14px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div><b>${escapeHtml(r.owner.name)||'—'}</b><div style="font-size:11.5px;color:var(--ink-dim)">${escapeHtml(r.owner.phone)||''}</div></div>
+          <span style="color:var(--flood);font-weight:900;font-size:16px">${r.netOwed} ر</span>
+        </div>
+        ${r.owner.iban ? `
+          <div style="background:var(--bg-elev);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px">
+            <div style="color:var(--ink-dim)">اسم الحساب: <b style="color:var(--ink)">${escapeHtml(r.owner.bank_account_name)||'—'}</b></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
+              <span style="direction:ltr;font-family:'JetBrains Mono',monospace;font-weight:700">${r.owner.iban}</span>
+              <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:10.5px" onclick="navigator.clipboard.writeText('${r.owner.iban}');showToast('تم نسخ الآيبان ✓')">📋 نسخ</button>
+            </div>
+          </div>` : `<div class="legal-note" style="margin-bottom:8px">⚠️ صاحب الملعب لسه ما أضاف بياناته البنكية</div>`}
+        <button class="btn btn-brand btn-block btn-sm" onclick="openPayoutReview('${r.owner.id}', ${r.gross}, ${r.commissionPct}, ${r.netOwed})">💸 نفّذ التحويل الآن</button>
+      </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد مستحقات لتحويلها حاليًا ✅</div>');
+  }
+
+  else if (kind === 'approvals') {
+    titleEl.textContent = '✅ الموافقات المعلّقة';
+    const { data: pendingFac } = await sb.from('facilities').select('id, name, city, district, profiles(name, phone), fields(id, name, price_per_hour)').eq('approved', false);
+    const totalPending = pendingFac?.length||0;
+    if (!totalPending) {
+      clearTimeout(_lt);
+      bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)"><div style="font-size:30px;margin-bottom:8px">✅</div>لا توجد عناصر بانتظار الموافقة</div>';
+      return;
+    }
+    clearTimeout(_lt);
+    bodyEl.innerHTML = backBtn +
+      ((pendingFac&&pendingFac.length) ? `<div class="dlabel">🏟️ منشآت (${pendingFac.length})</div>` + pendingFac.map(f=>`
+      <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+        <div><b style="font-size:14px">${escapeHtml(f.name)}</b>
+          <div style="font-size:12px;color:var(--ink-dim);margin-top:2px">📍 ${escapeHtml(f.district)||''}، ${escapeHtml(f.city)||''} · ${(f.fields||[]).length} ملعب</div>
+          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">👤 ${escapeHtml(f.profiles?.name)||'—'} · ${escapeHtml(f.profiles?.phone)||''}</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-brand btn-sm" style="flex:1" onclick="approveFacility(${f.id})">✅ موافقة ونشر</button>
+          <button class="btn btn-danger btn-sm" style="flex:1" onclick="rejectFacility(${f.id})">رفض وحذف</button>
+        </div>
+      </div>`).join('') : '');
+  }
+}
+
+// ── كوبونات صاحب الملعب (يديرها ويتحمّل تكلفتها) ──
+// ── بيانات الحساب البنكي (IBAN + اسم صاحب الحساب) — يستخدمها المالك لتحويل المستحقات فعليًا ──
+async function showBankDetailsForm(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🏦 بيانات الحساب البنكي';
+  const _lt = delayedLoading(bodyEl.id);
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: profile } = await sb.from('profiles').select('bank_account_name, iban').eq('id', user.id).single();
+  clearTimeout(_lt);
+  bodyEl.innerHTML = `
+    <div class="legal-note" style="margin-bottom:14px">🔒 هذي البيانات يشوفها فقط مالك المنصة عشان يحوّل مستحقاتك — ما تظهر لأي لاعب أو صاحب ملعب ثاني.</div>
+    <div class="field"><label>الاسم الكامل كما يظهر بالحساب البنكي *</label><input id="bank-name" type="text" value="${escapeHtml(profile?.bank_account_name)||''}" placeholder="مثال: محمد عبدالله السعيد"></div>
+    <div class="field"><label>رقم الآيبان (IBAN) *</label><input id="bank-iban" type="text" value="${profile?.iban||''}" placeholder="SA0000000000000000000000" style="direction:ltr;text-align:left;font-family:'JetBrains Mono',monospace"></div>
+    <div class="legal-note" style="margin-bottom:14px">الآيبان السعودي يبدأ بـ SA ويتكوّن من 24 خانة (حروف وأرقام) — تقدر تلقاه بتطبيق بنكك تحت "بيانات الحساب".</div>
+    <button class="btn btn-brand btn-block" onclick="saveBankDetails()">💾 حفظ البيانات</button>
+  `;
+}
+async function saveBankDetails(){
+  const name = document.getElementById('bank-name').value.trim();
+  const ibanRaw = document.getElementById('bank-iban').value.trim().toUpperCase().replace(/\s/g,'');
+  if (!name) { showToast('أدخل الاسم الكامل','error'); return; }
+  if (!/^SA[0-9A-Z]{22}$/.test(ibanRaw)) { showToast('رقم الآيبان غير صحيح — يجب أن يبدأ بـ SA ويتكوّن من 24 خانة بالضبط','error'); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('profiles').update({ bank_account_name: name, iban: ibanRaw }).eq('id', user.id);
+  if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
+  showToast('تم حفظ بياناتك البنكية ✓');
+  ownerGoTab('finance');
+}
+
+// ── مصاريفي: تتبّع مصاريف تشغيل الملاعب لمعرفة صافي الربح الحقيقي ──
+const EXPENSE_CATEGORIES = ['كهرباء','ماء','صيانة','رواتب','تنظيف','إيجار','أخرى'];
+async function showFacilityExpenses(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '💸 مصاريفي';
+  const _lt = delayedLoading(bodyEl.id);
+  const { data: { user } } = await sb.auth.getUser();
+  const [{ data: expenses }, { data: myFacilities }] = await Promise.all([
+    sb.from('facility_expenses').select('*, facilities(name)').eq('owner_id', user.id).order('expense_date', { ascending:false }).limit(50),
+    sb.from('facilities').select('id, name').eq('owner_id', user.id)
+  ]);
+  clearTimeout(_lt);
+
+  const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+  const facOptions = (myFacilities||[]).map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  bodyEl.innerHTML = backBtn + `
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
+      <div style="font-size:24px;font-weight:900;color:var(--danger)">${totalExpenses} ريال</div>
+      <div style="font-size:12px;color:var(--ink-dim)">إجمالي المصاريف المسجّلة</div>
+    </div>
+    <div class="dlabel">➕ إضافة مصروف</div>
+    <div class="field"><label>النوع *</label>
+      <select id="exp-category" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        ${EXPENSE_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>المبلغ (ريال) *</label><input id="exp-amount" type="number" placeholder="150"></div>
+    <div class="field"><label>الملعب (اختياري)</label>
+      <select id="exp-facility" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px">
+        <option value="">عام (كل الملاعب)</option>
+        ${facOptions}
+      </select>
+    </div>
+    <div class="field"><label>التاريخ</label><input id="exp-date" type="date" value="${riyadhTodayStr()}" max="${riyadhTodayStr()}"></div>
+    <div class="field"><label>ملاحظة (اختياري)</label><input id="exp-note" type="text" placeholder="مثال: فاتورة كهرباء شهر يوليو"></div>
+    <button class="btn btn-brand btn-block" style="margin-bottom:20px" onclick="addFacilityExpense()">💾 حفظ المصروف</button>
+
+    <div class="dlabel">📋 آخر المصاريف</div>
+    ${(expenses&&expenses.length)? expenses.map(e=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg-soft);border-radius:9px;margin-bottom:6px">
+        <div><b style="font-size:13px">${escapeHtml(e.category)}</b><div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(e.facilities?.name)||'عام'} · ${e.expense_date}${e.note?' · '+escapeHtml(e.note):''}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--danger);font-weight:700">${e.amount} ر</span>
+          <button class="btn btn-danger btn-sm" style="padding:2px 8px" onclick="deleteFacilityExpense(${e.id})">🗑️</button>
+        </div>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد مصاريف مسجّلة بعد</div>'}
+  `;
+}
+async function addFacilityExpense(){
+  const category = document.getElementById('exp-category').value;
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const facilityId = document.getElementById('exp-facility').value || null;
+  const expenseDate = document.getElementById('exp-date').value;
+  const note = document.getElementById('exp-note').value.trim();
+  if (!amount || amount <= 0) { showToast('أدخل مبلغاً صحيحاً','error'); return; }
+  if (expenseDate > riyadhTodayStr()) { showToast('لا يمكن تسجيل مصروف بتاريخ مستقبلي','error'); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('facility_expenses').insert({ owner_id: user.id, facility_id: facilityId, category, amount, expense_date: expenseDate, note: note||null });
+  if (error) { showToast('تعذّر الحفظ: ' + error.message,'error'); return; }
+  showToast('تم تسجيل المصروف ✓');
+  showFacilityExpenses();
+}
+async function deleteFacilityExpense(id){
+  if (!confirm('حذف هذا المصروف؟')) return;
+  const { error } = await sb.from('facility_expenses').delete().eq('id', id);
+  if (error) { showToast('تعذّر الحذف: ' + error.message,'error'); return; }
+  showToast('تم الحذف ✓');
+  showFacilityExpenses();
+}
+
+// ── توقّع الإيرادات: تقدير بسيط بناءً على متوسط آخر 4 أسابيع ──
+async function showRevenueForecast(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🔮 توقّع الإيرادات';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+  const myFieldIds = await getMyFieldIds();
+  if (!myFieldIds.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعباً أولاً لتظهر لك التوقعات</div>'; return; }
+
+  const since = new Date(riyadhNow().getTime() - 28*24*60*60*1000).toISOString().split('T')[0];
+  const { data: recentBookings } = await sb.from('bookings').select('booking_date, total_price, refunded_amount').in('field_id', myFieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').gte('booking_date', since);
+  clearTimeout(_lt);
+
+  const totalLast4Weeks = (recentBookings||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+  const weeklyAvg = totalLast4Weeks / 4;
+  const forecastMonth = Math.round(weeklyAvg * 4.345 * 100) / 100;
+  const hasEnoughData = (recentBookings||[]).length >= 4;
+
+  bodyEl.innerHTML = backBtn + `
+    ${hasEnoughData ? `
+    <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:14px;padding:18px;text-align:center;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">توقّع إيرادات الشهر القادم</div>
+      <div style="font-size:30px;font-weight:900;color:var(--brand-deep)">${forecastMonth} <span style="font-size:14px">ريال</span></div>
+      <div style="font-size:11px;color:var(--ink-dim);margin-top:4px">بناءً على متوسط آخر 4 أسابيع</div>
+    </div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">إجمالي آخر 4 أسابيع</span><b>${totalLast4Weeks} ر</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">متوسط أسبوعي</span><b>${Math.round(weeklyAvg*100)/100} ر</b></div>
+    </div>
+    <div class="legal-note">⚠️ هذا تقدير تقريبي مبني على نمط حجوزاتك الأخيرة فقط، وليس ضمانًا — قد يتأثر بموسمية الطلب أو تغييرات مفاجئة.</div>
+    ` : `<div style="text-align:center;padding:24px;color:var(--ink-dim)">تحتاج سجل حجوزات أكبر (4 حجوزات على الأقل بآخر شهر) عشان نقدر نطلع لك توقّع دقيق</div>`}
+  `;
+}
+
+// ── الأرشيف الشهري: يعرض التقارير المُنشأة تلقائيًا كل يوم 1 ميلادي عن الشهر السابق ──
+// ── التقرير المالي الشامل — عرض مرئي كامل داخل التطبيق (بدل الاعتماد فقط على تحميل ملف CSV خام) ──
+async function showOwnerMonthlyReports(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📊 التقرير المالي';
+  const _lt = delayedLoading(bodyEl.id);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  const { myFieldIds, myFacilities } = await getMyFacilitiesData();
+  if (!myFieldIds.length) { clearTimeout(_lt); bodyEl.innerHTML = backBtn + '<div style="text-align:center;padding:24px;color:var(--ink-dim)">أضف ملعبًا أولاً لتظهر لك تقاريرك هنا</div>'; return; }
+
+  // نعرض افتراضيًا آخر 6 أشهر (بما فيها الشهر الحالي)، مع إمكانية اختيار شهر محدد لاحقًا
+  window._reportMonthOffset = window._reportMonthOffset || 0; // 0 = الشهر الحالي، 1 = الشهر السابق، إلخ
+  await renderFinancialReportForMonth(window._reportMonthOffset);
+  clearTimeout(_lt);
+}
+
+async function renderFinancialReportForMonth(monthOffset){
+  const bodyEl = document.getElementById('ownerBody');
+  const _lt = delayedLoading(bodyEl.id);
+  window._reportMonthOffset = monthOffset;
+
+  const { myFieldIds, myFacilities } = await getMyFacilitiesData();
+  const { data: { user } } = await sb.auth.getUser();
+
+  const now = riyadhNow();
+  const targetMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthOffset, 1));
+  const monthStart = targetMonth.toISOString().slice(0,7) + '-01';
+  const nextMonth = new Date(Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 1));
+  const monthEnd = nextMonth.toISOString().slice(0,7) + '-01';
+  const monthLabel = targetMonth.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year:'numeric', month:'long' });
+
+  const [{ data: bookings }, { data: expenses }, { data: commSetting }] = await Promise.all([
+    sb.from('bookings').select('booking_date, start_time, total_price, refunded_amount, status, payment_status, field_id, fields(name)').in('field_id', myFieldIds).gte('booking_date', monthStart).lt('booking_date', monthEnd).order('booking_date'),
+    sb.from('facility_expenses').select('expense_date, category, amount, note, facility_id, facilities(name)').eq('owner_id', user.id).gte('expense_date', monthStart).lt('expense_date', monthEnd).order('expense_date'),
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
+  ]);
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  // نحسب فقط الحجوزات اللي فيها إيراد فعلي حقيقي (تم الدفع أو تم الإلغاء بعد دفع جزئي/كامل)
+  const revenueBookings = (bookings||[]).filter(b => b.payment_status !== 'unpaid');
+  const grossRevenue = revenueBookings.reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+  const commission = Math.round(grossRevenue * (commissionPct/100) * 100) / 100;
+  const netRevenue = Math.round((grossRevenue - commission) * 100) / 100;
+  const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+  const finalNet = Math.round((netRevenue - totalExpenses) * 100) / 100;
+  const bookingsCount = revenueBookings.length;
+  const avgBookingValue = bookingsCount ? Math.round((grossRevenue/bookingsCount)*100)/100 : 0;
+
+  // ── تفصيل حسب الملعب ──
+  const byField = {};
+  revenueBookings.forEach(b => {
+    const name = b.fields?.name || 'ملعب محذوف';
+    if (!byField[name]) byField[name] = { revenue: 0, count: 0 };
+    byField[name].revenue += (Number(b.total_price||0) - Number(b.refunded_amount||0));
+    byField[name].count += 1;
+  });
+  const fieldRows = Object.entries(byField).sort((a,b)=>b[1].revenue-a[1].revenue);
+  const maxFieldRevenue = Math.max(1, ...fieldRows.map(r=>r[1].revenue));
+
+  // ── تفصيل المصاريف حسب الفئة ──
+  const byCategory = {};
+  (expenses||[]).forEach(e => { byCategory[e.category] = (byCategory[e.category]||0) + Number(e.amount||0); });
+  const categoryRows = Object.entries(byCategory).sort((a,b)=>b[1]-a[1]);
+
+  // ── رسم بياني يومي للإيرادات خلال الشهر ──
+  const daysInMonth = new Date(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth()+1, 0).getUTCDate();
+  const dailyRevenue = Array.from({length: daysInMonth}, () => 0);
+  revenueBookings.forEach(b => {
+    const day = parseInt(b.booking_date.slice(8,10)) - 1;
+    if (day >= 0 && day < daysInMonth) dailyRevenue[day] += (Number(b.total_price||0) - Number(b.refunded_amount||0));
+  });
+  const maxDailyRevenue = Math.max(1, ...dailyRevenue);
+  const chartBars = dailyRevenue.map((rev, i) => {
+    const h = Math.round((rev/maxDailyRevenue)*90) + (rev>0?4:1);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0">
+      <div style="width:100%;max-width:14px;height:${h}px;background:${rev>0?'var(--brand)':'var(--line)'};border-radius:3px 3px 0 0" title="يوم ${i+1}: ${rev} ريال"></div>
+      ${(i+1)%5===0 || i===0 ? `<span style="font-size:8px;color:var(--ink-dim)">${i+1}</span>` : '<span style="font-size:8px;color:transparent">·</span>'}
+    </div>`;
+  }).join('');
+
+  const canGoNext = monthOffset > 0; // ما نسمح نتقدم لأبعد من الشهر الحالي
+
+  clearTimeout(_lt);
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <button class="btn btn-soft btn-sm" onclick="renderFinancialReportForMonth(${monthOffset+1})">‹ الشهر السابق</button>
+      <b style="font-size:15px">${monthLabel}</b>
+      <button class="btn btn-soft btn-sm" ${!canGoNext?'disabled style="opacity:.4"':''} onclick="${canGoNext?`renderFinancialReportForMonth(${monthOffset-1})`:''}">التالي ›</button>
+    </div>
+
+    ${bookingsCount === 0 && !expenses?.length ? `
+      <div style="text-align:center;padding:30px;color:var(--ink-dim)">لا توجد أي بيانات مالية لهذا الشهر</div>
+    ` : `
+      <!-- الملخص الرئيسي -->
+      <div style="background:linear-gradient(135deg,var(--brand-soft),var(--bg-soft));border:1px solid color-mix(in srgb,var(--brand) 30%,transparent);border-radius:16px;padding:18px;margin-bottom:16px;text-align:center">
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:6px">صافي ربحك هذا الشهر</div>
+        <div style="font-size:34px;font-weight:900;color:var(--brand-deep)">${finalNet} <span style="font-size:15px">ريال</span></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:19px;font-weight:900;color:var(--flood)">${grossRevenue}</div>
+          <div style="font-size:10.5px;color:var(--ink-dim)">إجمالي الحجوزات</div>
+        </div>
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:19px;font-weight:900;color:var(--danger)">${commission}</div>
+          <div style="font-size:10.5px;color:var(--ink-dim)">عمولة المنصة (${commissionPct}%)</div>
+        </div>
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:19px;font-weight:900;color:var(--danger)">${totalExpenses}</div>
+          <div style="font-size:10.5px;color:var(--ink-dim)">مصاريف تشغيلية</div>
+        </div>
+        <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:19px;font-weight:900;color:var(--brand)">${bookingsCount}</div>
+          <div style="font-size:10.5px;color:var(--ink-dim)">عدد الحجوزات (${avgBookingValue} ر متوسط)</div>
+        </div>
+      </div>
+
+      <!-- الرسم البياني اليومي -->
+      <div class="dlabel">📈 الإيرادات اليومية</div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:110px;background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:12px 8px;margin-bottom:20px">${chartBars}</div>
+
+      <!-- تفصيل حسب الملعب -->
+      ${fieldRows.length ? `
+        <div class="dlabel">🏟️ الإيرادات حسب الملعب</div>
+        ${fieldRows.map(([name, data]) => `
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
+              <span>${escapeHtml(name)} <span style="color:var(--ink-dim);font-size:11px">(${data.count} حجز)</span></span>
+              <b>${Math.round(data.revenue)} ر</b>
+            </div>
+            <div style="background:var(--bg-elev);border-radius:6px;height:8px;overflow:hidden">
+              <div style="height:100%;width:${Math.round((data.revenue/maxFieldRevenue)*100)}%;background:var(--brand)"></div>
+            </div>
+          </div>
+        `).join('')}
+      ` : ''}
+
+      <!-- تفصيل المصاريف حسب الفئة -->
+      ${categoryRows.length ? `
+        <div class="dlabel" style="margin-top:16px">💸 المصاريف حسب الفئة</div>
+        ${categoryRows.map(([cat, amount]) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:9px;margin-bottom:6px">
+            <span style="font-size:12.5px">${escapeHtml(cat)}</span>
+            <b style="color:var(--danger)">${Math.round(amount)} ر</b>
+          </div>
+        `).join('')}
+      ` : ''}
+
+      <!-- سجل الحجوزات التفصيلي -->
+      ${revenueBookings.length ? `
+        <div class="dlabel" style="margin-top:16px">📋 سجل الحجوزات (${revenueBookings.length})</div>
+        <div style="max-height:280px;overflow-y:auto">
+          ${revenueBookings.map(b => {
+            const net = Number(b.total_price||0) - Number(b.refunded_amount||0);
+            const statusLabel = { confirmed:'مؤكد', completed:'مكتمل', cancelled:'ملغي', pending:'معلّق' }[b.status] || b.status;
+            return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg-soft);border-radius:8px;margin-bottom:5px;font-size:12px">
+              <div><b>${escapeHtml(b.fields?.name)||'—'}</b><div style="color:var(--ink-dim);font-size:10.5px">${b.booking_date} · ${statusLabel}</div></div>
+              <b style="color:${net>0?'var(--flood)':'var(--ink-dim)'}">${net} ر</b>
+            </div>`;
+          }).join('')}
+        </div>
+      ` : ''}
+    `}
+
+    <button class="btn btn-brand btn-block" style="margin-top:20px" onclick="exportMonthlyReportCsv(${monthOffset}, '${monthLabel}')">📄 تصدير هذا الشهر كملف CSV</button>
+  `;
+}
+
+// ── تصدير نفس بيانات الشهر المعروض حاليًا كملف CSV — يطابق تمامًا ما يُعرض على الشاشة، بدون أي فرق ──
+async function exportMonthlyReportCsv(monthOffset, monthLabel){
+  showToast('جارٍ تجهيز الملف...');
+  const { myFieldIds } = await getMyFacilitiesData();
+  const { data: { user } } = await sb.auth.getUser();
+
+  const now = riyadhNow();
+  const targetMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthOffset, 1));
+  const monthStart = targetMonth.toISOString().slice(0,7) + '-01';
+  const nextMonth = new Date(Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 1));
+  const monthEnd = nextMonth.toISOString().slice(0,7) + '-01';
+
+  const [{ data: bookings }, { data: expenses }, { data: commSetting }] = await Promise.all([
+    sb.from('bookings').select('booking_date, total_price, refunded_amount, status, payment_status, fields(name)').in('field_id', myFieldIds).gte('booking_date', monthStart).lt('booking_date', monthEnd).neq('payment_status','unpaid').order('booking_date'),
+    sb.from('facility_expenses').select('expense_date, category, amount, note, facilities(name)').eq('owner_id', user.id).gte('expense_date', monthStart).lt('expense_date', monthEnd).order('expense_date'),
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
+  ]);
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  let csv = '\uFEFF';
+  csv += 'النوع,التاريخ,البيان,المبلغ الإجمالي (ريال),عمولة المنصة (ريال),الصافي لك (ريال)\n';
+  (bookings||[]).forEach(b => {
+    const gross = Math.round((Number(b.total_price||0) - Number(b.refunded_amount||0)) * 100) / 100;
+    const commission = Math.round(gross * (commissionPct/100) * 100) / 100;
+    const net = Math.round((gross - commission) * 100) / 100;
+    const label = (b.status === 'cancelled' && Number(b.refunded_amount||0) > 0) ? 'حجز (استرجاع جزئي)' : 'حجز';
+    csv += `${label},${b.booking_date},"${(b.fields?.name||'').replace(/"/g,'""')}",${gross},${commission},${net}\n`;
+  });
+  (expenses||[]).forEach(e => {
+    csv += `مصروف,${e.expense_date},"${(e.category||'').replace(/"/g,'""')} - ${(e.note||'').replace(/"/g,'""')}",-${e.amount},0,-${e.amount}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-${monthLabel}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم التحميل ✓');
+}
+
+// ── تصدير تقرير محاسبي (CSV) — الإيرادات والمصاريف لفترة محددة ──
+async function exportAccountingReport(){
+  showToast('جارٍ تجهيز التقرير...');
+  const { data: { user } } = await sb.auth.getUser();
+  const myFieldIds = await getMyFieldIds();
+  const [{ data: bookings }, { data: expenses }, { data: commSetting }] = await Promise.all([
+    myFieldIds.length ? sb.from('bookings').select('booking_date, total_price, refunded_amount, status, fields(name)').in('field_id', myFieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').order('booking_date') : Promise.resolve({data:[]}),
+    sb.from('facility_expenses').select('expense_date, category, amount, note, facilities(name)').eq('owner_id', user.id).order('expense_date'),
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
+  ]);
+  const commissionPct = commSetting ? Number(commSetting.value) : 20;
+
+  let csv = '\uFEFF'; // BOM لدعم العربي بإكسل
+  csv += 'النوع,التاريخ,البيان,المبلغ الإجمالي (ريال),عمولة المنصة (ريال),الصافي لك (ريال)\n';
+  (bookings||[]).forEach(b => {
+    const gross = Math.round((Number(b.total_price||0) - Number(b.refunded_amount||0)) * 100) / 100;
+    const commission = Math.round(gross * (commissionPct/100) * 100) / 100;
+    const net = Math.round((gross - commission) * 100) / 100;
+    const label = (b.status === 'cancelled' && Number(b.refunded_amount||0) > 0)
+      ? `حجز ملغي (استُرجع ${b.refunded_amount} من ${b.total_price}) - ${escapeHtml(b.fields?.name)||''}`
+      : `حجز - ${escapeHtml(b.fields?.name)||''}`;
+    csv += `إيراد,${b.booking_date},${label},${gross},-${commission},${net}\n`;
+  });
+  (expenses||[]).forEach(e => { csv += `مصروف,${e.expense_date},${escapeHtml(e.category)} - ${escapeHtml(e.facilities?.name)||'عام'}${e.note?' ('+escapeHtml(e.note)+')':''},-${e.amount},,-${e.amount}\n`; });
+
+  const totalGross = (bookings||[]).reduce((s,b)=>s+(Number(b.total_price||0) - Number(b.refunded_amount||0)),0);
+  const totalCommission = Math.round(totalGross * (commissionPct/100) * 100) / 100;
+  const totalNetFromBookings = Math.round((totalGross - totalCommission) * 100) / 100;
+  const totalExpenses = (expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+  const finalNetProfit = Math.round((totalNetFromBookings - totalExpenses) * 100) / 100;
+
+  csv += `\nملخص,,إجمالي الإيرادات (قبل عمولة المنصة),${Math.round(totalGross*100)/100},,\n`;
+  csv += `ملخص,,عمولة المنصة (${commissionPct}%),,-${totalCommission},\n`;
+  csv += `ملخص,,صافي مستحق لك من الحجوزات,,,${totalNetFromBookings}\n`;
+  csv += `ملخص,,إجمالي المصاريف المسجّلة,,,-${totalExpenses}\n`;
+  csv += `ملخص,,صافي الربح النهائي,,,${finalNetProfit}\n`;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تقرير-محاسبي-${riyadhTodayStr()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('تم تحميل التقرير ✓');
+}
+
+async function showOwnerCoupons(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '🎟️ كوبوناتي';
+const _lt = delayedLoading(bodyEl.id);
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+
+  const { data: { user } } = await sb.auth.getUser();
+  const [fieldOpts, { data: coupons }] = await Promise.all([
+    myFieldsOptionsHtml(),
+    sb.from('coupons').select('*, fields(name)').eq('owner_id', user.id).order('created_at',{ascending:false})
+  ]);
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  clearTimeout(_lt);
+
+  bodyEl.innerHTML = backBtn + `
+    <div class="legal-note" style="margin-bottom:14px">💡 الخصم يُحسم من نصيبك أنت — عمولة المنصة تبقى محسوبة على السعر بعد الخصم بنفس النسبة الثابتة.</div>
+    <div class="dlabel">➕ كوبون جديد</div>
+    <div class="field"><label>الكود *</label><input id="cp-code" type="text" placeholder="RAMADAN20" style="text-transform:uppercase"></div>
+    <div class="field"><label>لأي ملعب؟ (اختياري — اتركه فارغًا ليشمل كل ملاعبك)</label>
+      <select id="cp-field" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
+        <option value="">كل ملاعبي</option>
+        ${fieldOpts}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1">
+        <label>نوع الخصم</label>
+        <select id="cp-type" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
+          <option value="percent">نسبة %</option>
+          <option value="fixed">مبلغ ثابت (ريال)</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1"><label>القيمة *</label><input id="cp-value" type="number" placeholder="20"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>حد الاستخدام</label><input id="cp-maxuses" type="number" placeholder="بلا حد"></div>
+      <div class="field" style="flex:1"><label>ينتهي في</label><input id="cp-expires" type="date"></div>
+    </div>
+    <button class="btn btn-brand btn-block" onclick="saveCoupon()">💾 إنشاء الكوبون</button>
+
+    <div class="dlabel" style="margin-top:18px">📋 كوبوناتي الحالية</div>
+    ${(coupons&&coupons.length)? coupons.map(c=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:7px">
+        <div>
+          <b class="mono" style="font-size:13px">${escapeHtml(c.code)}</b>
+          <div style="font-size:11px;color:var(--ink-dim)">${c.discount_type==='percent'?c.discount_value+'%':c.discount_value+' ر'} · ${escapeHtml(c.fields?.name) || 'كل الملاعب'} · استُخدم ${c.used_count}${c.max_uses?'/'+c.max_uses:''} مرة${c.expires_at?' · ينتهي '+c.expires_at:''}</div>
+        </div>
+        <button class="btn ${c.active?'btn-danger':'btn-soft'} btn-sm" onclick="toggleCoupon(${c.id}, ${!c.active})">${c.active?'إيقاف':'تفعيل'}</button>
+      </div>`).join('') : '<div style="color:var(--ink-dim);font-size:12.5px;padding:8px">لا توجد كوبونات بعد</div>'}
+  `;
+}
+async function saveCoupon(){
+  const code = document.getElementById('cp-code').value.trim().toUpperCase();
+  const fieldId = document.getElementById('cp-field').value || null;
+  const type = document.getElementById('cp-type').value;
+  const value = parseFloat(document.getElementById('cp-value').value);
+  const maxUses = parseInt(document.getElementById('cp-maxuses').value) || null;
+  const expires = document.getElementById('cp-expires').value || null;
+  if (!code || !value) { showToast('أدخل الكود والقيمة','error'); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('coupons').insert({
+    code, owner_id: user.id, field_id: fieldId, discount_type:type, discount_value:value, max_uses:maxUses, expires_at:expires
+  });
+  if (error) {
+    if (error.code==='23505') { showToast('هذا الكود مستخدم مسبقاً','error'); return; }
+    showToast('تعذّر الحفظ: '+error.message,'error'); return;
+  }
+  showToast('تم إنشاء الكوبون ✓ 🎟️');
+  showOwnerCoupons();
+}
+async function toggleCoupon(id, newActive){
+  const { error } = await sb.from('coupons').update({ active: newActive }).eq('id', id);
+  if (error) { showToast('تعذّر التحديث','error'); return; }
+  showToast(newActive? 'تم التفعيل ✓' : 'تم الإيقاف ✓');
+  showOwnerCoupons();
+}
+
+// ── التحويلات المالية المستلمة (صاحب الملعب) ──
+async function showOwnerPayouts(){
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '💰 تحويلاتي';
+const _lt = delayedLoading(bodyEl.id);
+  document.getElementById('mOwner').classList.add('open'); document.getElementById('ov').classList.add('open');
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: payoutsRows } = await sb.from('payouts').select('*').eq('owner_id', user.id).order('created_at',{ascending:false});
+  const backBtn = `<button class="btn btn-ghost btn-sm" onclick="ownerGoTab('finance')" style="margin-bottom:14px">→ رجوع</button>`;
+
+  clearTimeout(_lt);
+
+  bodyEl.innerHTML = backBtn + (payoutsRows&&payoutsRows.length ? payoutsRows.map(p=>`
+    <div style="padding:13px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12.5px;color:var(--ink-dim)">${p.period_start} → ${p.period_end}</span>
+        <span style="color:var(--flood);font-weight:900">${p.net_amount} ر</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-dim);margin-top:4px">إجمالي ${p.gross_amount} ر − عمولة ${p.commission_amount} ر${p.reference_number?' · مرجع: '+escapeHtml(p.reference_number):''}</div>
+      <a href="${p.receipt_url}" target="_blank" class="btn btn-soft btn-sm btn-block" style="margin-top:8px">📄 عرض الإيصال</a>
+    </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--ink-dim)">لا توجد تحويلات مستلمة بعد</div>');
+}
+
+async function saveCommissionRate(){
+  const val = parseFloat(document.getElementById('commission-input').value);
+  if (isNaN(val) || val < 0 || val > 100) { showToast('أدخل نسبة صحيحة بين 0 و100','error'); return; }
+  const { error } = await sb.from('platform_settings').update({ value: String(val) }).eq('key','commission_percent');
+  if (error) { showToast('تعذّر الحفظ: '+error.message,'error'); return; }
+  showToast('تم تحديث نسبة العمولة ✓');
+  adminView('commission');
+}
+async function saveGatewayFeeSettings(){
+  const pct = parseFloat(document.getElementById('fee-pct-input').value);
+  const fixed = parseFloat(document.getElementById('fee-fixed-input').value);
+  if (isNaN(pct) || pct < 0 || pct > 100) { showToast('أدخل نسبة صحيحة بين 0 و100','error'); return; }
+  if (isNaN(fixed) || fixed < 0) { showToast('أدخل رسم ثابت صحيح','error'); return; }
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    sb.from('platform_settings').update({ value: String(pct) }).eq('key','gateway_fee_percent'),
+    sb.from('platform_settings').update({ value: String(fixed) }).eq('key','gateway_fee_fixed'),
+  ]);
+  if (e1 || e2) { showToast('تعذّر الحفظ','error'); return; }
+  showToast('تم تحديث رسوم البوابة ✓');
+  adminView('commission');
+}
+
+
+// ── مراجعة وتنفيذ تحويل (مع رفع إيصال إلزامي كدليل) ──
+window._payoutReview = null;
+async function openPayoutReview(ownerId, gross, commissionPct, netOwed){
+  const commissionAmount = Math.round((gross - netOwed) * 100) / 100;
+  window._payoutReview = { ownerId, gross, commissionAmount, netOwed };
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '💸 مراجعة التحويل قبل التنفيذ';
+  const today = riyadhTodayStr();
+  const { data: owner } = await sb.from('profiles').select('name, phone, iban, bank_account_name').eq('id', ownerId).single();
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="adminView('payouts')" style="margin-bottom:14px">→ رجوع</button>
+    ${owner?.iban ? `
+    <div style="background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,transparent);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">🏦 حوّل إلى</div>
+      <div style="font-weight:800;font-size:14px;margin-bottom:4px">${escapeHtml(owner.bank_account_name||owner.name)||'—'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="direction:ltr;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px">${owner.iban}</span>
+        <button class="btn btn-soft btn-sm" onclick="navigator.clipboard.writeText('${owner.iban}');showToast('تم نسخ الآيبان ✓')">📋 نسخ</button>
+      </div>
+    </div>
+    <div class="legal-note" style="margin-bottom:16px">🛡️ عند إدخال الآيبان ببنكك عبر سارie، البنك بيعرض لك اسم صاحب الحساب الحقيقي المسجّل — تأكد إنه يطابق "${escapeHtml(owner.bank_account_name||owner.name)||'الاسم أعلاه'}" قبل ما تأكد التحويل.</div>
+    ` : `<div class="legal-note" style="margin-bottom:16px">⚠️ صاحب الملعب لسه ما أضاف بياناته البنكية — تواصل معه قبل التحويل.</div>`}
+    <div class="summary" style="margin-bottom:16px">
+      <div class="srow"><span>إجمالي الحجوزات</span><span>${gross} ر</span></div>
+      <div class="srow"><span>عمولة المنصة (${commissionPct}%)</span><span>- ${commissionAmount} ر</span></div>
+      <div class="srow tot"><span>الصافي المُحوَّل</span><span class="amt">${netOwed} ر</span></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>من تاريخ</label><input id="po-start" type="date"></div>
+      <div class="field" style="flex:1"><label>إلى تاريخ</label><input id="po-end" type="date" value="${today}"></div>
+    </div>
+    <div class="field"><label>رقم العملية البنكية (اختياري)</label><input id="po-ref" type="text" placeholder="مثال: TRX123456"></div>
+    <div class="field">
+      <label>إيصال التحويل * <span style="color:var(--ink-dim);font-weight:400">(صورة أو PDF — إلزامي كدليل)</span></label>
+      <input id="po-receipt" type="file" accept="image/*,.pdf" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--ink);font-size:13px">
+    </div>
+    <div class="legal-note">⚠️ بعد التأكيد، هذا السجل يصبح ثابتًا ولا يمكن تعديله أو حذفه — يظهر لك وللمالك بنفس التفاصيل كدليل عند أي نزاع.</div>
+    <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="confirmPayout()">✅ تأكيد التنفيذ نهائيًا</button>
+  `;
+}
+async function confirmPayout(){
+  const r = window._payoutReview;
+  const file = document.getElementById('po-receipt').files?.[0];
+  const periodStart = document.getElementById('po-start').value;
+  const periodEnd = document.getElementById('po-end').value;
+  const ref = document.getElementById('po-ref').value.trim();
+  if (!file) { showToast('رفع الإيصال إلزامي','error'); return; }
+  if (!periodStart || !periodEnd) { showToast('حدد الفترة الزمنية','error'); return; }
+
+  showToast('جارٍ الرفع والتنفيذ...');
+  const { data: { user } } = await sb.auth.getUser();
+  let receiptUrl = null;
+  try {
+    if (file.type.startsWith('image/')) {
+      const base64 = await fileToBase64(file);
+      const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
+      if (upErr || !uploadRes?.url) { showToast('تعذّر رفع الإيصال: ' + (uploadRes?.error||'خطأ غير معروف'),'error'); return; }
+      receiptUrl = uploadRes.url;
+    } else {
+      // PDF لا تدعمها استضافة الصور المجانية — نستخدم مساحة المشروع فقط لهذي الحالة النادرة
+      const ext = file.name.split('.').pop();
+      const path = `${r.ownerId}/${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('payout-receipts').upload(path, file);
+      if (upErr) { showToast('تعذّر رفع الإيصال: '+upErr.message,'error'); return; }
+      const { data: pub } = sb.storage.from('payout-receipts').getPublicUrl(path);
+      receiptUrl = pub?.publicUrl;
+    }
+  } catch(e) { showToast('تعذّر رفع الإيصال','error'); return; }
+
+  const { error } = await sb.from('payouts').insert({
+    owner_id: r.ownerId, period_start: periodStart, period_end: periodEnd,
+    gross_amount: r.gross, commission_amount: r.commissionAmount, net_amount: r.netOwed,
+    receipt_url: receiptUrl, reference_number: ref || null, created_by: user.id
+  });
+  if (error) { showToast('تعذّر حفظ سجل التحويل: '+error.message,'error'); return; }
+
+  try {
+    await sb.rpc('send_notification', {
+      p_user_id: r.ownerId, p_title: 'تم تحويل مستحقاتك 💸',
+      p_body: `تم تحويل ${r.netOwed} ريال إلى حسابك — راجع لوحتك لعرض الإيصال`
+    });
+  } catch(e){}
+
+  showToast('تم تنفيذ التحويل وتوثيقه ✓');
+  adminView('payouts');
+}
+
+async function approveFacility(facilityId){
+  const { data: fac } = await sb.from('facilities').select('owner_id, name').eq('id', facilityId).single();
+  const { error } = await sb.from('facilities').update({ approved:true }).eq('id', facilityId);
+  if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (fac?.owner_id) {
+    try { await sb.rpc('send_notification', { p_user_id: fac.owner_id, p_title: 'تمت الموافقة على منشأتك ✅', p_body: `منشأة "${escapeHtml(fac.name)}" ظاهرة الآن لكل اللاعبين` }); } catch(e){}
+  }
+  showToast('تمت الموافقة ونُشرت المنشأة وكل ملاعبها ✓');
+  loadRealFields();
+  adminView('approvals');
+}
+function rejectFacility(facilityId){
+  openInfoModal('❌ رفض المنشأة', `
+    <div class="field"><label>سبب الرفض <span style="color:var(--ink-dim);font-weight:400">(سيُرسل لصاحب المنشأة مباشرة)</span></label>
+      <textarea id="reject-reason" placeholder="مثال: الصور غير واضحة، بيانات الموقع ناقصة..." style="width:100%;min-height:80px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;resize:vertical"></textarea>
+    </div>
+    <div class="legal-note" style="margin-bottom:10px">⚠️ هذا يحذف المنشأة نهائيًا مع كل ملاعبها. لا يمكن التراجع بعد التأكيد.</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="adminView('approvals')">إلغاء</button>
+      <button class="btn btn-danger" style="flex:1" onclick="_executeRejectFacility(${facilityId})">تأكيد الرفض والحذف</button>
+    </div>
+  `);
+}
+async function _executeRejectFacility(facilityId){
+  const reason = document.getElementById('reject-reason')?.value.trim();
+  const { data: fac } = await sb.from('facilities').select('owner_id, name').eq('id', facilityId).single();
+  const { error } = await sb.from('facilities').delete().eq('id', facilityId);
+  if (error) { showToast('تعذّر: '+error.message,'error'); return; }
+  if (fac?.owner_id) {
+    try { await sb.rpc('send_notification', { p_user_id: fac.owner_id, p_title: 'تم رفض منشأتك ❌', p_body: `منشأة "${escapeHtml(fac.name)}" لم تُقبل${reason ? ': ' + reason : ' — تواصل مع الدعم لمعرفة السبب'}` }); } catch(e){}
+  }
+  showToast('تم الرفض والحذف ✓');
+  adminView('approvals');
+}
+
+// ── إشعار جماعي (Broadcast) ──
+function showBroadcastForm(){
+  const bodyEl = document.getElementById('adminTabInner') || document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '📢 إرسال إشعار جماعي';
+  bodyEl.innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="adminGoTab('overview')" style="margin-bottom:14px">→ رجوع</button>
+    <div class="field">
+      <label>إرسال إلى</label>
+      <select id="bc-target" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--ink);font-size:13px">
+        <option value="all">جميع المستخدمين</option>
+        <option value="owner">أصحاب الملاعب فقط</option>
+        <option value="customer">اللاعبين فقط</option>
+      </select>
+    </div>
+    <div class="field"><label>عنوان الإشعار *</label><input id="bc-title" type="text" placeholder="إعلان مهم"></div>
+    <div class="field"><label>نص الإشعار</label><input id="bc-body" type="text" placeholder="تفاصيل الإعلان..."></div>
+    <button class="btn btn-brand btn-block" onclick="sendBroadcast()">📢 إرسال للجميع</button>
+    <div class="legal-note">⚠️ سيصل هذا الإشعار لكل من يطابق الفئة المختارة داخل قسم "التنبيهات" في حساباتهم.</div>
+  `;
+  document.getElementById('mOwner').classList.add('open');
+  document.getElementById('ov').classList.add('open');
+}
+async function sendBroadcast(){
+  const target = document.getElementById('bc-target').value;
+  const title = document.getElementById('bc-title').value.trim();
+  const body = document.getElementById('bc-body').value.trim();
+  if (!title) { showToast('أدخل عنوان الإشعار','error'); return; }
+
+  // نحسب العدد الفعلي للمستلمين المستهدفين قبل الإرسال، ونعرضه بنص التأكيد — يمنع إرسال جماعي بضغطة خاطئة بدون معرفة الأثر الحقيقي
+  let targetCountQuery = sb.from('profiles').select('*', { count: 'exact', head: true });
+  if (target !== 'all') targetCountQuery = targetCountQuery.eq('role', target);
+  const { count: targetCount } = await targetCountQuery;
+  const targetLabel = target === 'all' ? 'جميع المستخدمين' : target === 'owner' ? 'أصحاب الملاعب فقط' : 'اللاعبين فقط';
+
+  showConfirmDialog(
+    `هل تريد إرسال هذا الإشعار إلى ${targetCount||0} مستخدم (${targetLabel})؟ سيصلهم داخل التطبيق وعبر واتساب، ولا يمكن التراجع بعد الإرسال.`,
+    'نعم، أرسل الآن',
+    () => _executeSendBroadcast(target, title, body)
+  );
+}
+async function _executeSendBroadcast(target, title, body){
+  showToast('جارٍ الإرسال...');
+  const { data: count, error } = await sb.rpc('send_broadcast_notification', { p_role: target, p_title: title, p_body: body || null });
+  if (error) { showToast('تعذّر الإرسال: ' + error.message, 'error'); return; }
+  showToast(`تم إرسال الإشعار إلى ${count} مستخدم ✓`);
+  closeAll();
+}
+
+async function sendTestSms(){
+  const phone = document.getElementById('sms-test-phone').value.trim();
+  const msg = document.getElementById('sms-test-msg').value.trim();
+  if (!phone || !msg) { showToast('أدخل الرقم والرسالة','error'); return; }
+  showToast('جارٍ الإرسال...');
+  try {
+    const { data, error } = await sb.functions.invoke('send-sms', { body: { to_phone: phone, message: msg } });
+    if (error) { showToast('تعذّر الإرسال: ' + error.message,'error'); adminView('sms'); return; }
+    if (data?.error) { showToast(data.error,'error'); adminView('sms'); return; }
+    showToast('تم الإرسال ✓');
+  } catch(e) { showToast('تعذّر الاتصال بالدالة — تأكد من نشرها في Supabase','error'); }
+  adminView('sms');
+}
+
+async function adminDeleteReview(reviewId) {
+  if (!confirm('حذف هذا التقييم نهائياً؟')) return;
+  const { error } = await sb.from('reviews').delete().eq('id', reviewId);
+  if (error) { showToast('تعذّر الحذف: ' + error.message, 'error'); return; }
+  showToast('تم حذف التقييم ✓');
+  adminView('reviews');
+}
+
+async function adminSetBookingStatus(bookingId, newStatus) {
+  const { error } = await sb.from('bookings').update({ status: newStatus }).eq('id', bookingId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  showToast('تم التحديث ✓');
+  adminView('bookings');
+}
+
+function adminDeleteFacility(facilityId) {
+  showConfirmDialog('حذف هذه المنشأة؟ لو كان لملاعبها حجوزات سابقة، سيُحفظ سجلها (معلَّمة "محذوف") للحماية القانونية والمالية، وتختفي فورًا من الموقع.', 'نعم، احذف المنشأة', () => _executeAdminDeleteFacility(facilityId));
+}
+async function _executeAdminDeleteFacility(facilityId) {
+  const { error } = await sb.from('facilities').delete().eq('id', facilityId);
+  if (!error) {
+    showToast('تم حذف المنشأة نهائيًا ✓ (لا سجلات سابقة عليها)');
+    adminView('facilities');
+    return;
+  }
+
+  if (error.code === '23503') {
+    const { data: current } = await sb.from('facilities').select('name').eq('id', facilityId).single();
+    const markedName = current?.name?.includes('(محذوف)') ? current.name : `${escapeHtml(current?.name)||'منشأة'} (محذوف)`;
+    const { error: softErr } = await sb.from('facilities')
+      .update({ name: markedName, is_deleted: true, approved: false })
+      .eq('id', facilityId);
+    if (softErr) { showToast('تعذّر الحذف: ' + softErr.message, 'error'); return; }
+    // أغلق كل ملاعبها أيضًا حتى تختفي فعليًا من الموقع العام
+    await sb.from('fields').update({ status: 'closed' }).eq('facility_id', facilityId);
+    showToast('تم حذف المنشأة ✓ — سجل حجوزاتها السابقة محفوظ للحماية المالية والقانونية');
+    if (window.loadRealFields) window.loadRealFields();
+    adminView('facilities');
+    return;
+  }
+  showToast('تعذّر الحذف: ' + error.message, 'error');
+}
+
+async function ownerControl(userId, newRole) {
+  const confirmMsg = newRole==='owner' ? 'ترقية هذا المستخدم لصاحب ملعب؟' : 'إلغاء صفة صاحب الملعب لهذا الحساب؟ سيصبح لاعباً عادياً.';
+  if (!confirm(confirmMsg)) return;
+  const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', userId);
+  if (error) { showToast('تعذّر التحديث: ' + error.message, 'error'); return; }
+  try {
+    await sb.rpc('send_notification', {
+      p_user_id: userId,
+      p_title: newRole==='owner' ? 'تمت ترقيتك 🏟️' : 'تحديث في حسابك',
+      p_body: newRole==='owner' ? 'أصبح بإمكانك الآن إضافة ملاعبك من لوحة صاحب الملعب' : 'تم إلغاء صفة صاحب الملعب عن حسابك'
+    });
+  } catch(e){}
+  showToast('تم التحديث ✓');
+  adminView('users');
+}
+
+// ── بحث سريع برقم الحجز داخل لوحة الأدمن — يفيد عند استفسار لاعب أو صاحب ملعب برقم معيّن ──
+async function adminSearchBookingById(){
+  const id = document.getElementById('admin-booking-search')?.value.trim();
+  const listEl = document.getElementById('admin-bookings-list');
+  if (!id) { adminView('bookings'); return; }
+  const { data, error } = await sb.from('bookings')
+    .select('id, booking_date, start_time, end_time, status, total_price, payment_status, refunded_amount, players_count, profiles(name, phone), fields(name, facilities(name, city))')
+    .eq('id', id).maybeSingle();
+  if (error || !data) { listEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">لم يُعثر على حجز برقم #${escapeHtml(id)}</div>`; return; }
+  const statusMap = { pending:'قيد الانتظار', confirmed:'مؤكد', cancelled:'ملغي', completed:'مكتمل' };
+  listEl.innerHTML = `
+    <div style="background:var(--brand-soft);border:1px solid rgba(57,255,20,.3);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);margin-bottom:4px"><span style="color:var(--ink-dim)">رقم الحجز</span><b class="mono" style="color:var(--brand)">#${data.id}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الملعب</span><b>${escapeHtml(data.fields?.name)||'—'} (${escapeHtml(data.fields?.facilities?.city)||''})</b></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span style="color:var(--ink-dim)">اللاعب</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <b>${escapeHtml(data.profiles?.name)||'—'} · ${escapeHtml(data.profiles?.phone)||''}</b>
+          ${data.profiles?.phone ? `<a href="${whatsappLink(data.profiles.phone)}" target="_blank" class="btn btn-soft btn-sm" style="padding:4px 10px;font-size:11px;text-decoration:none">💬</a>` : ''}
+        </span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">التاريخ والوقت</span><b>${data.booking_date} · ${formatTime12(data.start_time)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">الحالة</span><b>${bookingStatusLabel(data, statusMap)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-dim)">المبلغ</span><b style="color:var(--flood)">${data.total_price} ريال</b></div>
+    </div>
+    <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" onclick="adminView('bookings')">← عرض كل الحجوزات</button>
+  `;
+}
+
+async function adminCancelBooking(bookingId) {
+  const { data: bk } = await sb.from('bookings').select('booking_date, start_time, payment_status').eq('id', bookingId).single();
+  let refundNote = '';
+  if (bk) {
+    try {
+      const { data: pct } = await sb.rpc('calc_refund_percent', { p_booking_date: bk.booking_date, p_start_time: bk.start_time });
+      refundNote = pct!=null ? `\n\nحسب سياسة الإلغاء، نسبة الاسترجاع المتوقعة: ${pct}%` : '';
+    } catch(e){}
+  }
+  if (!confirm('هل تريد إلغاء هذا الحجز؟' + refundNote)) return;
+
+  const wasPaid = bk?.payment_status === 'paid' || bk?.payment_status === 'partial';
+  const { error } = await sb.from('bookings').update({ status:'cancelled' }).eq('id', bookingId);
+  if (error) { showToast('تعذّر الإلغاء', 'error'); return; }
+
+  if (wasPaid) {
+    try {
+      const { data, error: refundErr } = await sb.functions.invoke('refund-payment', { body: { booking_id: bookingId } });
+      if (refundErr || data?.error) showToast('تم الإلغاء، لكن تعذّر تنفيذ الاسترجاع تلقائيًا — تواصل مع الدعم','error');
+      else showToast(`تم الإلغاء والاسترجاع (${data.refund_percent}%) ✓`);
+    } catch(e) { showToast('تم الإلغاء، لكن تعذّر الاتصال ببوابة الاسترجاع','error'); }
+  } else {
+    showToast('تم إلغاء الحجز ✓');
+  }
+  adminView('bookings');
+}
+
+async function showAddStadiumForm() {
+  const bodyEl = document.getElementById('ownerBody');
+  document.getElementById('ownerTitle').textContent = '➕ إضافة ملعب جديد';
+const _lt = delayedLoading(bodyEl.id);
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: myFacilities } = await sb.from('facilities').select('id, name, city, district, approved').eq('owner_id', user.id);
+  const facOptions = (myFacilities||[]).map(f=>
+    `<option value="${f.id}">${escapeHtml(f.name)} — ${escapeHtml(f.city)}${!f.approved?' (بانتظار الموافقة)':''}</option>`).join('');
+
+  clearTimeout(_lt);
+
+  bodyEl.innerHTML = `
+    <div class="field">
+      <label>أضف الملعب إلى</label>
+      <select id="st-existing-facility" onchange="toggleFacilityFields()" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+        <option value="new">➕ منشأة جديدة (موقع/فرع جديد)</option>
+        ${facOptions}
+      </select>
+      <div class="legal-note" style="margin-top:8px">💡 لو اخترت منشأة موجودة ومعتمدة، الملعب الجديد يُنشر فورًا بدون انتظار موافقة. المنشأة الجديدة فقط تحتاج موافقة المالك مرة واحدة.</div>
+    </div>
+    <div id="facilityLocationFields">
+      <div class="field"><label>اسم المنشأة/الملعب *</label><input id="st-name" type="text" placeholder="مثال: مجمع النخيل الرياضي"></div>
+      <div class="field"><label>المدينة *</label><input id="st-city" type="text" placeholder="مثال: الرياض"></div>
+      <div class="field"><label>الحي *</label><input id="st-district" type="text" placeholder="مثال: حي النخيل"></div>
+      <div class="field">
+        <label>المنطقة</label>
+        <select id="st-region" style="width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:14px;outline:none">
+          ${saudiRegionOptionsHtml(null)}
+        </select>
+      </div>
+      <div class="field">
+        <label>الموقع على الخريطة <span style="color:var(--ink-dim);font-weight:400">(اضغط على الخريطة لتحديد مكان الملعب)</span></label>
+        <div id="pickerMap" style="height:220px;border-radius:12px;overflow:hidden;border:1px solid var(--line)"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+          <span id="pickerCoords" style="font-size:11.5px;color:var(--ink-dim)">لم يُحدَّد موقع بعد</span>
+          <button class="btn btn-soft btn-sm" onclick="useMyLocationForField()" type="button">📍 استخدم موقعي الآن</button>
+        </div>
+        <input id="st-lat" type="hidden">
+        <input id="st-lng" type="hidden">
+      </div>
+    </div>
+    <div id="fieldNameOnly" style="display:none">
+      <div class="field"><label>اسم الملعب *</label><input id="st-name2" type="text" placeholder="مثال: الملعب رقم 2"></div>
+    </div>
+    <div class="field">
+      <label>نوع الأرضية</label>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <div class="pay sel" id="type-artificial" onclick="selFieldType('artificial')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌿</div>عشب صناعي</div>
+        <div class="pay" id="type-natural" onclick="selFieldType('natural')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🌱</div>عشب طبيعي</div>
+        <div class="pay" id="type-indoor" onclick="selFieldType('indoor')" style="flex:1;padding:10px 6px;font-size:12px"><div class="ic" style="font-size:18px">🏛️</div>مغلق</div>
+      </div>
+    </div>
+    <div class="field"><label>سعر الساعة (ريال) *</label><input id="st-price" type="number" inputmode="numeric" placeholder="150"></div>
+    <div class="field">
+      <label>مميزات الملعب <span style="color:var(--ink-dim);font-weight:400">(اختياري — تظهر للاعب وقت الحجز)</span></label>
+      ${amenitiesCheckboxesHtml([])}
+    </div>
+    <div class="legal-note">🖼️ يمكنك إضافة صور الملعب من "معرض الصور" بعد حفظه من لوحة "ملاعبي"</div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-ghost" style="flex:1" onclick="ownerGoTab('fields')">إلغاء</button>
+      <button class="btn btn-brand" style="flex:2" onclick="saveStadium()">💾 حفظ الملعب</button>
+    </div>
+  `;
+  initLocationPicker('pickerMap', null, null);
+}
+
+function toggleFacilityFields(){
+  const isNew = document.getElementById('st-existing-facility').value === 'new';
+  document.getElementById('facilityLocationFields').style.display = isNew ? 'block' : 'none';
+  document.getElementById('fieldNameOnly').style.display = isNew ? 'none' : 'block';
+  if (isNew && window._pickerMapInstance) setTimeout(()=>window._pickerMapInstance.invalidateSize(), 50);
+}
+
+function useMyLocationForField(){
+  if (!navigator.geolocation) { showToast('المتصفح لا يدعم تحديد الموقع','error'); return; }
+  showToast('جارٍ تحديد موقعك...');
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{
+      setPickerLocation(pos.coords.latitude, pos.coords.longitude);
+      showToast('تم تحديد الموقع ✓');
+    },
+    ()=>showToast('تعذّر الوصول للموقع','error')
+  );
+}
+
+// ── خريطة اختيار الموقع بالضغط المباشر (بدل إدخال خطوط الطول/العرض يدويًا) ──
+function initLocationPicker(containerId, initialLat, initialLng){
+  if (typeof L === 'undefined') { setTimeout(()=>initLocationPicker(containerId, initialLat, initialLng), 200); return; }
+  const startLat = initialLat != null ? initialLat : 24.0;
+  const startLng = initialLng != null ? initialLng : 45.0;
+  const map = L.map(containerId, { zoomControl:true, attributionControl:false }).setView([startLat, startLng], initialLat!=null ? 14 : 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(map);
+  window._pickerMapInstance = map;
+  window._pickerMarker = null;
+
+  if (initialLat != null && initialLng != null) {
+    window._pickerMarker = L.marker([initialLat, initialLng]).addTo(map);
+    updatePickerCoordsLabel(initialLat, initialLng);
+  }
+
+  map.on('click', (e)=> setPickerLocation(e.latlng.lat, e.latlng.lng));
+  setTimeout(()=>map.invalidateSize(), 100);
+}
+
+function setPickerLocation(lat, lng){
+  const latFixed = Number(lat).toFixed(6), lngFixed = Number(lng).toFixed(6);
+  document.getElementById('st-lat').value = latFixed;
+  document.getElementById('st-lng').value = lngFixed;
+  updatePickerCoordsLabel(latFixed, lngFixed);
+  if (!window._pickerMapInstance) return;
+  if (window._pickerMarker) window._pickerMarker.setLatLng([lat, lng]);
+  else window._pickerMarker = L.marker([lat, lng]).addTo(window._pickerMapInstance);
+  window._pickerMapInstance.setView([lat, lng], 14);
+}
+
+function updatePickerCoordsLabel(lat, lng){
+  const el = document.getElementById('pickerCoords');
+  if (el) el.textContent = `📍 الموقع المحدَّد: ${lat}, ${lng}`;
+}
+
+let newFieldType = 'artificial';
+function selFieldType(t) {
+  newFieldType = t;
+  ['artificial','natural','indoor'].forEach(x =>
+    document.getElementById('type-'+x).classList.toggle('sel', x===t));
+}
+
+async function saveStadium() {
+  const existingFacilityId = document.getElementById('st-existing-facility').value;
+  const isNewFacility = existingFacilityId === 'new';
+  const price = parseFloat(document.getElementById('st-price').value);
+
+  if (!price || price <= 0) { showToast('أدخل سعراً صحيحاً للساعة','error'); return; }
+
+  // تحذير غير قاطع (مو رفض) لسعر غير واقعي — يحمي من خطأ كتابة رقم إضافي بالغلط
+  if (price > 2000) {
+    showConfirmDialog(`السعر المدخل ${price} ريال/ساعة يبدو مرتفعًا جدًا — هل أنت متأكد إن هذا هو السعر الصحيح؟`, 'نعم، هذا صحيح', () => _executeSaveStadium(existingFacilityId, isNewFacility, price));
+    return;
+  }
+  await _executeSaveStadium(existingFacilityId, isNewFacility, price);
+}
+
+async function _executeSaveStadium(existingFacilityId, isNewFacility, price) {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { showToast('انتهت الجلسة، سجّل الدخول','error'); return; }
+
+  showToast('جارٍ الحفظ...');
+
+  let facilityId = existingFacilityId;
+  let name;
+
+  if (isNewFacility) {
+    name = document.getElementById('st-name').value.trim();
+    const city = document.getElementById('st-city').value.trim();
+    const district = document.getElementById('st-district').value.trim();
+    const region = document.getElementById('st-region').value;
+    if (!name || !city || !district) { showToast('املأ الحقول الإلزامية (*)','error'); return; }
+
+    const facPayload = { owner_id: user.id, name, city, district, region };
+    const latVal = parseFloat(document.getElementById('st-lat')?.value);
+    const lngVal = parseFloat(document.getElementById('st-lng')?.value);
+    if (!isNaN(latVal)) facPayload.lat = latVal;
+    if (!isNaN(lngVal)) facPayload.lng = lngVal;
+    const { data: facility, error: facErr } = await sb.from('facilities').insert(facPayload).select().single();
+    if (facErr) { showToast('تعذّر الحفظ: ' + facErr.message,'error'); return; }
+    facilityId = facility.id;
+  } else {
+    name = document.getElementById('st-name2').value.trim();
+    if (!name) { showToast('أدخل اسم الملعب','error'); return; }
+  }
+
+  const fldPayload = { facility_id: facilityId, name, type: newFieldType, price_per_hour: price, status: 'available', amenities: collectCheckedAmenities() };
+  const { error: fldErr } = await sb.from('fields').insert(fldPayload);
+
+  if (fldErr) { showToast((isNewFacility?'حُفظت المنشأة لكن تعذّر حفظ الملعب: ':'تعذّر حفظ الملعب: ') + fldErr.message,'error'); return; }
+
+  showToast(isNewFacility ? 'تمت الإضافة ✓ بانتظار موافقة المالك على المنشأة الجديدة' : 'تمت إضافة الملعب ونُشر فورًا ✓ 🏟️');
+  if (!isNewFacility && window.loadRealFields) window.loadRealFields();
+  ownerGoTab('fields');
+}
+
+function previewStadiumImg(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('st-image-preview').innerHTML =
+      `<img src="${e.target.result}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── يرفع ملف صورة واحد على imgbb عبر Edge Function الموجودة، ويرجّع الرابط أو null عند الفشل ──
+async function uploadImageToImgbb(file){
+  try {
+    const base64 = await fileToBase64(file);
+    const { data: uploadRes, error: upErr } = await sb.functions.invoke('upload-image', { body: { image_base64: base64 } });
+    if (!upErr && uploadRes?.url) return uploadRes.url;
+    if (uploadRes?.error) showToast('تعذّر رفع الصورة: ' + uploadRes.error, 'error');
+    return null;
+  } catch(e) { console.log('تعذّر رفع الصورة:', e); return null; }
+}
+
+function translateErr(msg) {
+  if (msg.includes('already registered')) return 'هذا البريد مسجّل مسبقاً';
+  if (msg.includes('Invalid login'))      return 'البريد أو كلمة المرور خطأ';
+  if (msg.includes('Password should'))    return 'كلمة المرور قصيرة (6 أحرف على الأقل)';
+  if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
+  return msg;
+}
