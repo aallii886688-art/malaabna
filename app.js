@@ -1134,13 +1134,13 @@ function initBackend() {
     document.querySelector('#mConfirm .micon').textContent = '📱';
     document.getElementById('confirmTitle').textContent = 'تحقق من رقم جوالك';
     document.getElementById('confirmText').textContent = `أرسلنا رمز تحقق مكوّن من 6 أرقام عبر واتساب إلى ${phone}`;
+    const btn = document.querySelector('#mConfirm .btn-brand');
+    if (btn) btn.style.display = 'none';
     document.getElementById('receipt').innerHTML = `
       <div class="field"><label>رمز التحقق</label><input id="otp-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="text-align:center;font-size:22px;letter-spacing:6px;width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);font-family:inherit"></div>
       <button class="btn btn-brand btn-block" style="margin-top:10px" onclick="completeSignupAfterVerification()">تأكيد</button>
       <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="resendSignupOtp()">لم يصلك الرمز؟ إعادة الإرسال</button>
     `;
-    const btn = document.querySelector('#mConfirm .btn-brand');
-    if (btn) btn.style.display = 'none';
     document.getElementById('mConfirm').classList.add('open');
     document.getElementById('ov').classList.add('open');
   }
@@ -5476,5 +5476,6 @@ function translateErr(msg) {
   if (msg.includes('valid email'))        return 'البريد الإلكتروني غير صحيح';
   return msg;
 }
+
 
 
