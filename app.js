@@ -1157,6 +1157,7 @@ function initBackend() {
   window.completeSignupAfterVerification = async function(){
     const code = document.getElementById('otp-code-input')?.value.trim();
     const pending = window._pendingSignup;
+    showToast('DEBUG: code=' + code + ' pending=' + !!pending, 'error');
     if (!pending) { showToast('انتهت الجلسة — ابدأ التسجيل من جديد','error'); authTab('signup'); return; }
     if (!code || code.length !== 6) { showToast('أدخل الرمز المكوّن من 6 أرقام','error'); return; }
 
