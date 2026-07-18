@@ -5749,3 +5749,10 @@ function translateErr(msg) {
 
 
 
+
+// scroll-to-top visibility
+window.addEventListener('scroll',function(){
+  var btn=document.getElementById('scrollTopBtn');
+  if(!btn)return;
+  if(window.scrollY>300){btn.classList.add('visible')}else{btn.classList.remove('visible')}
+},{passive:true});
