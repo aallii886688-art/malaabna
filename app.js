@@ -1235,6 +1235,52 @@ function initBackend() {
     startNotificationsWatch(user.id);
   }
   window.afterLogin = afterLogin;
+// ═══════════════════════════════════════════════════════════
+//  نماذج التنبيهات الافتراضية — تُزرع تلقائياً إذا الجدول فارغ
+// ═══════════════════════════════════════════════════════════
+const DEFAULT_NOTIF_TEMPLATES = [
+  // ── الحجوزات ──
+  { role:'booking_confirmed',        category:'📅 الحجوزات', role_label:'تأكيد الحجز (للاعب)',           send_web:true,  send_whatsapp:true,
+    template_web:'تم تأكيد حجزك في {{field}} بتاريخ {{date}} الساعة {{time}} ✅',
+    template_whatsapp:'مرحباً {{name}} 👋\nتم *تأكيد حجزك* في {{field}}\n📅 {{date}} الساعة {{time}}\n💰 المبلغ: {{price}} ريال\n\nنتمنى لك مباراة رائعة ⚽' },
+  { role:'booking_cancelled_player', category:'📅 الحجوزات', role_label:'إلغاء الحجز (من اللاعب)',       send_web:true,  send_whatsapp:false,
+    template_web:'تم إلغاء حجزك في {{field}} بتاريخ {{date}}',
+    template_whatsapp:'مرحباً {{name}}\nتم إلغاء حجزك في {{field}} بتاريخ {{date}}.\nإذا دفعت مسبقاً سيُعاد المبلغ خلال 3-5 أيام عمل.' },
+  { role:'booking_cancelled_owner',  category:'📅 الحجوزات', role_label:'إلغاء الحجز (من صاحب الملعب)', send_web:true,  send_whatsapp:true,
+    template_web:'عذراً، تم إلغاء حجزك في {{field}} من قِبل الإدارة. سيُعاد المبلغ كاملاً.',
+    template_whatsapp:'عذراً {{name}} 🙏\nاضطرت إدارة {{field}} لإلغاء حجزك بتاريخ {{date}}.\nسيُعاد مبلغ {{price}} ريال كاملاً لحسابك.' },
+  { role:'booking_reminder',         category:'📅 الحجوزات', role_label:'تذكير قبل الموعد (ساعة)',       send_web:true,  send_whatsapp:true,
+    template_web:'تذكير: حجزك في {{field}} بعد ساعة — الساعة {{time}} ⏰',
+    template_whatsapp:'⏰ تذكير {{name}}\nحجزك في *{{field}}* بعد ساعة!\n🕐 الساعة {{time}}\n📍 {{address}}\n\nاستمتع باللعب 🏆' },
+  { role:'new_booking_owner',        category:'📅 الحجوزات', role_label:'حجز جديد (لصاحب الملعب)',      send_web:true,  send_whatsapp:true,
+    template_web:'حجز جديد في {{field}} — {{date}} الساعة {{time}} — {{player}}',
+    template_whatsapp:'🏟️ حجز جديد!\nالملعب: *{{field}}*\nاللاعب: {{player}}\n📅 {{date}} · ⏱️ {{time}}\n💰 {{price}} ريال' },
+
+  // ── الدفع ──
+  { role:'payment_confirmed',        category:'💰 الدفع',    role_label:'تأكيد الدفع (للاعب)',           send_web:true,  send_whatsapp:true,
+    template_web:'تم استلام دفعتك {{price}} ريال للحجز #{{booking_id}} ✅',
+    template_whatsapp:'✅ تم استلام دفعتك\nالمبلغ: *{{price}} ريال*\nرقم الحجز: #{{booking_id}}\nشكراً لاستخدامك ملاعبنا 🙏' },
+  { role:'payout_sent',              category:'💰 الدفع',    role_label:'تحويل المستحقات (لصاحب الملعب)', send_web:true, send_whatsapp:true,
+    template_web:'تم تحويل مستحقاتك {{amount}} ريال إلى حسابك البنكي',
+    template_whatsapp:'💸 تحويل مستحقات\nالمبلغ: *{{amount}} ريال*\nتم التحويل إلى IBAN المسجّل.\nقد يستغرق 1-3 أيام عمل.' },
+
+  // ── الحجز المشترك (القطة) ──
+  { role:'split_join_request',       category:'🤝 القطة',    role_label:'طلب انضمام للحجز المشترك',      send_web:true,  send_whatsapp:true,
+    template_web:'{{player}} يريد الانضمام لحجزك في {{field}} — قبول أو رفض',
+    template_whatsapp:'🤝 طلب انضمام!\n*{{player}}* يريد الانضمام لحجزك في {{field}}.\nنصيبه: {{share}} ريال\nافتح التطبيق للقبول أو الرفض.' },
+  { role:'split_completed',          category:'🤝 القطة',    role_label:'اكتمال الحجز المشترك',          send_web:true,  send_whatsapp:true,
+    template_web:'اكتمل الفريق! حجزك في {{field}} {{date}} مكتمل ✅',
+    template_whatsapp:'🎉 اكتمل الفريق!\nحجزكم في *{{field}}*\n📅 {{date}} الساعة {{time}}\nبالتوفيق للجميع ⚽' },
+
+  // ── الحساب ──
+  { role:'welcome',                  category:'👤 الحساب',   role_label:'ترحيب بعد إنشاء الحساب',        send_web:true,  send_whatsapp:true,
+    template_web:'مرحباً {{name}}! حسابك في ملاعبنا جاهز. ابدأ بحجز ملعبك الأول 🎉',
+    template_whatsapp:'أهلاً {{name}} 👋\nمرحباً بك في *ملاعبنا*!\nيمكنك الآن حجز الملاعب، الانضمام للفرق، والمشاركة في البطولات.\n\nابدأ الآن: malaebnaa.com ⚽' },
+  { role:'password_reset',           category:'👤 الحساب',   role_label:'استعادة كلمة المرور',           send_web:false, send_whatsapp:false,
+    template_web:'تم إرسال رابط استعادة كلمة المرور لبريدك الإلكتروني',
+    template_whatsapp:'' },
+];
+
 async function openNotifTemplates(){
   document.getElementById('ownerTitle').textContent = '🔔 نماذج التنبيهات';
   document.getElementById('ownerBody').innerHTML = '';
@@ -1243,60 +1289,111 @@ async function openNotifTemplates(){
   const inner = document.getElementById('ownerBody');
   inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim);text-align:center">جارٍ التحميل...</div>';
 
-  let rows, error;
+  let rows, fetchError;
   try {
-    ({ data: rows, error } = await sb.from('notification_templates').select('*').order('id'));
-  } catch(e) { error = e; }
-  if (error) { inner.innerHTML = `<div style="padding:20px;color:var(--danger)">خطأ: ${error.message||error}</div>`; return; }
-  if (!rows || !rows.length) { inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim)">لا توجد نماذج</div>'; return; }
+    ({ data: rows, error: fetchError } = await sb.from('notification_templates').select('*').order('id'));
+  } catch(e) { fetchError = e; }
 
-  const cards = rows.map(r => `
-    <div class="notif-tpl-card" data-role="${r.role}" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:14px">
-      <div style="font-weight:700;font-size:15px;margin-bottom:12px">🔔 ${r.role_label}</div>
+  if (fetchError) {
+    inner.innerHTML = `<div style="padding:20px;color:var(--danger)">خطأ في تحميل النماذج: ${fetchError.message||fetchError}</div>`;
+    return;
+  }
 
-      <div style="margin-bottom:10px">
-        <label style="font-size:12px;color:var(--ink-dim);display:block;margin-bottom:4px">نموذج تنبيه الموقع</label>
-        <textarea class="tpl-web" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:inherit;font-size:13px;resize:vertical">${r.template_web||''}</textarea>
-      </div>
+  // إذا الجدول فارغ → زرع النماذج الافتراضية تلقائياً
+  if (!rows || !rows.length) {
+    inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim);text-align:center">جارٍ إنشاء النماذج الافتراضية...</div>';
+    const { error: seedErr } = await sb.from('notification_templates').insert(DEFAULT_NOTIF_TEMPLATES);
+    if (seedErr) {
+      inner.innerHTML = `<div style="padding:20px;color:var(--danger)">تعذّر إنشاء النماذج: ${seedErr.message}</div>
+        <div style="padding:10px 20px;font-size:12px;color:var(--ink-dim)">تأكد من وجود جدول <code>notification_templates</code> في قاعدة البيانات وأن صلاحيات RLS تسمح للمالك بالكتابة.</div>`;
+      return;
+    }
+    ({ data: rows } = await sb.from('notification_templates').select('*').order('id'));
+  }
 
-      <div style="margin-bottom:14px">
-        <label style="font-size:12px;color:var(--ink-dim);display:block;margin-bottom:4px">نموذج تنبيه الواتساب</label>
-        <textarea class="tpl-wa" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:inherit;font-size:13px;resize:vertical">${r.template_whatsapp||''}</textarea>
-      </div>
+  // تجميع النماذج حسب الفئة
+  const byCategory = {};
+  (rows||[]).forEach(r => {
+    const cat = r.category || '🔔 عام';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(r);
+  });
 
-      <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-          <input type="checkbox" class="chk-web" ${r.send_web?'checked':''} style="width:17px;height:17px;accent-color:var(--brand);cursor:pointer">
-          <span>التنبيه يوصل للموقع</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-          <input type="checkbox" class="chk-wa" ${r.send_whatsapp?'checked':''} style="width:17px;height:17px;accent-color:var(--brand);cursor:pointer">
-          <span>التنبيه يوصل للواتساب</span>
-        </label>
-      </div>
+  const varsHint = `<div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:20px;font-size:12px;color:var(--ink-dim);line-height:1.8">
+    <b style="color:var(--ink)">المتغيرات المتاحة في النصوص:</b><br>
+    <code>{{name}}</code> اسم المستخدم &nbsp;·&nbsp;
+    <code>{{field}}</code> اسم الملعب &nbsp;·&nbsp;
+    <code>{{date}}</code> التاريخ &nbsp;·&nbsp;
+    <code>{{time}}</code> الوقت &nbsp;·&nbsp;
+    <code>{{price}}</code> المبلغ &nbsp;·&nbsp;
+    <code>{{booking_id}}</code> رقم الحجز &nbsp;·&nbsp;
+    <code>{{address}}</code> العنوان &nbsp;·&nbsp;
+    <code>{{player}}</code> اسم اللاعب &nbsp;·&nbsp;
+    <code>{{share}}</code> نصيب اللاعب &nbsp;·&nbsp;
+    <code>{{amount}}</code> مبلغ التحويل
+  </div>`;
 
-      <button class="btn btn-brand btn-sm" onclick="saveNotifTemplate('${r.role}',this)">حفظ</button>
+  const sectionsHtml = Object.entries(byCategory).map(([cat, items]) => `
+    <div style="margin-bottom:24px">
+      <div class="dlabel">${escapeHtml(cat)}</div>
+      ${items.map(r => `
+        <div class="notif-tpl-card" data-role="${escapeHtml(r.role)}" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+              <div style="font-weight:700;font-size:14px">${escapeHtml(r.role_label||r.role)}</div>
+              <div style="font-size:11px;color:var(--ink-dim);margin-top:2px">المعرّف: <code>${escapeHtml(r.role)}</code></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 9px">
+                <input type="checkbox" class="chk-web" ${r.send_web?'checked':''} style="width:14px;height:14px;accent-color:var(--brand);cursor:pointer">
+                🌐 موقع
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 9px">
+                <input type="checkbox" class="chk-wa" ${r.send_whatsapp?'checked':''} style="width:14px;height:14px;accent-color:#25D366;cursor:pointer">
+                💬 واتساب
+              </label>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+            <div>
+              <label style="font-size:11px;color:var(--ink-dim);display:block;margin-bottom:4px">🌐 نص تنبيه الموقع</label>
+              <textarea class="tpl-web" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:inherit;font-size:12px;resize:vertical;box-sizing:border-box">${escapeHtml(r.template_web||'')}</textarea>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--ink-dim);display:block;margin-bottom:4px">💬 نص رسالة الواتساب</label>
+              <textarea class="tpl-wa" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:inherit;font-size:12px;resize:vertical;box-sizing:border-box">${escapeHtml(r.template_whatsapp||'')}</textarea>
+            </div>
+          </div>
+
+          <button class="btn btn-brand btn-sm" onclick="saveNotifTemplate('${escapeHtml(r.role)}',this)">💾 حفظ</button>
+        </div>
+      `).join('')}
     </div>
   `).join('');
 
   inner.innerHTML = `
-    <div style="max-width:680px">
-      <p style="font-size:12.5px;color:var(--ink-dim);margin-bottom:16px">المتغيرات المتاحة: <code>{{name}}</code> اسم المستخدم &nbsp;·&nbsp; <code>{{message}}</code> نص التنبيه</p>
-      ${cards}
+    <div style="max-width:760px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="margin:0;font-size:16px">إدارة نماذج التنبيهات</h3>
+        <button class="btn btn-ghost btn-sm" onclick="openNotifTemplates()">🔄 تحديث</button>
+      </div>
+      ${varsHint}
+      ${sectionsHtml}
     </div>`;
 }
 
 window.saveNotifTemplate = async function(role, btn){
   const card = btn.closest('.notif-tpl-card');
-  const template_web     = card.querySelector('.tpl-web').value.trim();
+  const template_web      = card.querySelector('.tpl-web').value.trim();
   const template_whatsapp = card.querySelector('.tpl-wa').value.trim();
-  const send_web         = card.querySelector('.chk-web').checked;
-  const send_whatsapp    = card.querySelector('.chk-wa').checked;
+  const send_web          = card.querySelector('.chk-web').checked;
+  const send_whatsapp     = card.querySelector('.chk-wa').checked;
   btn.disabled = true; btn.textContent = '...';
   const { error } = await sb.from('notification_templates')
     .update({ template_web, template_whatsapp, send_web, send_whatsapp, updated_at: new Date().toISOString() })
     .eq('role', role);
-  btn.disabled = false; btn.textContent = 'حفظ';
+  btn.disabled = false; btn.textContent = '💾 حفظ';
   if (error) showToast('خطأ في الحفظ: ' + error.message, 'error');
   else showToast('تم الحفظ ✓');
 };
