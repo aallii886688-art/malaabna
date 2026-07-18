@@ -13,8 +13,8 @@
  * ════════════════════════════════════════════════════════════════ */
 
 // ⚙️ الإعدادات — استبدلها بقيم مشروعك من Supabase → Settings → API
-const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';   // رابط مشروعك
-const SUPABASE_ANON_KEY = 'YOUR_ANON_PUBLIC_KEY';          // المفتاح العام فقط (آمن)
+const SUPABASE_URL = 'https://lsgakyydqomzntoebqep.supabase.co';   // رابط مشروعك
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzZ2FreXlkcW9tem50b2VicWVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTkwMDEsImV4cCI6MjA5ODU5NTAwMX0.33DmQ23ab5hw3Y3iGtzXphopVMKmnOnTZZfxhtVZmcM';          // المفتاح العام فقط (آمن)
 
 // تهيئة العميل
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
