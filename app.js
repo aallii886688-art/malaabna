@@ -983,7 +983,6 @@ async function submitJoinPayment(token, remaining){
 
     openInfoModal('💳 إتمام الدفع', `
       <div id="mysrPayWrap">
-        <div style="text-align:center;margin-bottom:12px;padding:8px 12px;background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;font-size:12px;color:var(--warn,#f59e0b);font-weight:700">⏰ هذا الوقت متاح لأي شخص آخر يحاول حجزه الآن — أول من يكمل الدفع فعليًا يفوز بالخانة. أكمل دفعك خلال 30 دقيقة (أو قبل موعد الملعب لو كان أقرب) وإلا يُلغى حجزك تلقائيًا</div>
         <div class="mysr-form"></div>
         <div style="text-align:center;margin-top:10px;font-size:11.5px;color:var(--ink-dim)">🔒 الدفع مشفّر بالكامل عبر ميسر — بياناتك ما تمر على خوادمنا إطلاقًا</div>
       </div>
@@ -1482,7 +1481,7 @@ window.saveNotifTemplate = async function(role, btn){
         }
       } catch(e){}
 
-      await startRealPayment(newBooking.id, myShareAmount, true, user.user_metadata?.name || 'اللاعب', newBooking.share_link_token);
+      await startRealPayment(newBooking.id, myShareAmount, true, user.user_metadata?.name || 'اللاعب', isSplit ? newBooking.share_link_token : null);
       return;
     }
   };
@@ -1824,7 +1823,6 @@ function shareBookingLink(token){
 
 // ── يكمل دفع حجز موجود مسبقًا لم يكتمل دفعه بعد — يجيب المتبقي الفعلي من قاعدة البيانات ويفتح نموذج الدفع المضمّن مباشرة ──
 async function resumeBookingPayment(bookingId){
-  showToast('جارٍ تجهيز نموذج الدفع...');
   const { data: bk, error } = await sb.from('bookings').select('total_price, amount_paid, status').eq('id', bookingId).single();
   if (error || !bk) { showToast('تعذّر تحميل بيانات الحجز','error'); return; }
   if (bk.status !== 'pending') { showToast('هذا الحجز لم يعد بانتظار الدفع','error'); showMyBookings(); return; }
