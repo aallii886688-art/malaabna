@@ -4312,17 +4312,7 @@ async function renderAdminIntegrationsTab(){
       </div>`:''}
     </div>
 
-    <div class="dlabel">💰 نسبة عمولة المنصة</div>
-    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-        <input id="comm-pct-input" type="number" min="0" max="50" value="${commPct}"
-          style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-family:inherit;font-size:20px;font-weight:900;text-align:center">
-        <span style="font-size:20px;font-weight:900;color:var(--ink-dim)">%</span>
-      </div>
-      <button class="btn btn-brand btn-block" onclick="saveCommissionPct()">💾 حفظ نسبة العمولة</button>
-    </div>
-
-    <div class="dlabel">🔔 نماذج التنبيهات</div>
+    
     <div class="stat-click" onclick="openNotifTemplates()" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:13px">تخصيص رسائل الواتساب والموقع لكل حدث</span>
       <span style="font-size:12px;color:var(--ink-dim)">فتح ←</span>
