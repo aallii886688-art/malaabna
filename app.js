@@ -2501,7 +2501,7 @@ async function renderOwnerFinanceTab(){
   if (myFieldIds.length) {
     const firstOfMonth = riyadhTodayStr().slice(0,7) + '-01';
     const { data: { user } } = await sb.auth.getUser();
-    const [{ data: earnRows }, { data: expRows }, { data: commSetting }] = await Promise.all([
+    const [{ data: earnRows }, { data: expRows }] = await Promise.all([
       sb.from('bookings').select('total_price, refunded_amount').in('field_id', myFieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').gte('booking_date', firstOfMonth),
       sb.from('facility_expenses').select('amount').eq('owner_id', user.id).gte('expense_date', firstOfMonth),
       sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
@@ -4274,16 +4274,13 @@ async function showSeoHealth(){
 }
 
 async function renderAdminIntegrationsTab(){
-  const [{ data: pubKeySetting }, { data: latestSmsLog }, { data: commSetting }] = await Promise.all([
+  const [{ data: pubKeySetting }, { data: latestSmsLog }] = await Promise.all([
     sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
     sb.from('whatsapp_logs').select('status,created_at').order('created_at',{ascending:false}).limit(1).maybeSingle(),
-    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
   ]);
   const paymentActive = !!pubKeySetting?.value;
   const smsActive = !!latestSmsLog && latestSmsLog.status==='sent';
   const smsPending = !!latestSmsLog && latestSmsLog.status!=='sent' && latestSmsLog.status!=='no_api_key';
-  const commPct = commSetting ? Number(commSetting.value) : 20;
-
   clearTimeout(window._tabLoadTimer);
   document.getElementById('adminTabInner').innerHTML = `
     <div class="dlabel">💳 الدفع الإلكتروني (Moyasar)</div>
@@ -4878,7 +4875,7 @@ async function renderFinancialReportForMonth(monthOffset){
   const monthEnd = nextMonth.toISOString().slice(0,7) + '-01';
   const monthLabel = targetMonth.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year:'numeric', month:'long' });
 
-  const [{ data: bookings }, { data: expenses }, { data: commSetting }] = await Promise.all([
+  const [{ data: bookings }, { data: expenses }] = await Promise.all([
     sb.from('bookings').select('booking_date, start_time, total_price, refunded_amount, status, payment_status, field_id, fields(name)').in('field_id', myFieldIds).gte('booking_date', monthStart).lt('booking_date', monthEnd).order('booking_date'),
     sb.from('facility_expenses').select('expense_date, category, amount, note, facility_id, facilities(name)').eq('owner_id', user.id).gte('expense_date', monthStart).lt('expense_date', monthEnd).order('expense_date'),
     sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
@@ -5031,7 +5028,7 @@ async function exportMonthlyReportCsv(monthOffset, monthLabel){
   const nextMonth = new Date(Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 1));
   const monthEnd = nextMonth.toISOString().slice(0,7) + '-01';
 
-  const [{ data: bookings }, { data: expenses }, { data: commSetting }] = await Promise.all([
+  const [{ data: bookings }, { data: expenses }] = await Promise.all([
     sb.from('bookings').select('booking_date, total_price, refunded_amount, status, payment_status, fields(name)').in('field_id', myFieldIds).gte('booking_date', monthStart).lt('booking_date', monthEnd).neq('payment_status','unpaid').order('booking_date'),
     sb.from('facility_expenses').select('expense_date, category, amount, note, facilities(name)').eq('owner_id', user.id).gte('expense_date', monthStart).lt('expense_date', monthEnd).order('expense_date'),
     sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
@@ -5065,7 +5062,7 @@ async function exportAccountingReport(){
   showToast('جارٍ تجهيز التقرير...');
   const { data: { user } } = await sb.auth.getUser();
   const myFieldIds = await getMyFieldIds();
-  const [{ data: bookings }, { data: expenses }, { data: commSetting }] = await Promise.all([
+  const [{ data: bookings }, { data: expenses }] = await Promise.all([
     myFieldIds.length ? sb.from('bookings').select('booking_date, total_price, refunded_amount, status, fields(name)').in('field_id', myFieldIds).in('status',['confirmed','completed','cancelled']).neq('payment_status','unpaid').order('booking_date') : Promise.resolve({data:[]}),
     sb.from('facility_expenses').select('expense_date, category, amount, note, facilities(name)').eq('owner_id', user.id).order('expense_date'),
     sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle()
