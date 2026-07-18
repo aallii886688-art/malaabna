@@ -1238,14 +1238,14 @@ function initBackend() {
 // ═══════════════════════════════════════════════════════════
 //  نماذج التنبيهات الافتراضية — تُزرع تلقائياً إذا الجدول فارغ
 // ═══════════════════════════════════════════════════════════
-const NOTIF_ROLE_CATEGORY = {
+window.NOTIF_ROLE_CATEGORY = {
   booking_confirmed:'📅 الحجوزات', booking_cancelled_player:'📅 الحجوزات',
   booking_cancelled_owner:'📅 الحجوزات', booking_reminder:'📅 الحجوزات',
   new_booking_owner:'📅 الحجوزات', payment_confirmed:'💰 الدفع',
   payout_sent:'💰 الدفع', split_join_request:'🤝 القطة',
   split_completed:'🤝 القطة', welcome:'👤 الحساب', password_reset:'👤 الحساب',
 };
-const DEFAULT_NOTIF_TEMPLATES = [
+window.DEFAULT_NOTIF_TEMPLATES = [
   { role:'booking_confirmed',        role_label:'تأكيد الحجز (للاعب)',            send_web:true,  send_whatsapp:true,
     template_web:'تم تأكيد حجزك في {{field}} بتاريخ {{date}} الساعة {{time}} ✅',
     template_whatsapp:'مرحباً {{name}} 👋\nتم *تأكيد حجزك* في {{field}}\n📅 {{date}} الساعة {{time}}\n💰 المبلغ: {{price}} ريال\n\nنتمنى لك مباراة رائعة ⚽' },
@@ -1281,7 +1281,7 @@ const DEFAULT_NOTIF_TEMPLATES = [
     template_whatsapp:'' },
 ];
 
-async function openNotifTemplates(){
+window.openNotifTemplates = async function(){
   document.getElementById('ownerTitle').textContent = '🔔 نماذج التنبيهات';
   document.getElementById('ownerBody').innerHTML = '';
   document.getElementById('mOwner').classList.add('open');
@@ -1302,7 +1302,7 @@ async function openNotifTemplates(){
   // إذا الجدول فارغ → زرع النماذج الافتراضية تلقائياً
   if (!rows || !rows.length) {
     inner.innerHTML = '<div style="padding:20px;color:var(--ink-dim);text-align:center">جارٍ إنشاء النماذج الافتراضية...</div>';
-    const { error: seedErr } = await sb.from('notification_templates').insert(DEFAULT_NOTIF_TEMPLATES);
+    const { error: seedErr } = await sb.from('notification_templates').insert(window.DEFAULT_NOTIF_TEMPLATES);
     if (seedErr) {
       inner.innerHTML = `<div style="padding:20px;color:var(--danger)">تعذّر إنشاء النماذج: ${seedErr.message}</div>
         <div style="padding:10px 20px;font-size:12px;color:var(--ink-dim)">تأكد من وجود جدول <code>notification_templates</code> في قاعدة البيانات وأن صلاحيات RLS تسمح للمالك بالكتابة.</div>`;
@@ -1314,7 +1314,7 @@ async function openNotifTemplates(){
   // تجميع النماذج حسب الفئة
   const byCategory = {};
   (rows||[]).forEach(r => {
-    const cat = NOTIF_ROLE_CATEGORY[r.role] || '🔔 عام';
+    const cat = window.NOTIF_ROLE_CATEGORY[r.role] || '🔔 عام';
     if (!byCategory[cat]) byCategory[cat] = [];
     byCategory[cat].push(r);
   });
