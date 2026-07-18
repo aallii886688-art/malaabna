@@ -1238,45 +1238,45 @@ function initBackend() {
 // ═══════════════════════════════════════════════════════════
 //  نماذج التنبيهات الافتراضية — تُزرع تلقائياً إذا الجدول فارغ
 // ═══════════════════════════════════════════════════════════
+const NOTIF_ROLE_CATEGORY = {
+  booking_confirmed:'📅 الحجوزات', booking_cancelled_player:'📅 الحجوزات',
+  booking_cancelled_owner:'📅 الحجوزات', booking_reminder:'📅 الحجوزات',
+  new_booking_owner:'📅 الحجوزات', payment_confirmed:'💰 الدفع',
+  payout_sent:'💰 الدفع', split_join_request:'🤝 القطة',
+  split_completed:'🤝 القطة', welcome:'👤 الحساب', password_reset:'👤 الحساب',
+};
 const DEFAULT_NOTIF_TEMPLATES = [
-  // ── الحجوزات ──
-  { role:'booking_confirmed',        category:'📅 الحجوزات', role_label:'تأكيد الحجز (للاعب)',           send_web:true,  send_whatsapp:true,
+  { role:'booking_confirmed',        role_label:'تأكيد الحجز (للاعب)',            send_web:true,  send_whatsapp:true,
     template_web:'تم تأكيد حجزك في {{field}} بتاريخ {{date}} الساعة {{time}} ✅',
     template_whatsapp:'مرحباً {{name}} 👋\nتم *تأكيد حجزك* في {{field}}\n📅 {{date}} الساعة {{time}}\n💰 المبلغ: {{price}} ريال\n\nنتمنى لك مباراة رائعة ⚽' },
-  { role:'booking_cancelled_player', category:'📅 الحجوزات', role_label:'إلغاء الحجز (من اللاعب)',       send_web:true,  send_whatsapp:false,
+  { role:'booking_cancelled_player', role_label:'إلغاء الحجز (من اللاعب)',        send_web:true,  send_whatsapp:false,
     template_web:'تم إلغاء حجزك في {{field}} بتاريخ {{date}}',
     template_whatsapp:'مرحباً {{name}}\nتم إلغاء حجزك في {{field}} بتاريخ {{date}}.\nإذا دفعت مسبقاً سيُعاد المبلغ خلال 3-5 أيام عمل.' },
-  { role:'booking_cancelled_owner',  category:'📅 الحجوزات', role_label:'إلغاء الحجز (من صاحب الملعب)', send_web:true,  send_whatsapp:true,
+  { role:'booking_cancelled_owner',  role_label:'إلغاء الحجز (من صاحب الملعب)',  send_web:true,  send_whatsapp:true,
     template_web:'عذراً، تم إلغاء حجزك في {{field}} من قِبل الإدارة. سيُعاد المبلغ كاملاً.',
     template_whatsapp:'عذراً {{name}} 🙏\nاضطرت إدارة {{field}} لإلغاء حجزك بتاريخ {{date}}.\nسيُعاد مبلغ {{price}} ريال كاملاً لحسابك.' },
-  { role:'booking_reminder',         category:'📅 الحجوزات', role_label:'تذكير قبل الموعد (ساعة)',       send_web:true,  send_whatsapp:true,
+  { role:'booking_reminder',         role_label:'تذكير قبل الموعد (ساعة)',        send_web:true,  send_whatsapp:true,
     template_web:'تذكير: حجزك في {{field}} بعد ساعة — الساعة {{time}} ⏰',
     template_whatsapp:'⏰ تذكير {{name}}\nحجزك في *{{field}}* بعد ساعة!\n🕐 الساعة {{time}}\n📍 {{address}}\n\nاستمتع باللعب 🏆' },
-  { role:'new_booking_owner',        category:'📅 الحجوزات', role_label:'حجز جديد (لصاحب الملعب)',      send_web:true,  send_whatsapp:true,
+  { role:'new_booking_owner',        role_label:'حجز جديد (لصاحب الملعب)',        send_web:true,  send_whatsapp:true,
     template_web:'حجز جديد في {{field}} — {{date}} الساعة {{time}} — {{player}}',
     template_whatsapp:'🏟️ حجز جديد!\nالملعب: *{{field}}*\nاللاعب: {{player}}\n📅 {{date}} · ⏱️ {{time}}\n💰 {{price}} ريال' },
-
-  // ── الدفع ──
-  { role:'payment_confirmed',        category:'💰 الدفع',    role_label:'تأكيد الدفع (للاعب)',           send_web:true,  send_whatsapp:true,
+  { role:'payment_confirmed',        role_label:'تأكيد الدفع (للاعب)',            send_web:true,  send_whatsapp:true,
     template_web:'تم استلام دفعتك {{price}} ريال للحجز #{{booking_id}} ✅',
     template_whatsapp:'✅ تم استلام دفعتك\nالمبلغ: *{{price}} ريال*\nرقم الحجز: #{{booking_id}}\nشكراً لاستخدامك ملاعبنا 🙏' },
-  { role:'payout_sent',              category:'💰 الدفع',    role_label:'تحويل المستحقات (لصاحب الملعب)', send_web:true, send_whatsapp:true,
+  { role:'payout_sent',              role_label:'تحويل المستحقات (لصاحب الملعب)', send_web:true,  send_whatsapp:true,
     template_web:'تم تحويل مستحقاتك {{amount}} ريال إلى حسابك البنكي',
     template_whatsapp:'💸 تحويل مستحقات\nالمبلغ: *{{amount}} ريال*\nتم التحويل إلى IBAN المسجّل.\nقد يستغرق 1-3 أيام عمل.' },
-
-  // ── الحجز المشترك (القطة) ──
-  { role:'split_join_request',       category:'🤝 القطة',    role_label:'طلب انضمام للحجز المشترك',      send_web:true,  send_whatsapp:true,
+  { role:'split_join_request',       role_label:'طلب انضمام للحجز المشترك',       send_web:true,  send_whatsapp:true,
     template_web:'{{player}} يريد الانضمام لحجزك في {{field}} — قبول أو رفض',
     template_whatsapp:'🤝 طلب انضمام!\n*{{player}}* يريد الانضمام لحجزك في {{field}}.\nنصيبه: {{share}} ريال\nافتح التطبيق للقبول أو الرفض.' },
-  { role:'split_completed',          category:'🤝 القطة',    role_label:'اكتمال الحجز المشترك',          send_web:true,  send_whatsapp:true,
+  { role:'split_completed',          role_label:'اكتمال الحجز المشترك',           send_web:true,  send_whatsapp:true,
     template_web:'اكتمل الفريق! حجزك في {{field}} {{date}} مكتمل ✅',
     template_whatsapp:'🎉 اكتمل الفريق!\nحجزكم في *{{field}}*\n📅 {{date}} الساعة {{time}}\nبالتوفيق للجميع ⚽' },
-
-  // ── الحساب ──
-  { role:'welcome',                  category:'👤 الحساب',   role_label:'ترحيب بعد إنشاء الحساب',        send_web:true,  send_whatsapp:true,
+  { role:'welcome',                  role_label:'ترحيب بعد إنشاء الحساب',         send_web:true,  send_whatsapp:true,
     template_web:'مرحباً {{name}}! حسابك في ملاعبنا جاهز. ابدأ بحجز ملعبك الأول 🎉',
     template_whatsapp:'أهلاً {{name}} 👋\nمرحباً بك في *ملاعبنا*!\nيمكنك الآن حجز الملاعب، الانضمام للفرق، والمشاركة في البطولات.\n\nابدأ الآن: malaebnaa.com ⚽' },
-  { role:'password_reset',           category:'👤 الحساب',   role_label:'استعادة كلمة المرور',           send_web:false, send_whatsapp:false,
+  { role:'password_reset',           role_label:'استعادة كلمة المرور',            send_web:false, send_whatsapp:false,
     template_web:'تم إرسال رابط استعادة كلمة المرور لبريدك الإلكتروني',
     template_whatsapp:'' },
 ];
@@ -1314,7 +1314,7 @@ async function openNotifTemplates(){
   // تجميع النماذج حسب الفئة
   const byCategory = {};
   (rows||[]).forEach(r => {
-    const cat = r.category || '🔔 عام';
+    const cat = NOTIF_ROLE_CATEGORY[r.role] || '🔔 عام';
     if (!byCategory[cat]) byCategory[cat] = [];
     byCategory[cat].push(r);
   });
