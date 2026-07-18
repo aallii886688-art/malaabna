@@ -2603,9 +2603,75 @@ async function showFieldsComparison(){
 
 async function renderOwnerTeamTab(){
   window._isTrueOwner = window.currentUser?.role === 'owner' || window.currentUser?.role === 'super_admin';
+  const inner = ownerInner();
+  inner.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-dim)">جارٍ التحميل...</div>';
+
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { clearTimeout(window._tabLoadTimer); inner.innerHTML = '<div class="legal-note">تعذّر التحقق من الهوية</div>'; return; }
+
+  const { data: ownFac } = await sb.from('facilities').select('id,name').eq('owner_id', user.id);
+  const facIds = (ownFac||[]).map(f=>f.id);
+  const { data: staffRows } = facIds.length
+    ? await sb.from('facility_staff').select('id,facility_id,user_id,permissions,profiles(name,phone)').in('facility_id', facIds)
+    : { data: [] };
+
+  const PERM_LABELS = { bookings:'إدارة الحجوزات', schedule:'الجدولة', finance:'التحليلات' };
   clearTimeout(window._tabLoadTimer);
-  ownerInner().innerHTML = `
-    ${window._isTrueOwner ? `<button class="btn btn-soft btn-block" onclick="pushOwnerPage('showStaffManagement',)">🧑‍💼 إدارة الموظفين</button>` : `<div class="legal-note">👤 أنت مسجّل كموظف — إدارة الموظفين تخص المالك الحقيقي فقط.</div>`}
+
+  if (!window._isTrueOwner) {
+    const myPerms = (staffRows||[]).find(s=>s.user_id===user.id)?.permissions||[];
+    inner.innerHTML = `
+      <div class="legal-note" style="margin-bottom:16px">👤 أنت مسجّل <b>كموظف</b> في هذه المنشأة.</div>
+      <div class="dlabel">صلاحياتك الحالية</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${myPerms.length
+          ? myPerms.map(p=>`<span style="background:var(--brand-soft);color:var(--brand-deep);padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700">✅ ${PERM_LABELS[p]||p}</span>`).join('')
+          : '<span style="color:var(--ink-dim);font-size:13px">لا توجد صلاحيات مخصصة</span>'}
+      </div>`;
+    return;
+  }
+
+  const staffByFac = {};
+  (staffRows||[]).forEach(s=>{ if(!staffByFac[s.facility_id]) staffByFac[s.facility_id]=[]; staffByFac[s.facility_id].push(s); });
+  const totalStaff = (staffRows||[]).length;
+
+  const facListHtml = (ownFac||[]).map(f=>{
+    const fs = staffByFac[f.id]||[];
+    return `<div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${fs.length?8:0}px">
+        <b style="font-size:13px">🏟️ ${escapeHtml(f.name)}</b>
+        <span style="font-size:11px;color:var(--ink-dim)">${fs.length} موظف</span>
+      </div>
+      ${fs.map(s=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+          <div>
+            <div style="font-size:13px;font-weight:600">${escapeHtml(s.profiles?.name||'—')}</div>
+            <div style="font-size:11px;color:var(--ink-dim)">${escapeHtml(s.profiles?.phone||'')}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+              ${(s.permissions||[]).map(p=>`<span style="background:var(--bg);border:1px solid var(--line);padding:2px 8px;border-radius:10px;font-size:10px">${PERM_LABELS[p]||p}</span>`).join('')}
+            </div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="removeStaffMember(${s.id})">إزالة</button>
+        </div>`).join('')}
+      ${!fs.length?'<div style="font-size:12px;color:var(--ink-dim);padding-top:6px">لا يوجد موظفون في هذه المنشأة</div>':''}
+    </div>`;
+  }).join('');
+
+  inner.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--brand)">${totalStaff}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">موظف نشط</div>
+      </div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:26px;font-weight:900;color:var(--flood)">${(ownFac||[]).length}</div>
+        <div style="font-size:12px;color:var(--ink-dim)">منشأة</div>
+      </div>
+    </div>
+    <div class="dlabel">👥 الفريق حسب المنشأة</div>
+    ${facListHtml||'<div style="color:var(--ink-dim);font-size:13px;padding:10px">لا توجد منشآت بعد</div>'}
+    <button class="btn btn-brand btn-block" style="margin-top:16px" onclick="pushOwnerPage('showStaffManagement',)">➕ إضافة موظف أو تعديل الصلاحيات</button>
+    ${facIds.length?`<button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="pushOwnerPage('showStaffActivityLog',)">📜 سجل نشاط الموظفين</button>`:''}
   `;
 }
 
@@ -3842,6 +3908,7 @@ const ADMIN_TABS = [
   {key:'overview', label:'🏠 نظرة عامة'},
   {key:'users', label:'👥 المستخدمون'},
   {key:'facilities', label:'🏟️ المنشآت'},
+  {key:'approvals', label:'⏳ الموافقات'},
   {key:'bookings', label:'📅 الحجوزات'},
   {key:'finance', label:'💰 المالية'},
   {key:'reviews', label:'⭐ التقييمات'},
@@ -3869,6 +3936,7 @@ async function adminGoTab(tab, isRoot){
     case 'reviews':      await adminView('reviews'); break;
     case 'finance':      await renderAdminFinanceTab(); break;
     case 'integrations': await renderAdminIntegrationsTab(); break;
+    case 'approvals':     await adminView('approvals'); break;
   }
 }
 
@@ -4206,28 +4274,74 @@ async function showSeoHealth(){
 }
 
 async function renderAdminIntegrationsTab(){
-  const [{ data: pubKeySetting }, { data: latestSmsLog }] = await Promise.all([
+  const [{ data: pubKeySetting }, { data: latestSmsLog }, { data: commSetting }] = await Promise.all([
     sb.from('platform_settings').select('value').eq('key','moyasar_publishable_key').maybeSingle(),
-    sb.from('whatsapp_logs').select('status').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('whatsapp_logs').select('status,created_at').order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('platform_settings').select('value').eq('key','commission_percent').maybeSingle(),
   ]);
   const paymentActive = !!pubKeySetting?.value;
-  const smsActive = !!latestSmsLog && latestSmsLog.status !== 'no_api_key' && latestSmsLog.status !== 'failed';
+  const smsActive = !!latestSmsLog && latestSmsLog.status==='sent';
+  const smsPending = !!latestSmsLog && latestSmsLog.status!=='sent' && latestSmsLog.status!=='no_api_key';
+  const commPct = commSetting ? Number(commSetting.value) : 20;
 
   clearTimeout(window._tabLoadTimer);
   document.getElementById('adminTabInner').innerHTML = `
-    <div class="dlabel">💳 الدفع الإلكتروني</div>
-    <div class="stat-click" onclick="adminView('payment')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px">${paymentActive?'✅ مفعّلة':'⚠️ غير مفعّلة بعد'}</span>
-      <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
+    <div class="dlabel">💳 الدفع الإلكتروني (Moyasar)</div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:700">${paymentActive?'✅ مفعّلة':'⚠️ غير مفعّلة'}</span>
+        <button class="btn btn-ghost btn-sm" onclick="adminView('payment')">السجل ←</button>
+      </div>
+      ${!paymentActive?`<div style="background:var(--danger-soft);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.8">
+        <b>خطوات التفعيل:</b><br>
+        1. سجّل في <a href="https://moyasar.com" target="_blank" style="color:var(--brand)">moyasar.com</a> كتاجر<br>
+        2. أضف المفتاح السري في Supabase → Edge Functions → Secrets باسم: <code>MOYASAR_SECRET_KEY</code><br>
+        3. أضف المفتاح القابل للنشر في جدول <code>platform_settings</code> بالمفتاح: <code>moyasar_publishable_key</code>
+      </div>`:'<div style="font-size:12px;color:var(--ink-dim)">البوابة جاهزة لاستقبال المدفوعات ✅</div>'}
     </div>
 
-    <div class="dlabel">💬 واتساب</div>
-    <div class="stat-click" onclick="adminView('sms')" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px">${smsActive?'✅ مفعّلة':'⚠️ غير مفعّلة بعد'}</span>
-      <span style="font-size:12px;color:var(--ink-dim)">التفاصيل ←</span>
+    <div class="dlabel">💬 واتساب (WaSender)</div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:700">${smsActive?'✅ تعمل':smsPending?'⚠️ تحقق من المفتاح':'⚠️ غير مفعّلة'}</span>
+        <button class="btn btn-ghost btn-sm" onclick="adminView('sms')">اختبار وسجل ←</button>
+      </div>
+      ${latestSmsLog?`<div style="font-size:11px;color:var(--ink-dim);margin-bottom:8px">آخر رسالة: ${new Date(latestSmsLog.created_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn')} · ${latestSmsLog.status}</div>`:''}
+      ${!smsActive?`<div style="background:var(--danger-soft);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.8">
+        <b>خطوات التفعيل:</b><br>
+        1. سجّل في <a href="https://wasender.app" target="_blank" style="color:var(--brand)">wasender.app</a><br>
+        2. أضف الـ API Key في Supabase → Edge Functions → Secrets باسم: <code>WASENDER_API_KEY</code><br>
+        3. تأكد من نشر Edge Function باسم <code>send-whatsapp</code>
+      </div>`:''}
+    </div>
+
+    <div class="dlabel">💰 نسبة عمولة المنصة</div>
+    <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <input id="comm-pct-input" type="number" min="0" max="50" value="${commPct}"
+          style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-family:inherit;font-size:20px;font-weight:900;text-align:center">
+        <span style="font-size:20px;font-weight:900;color:var(--ink-dim)">%</span>
+      </div>
+      <button class="btn btn-brand btn-block" onclick="saveCommissionPct()">💾 حفظ نسبة العمولة</button>
+    </div>
+
+    <div class="dlabel">🔔 نماذج التنبيهات</div>
+    <div class="stat-click" onclick="openNotifTemplates()" style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px">تخصيص رسائل الواتساب والموقع لكل حدث</span>
+      <span style="font-size:12px;color:var(--ink-dim)">فتح ←</span>
     </div>
   `;
 }
+
+window.saveCommissionPct = async function(){
+  const val = Number(document.getElementById('comm-pct-input')?.value);
+  if (isNaN(val)||val<0||val>50) { showToast('نسبة غير صالحة (0-50%)','error'); return; }
+  const { error } = await sb.from('platform_settings')
+    .upsert({key:'commission_percent',value:String(val)},{onConflict:'key'});
+  if (error) { showToast('خطأ: '+error.message,'error'); return; }
+  showToast('تم حفظ نسبة العمولة '+val+'% ✓');
+  renderAdminIntegrationsTab();
+};
 
 // ── يفلتر قائمة المستخدمين المخزّنة بالذاكرة حسب الاسم أو رقم الجوال، بدون إعادة استعلام قاعدة البيانات لكل حرف يُكتب ──
 function renderAdminUsersList(){
